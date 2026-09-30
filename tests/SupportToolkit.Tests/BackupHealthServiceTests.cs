@@ -29,23 +29,23 @@ public class BackupHealthServiceTests
 
         Assert.Equal(3, resources.Count);
 
-        var healthyResource = resources.Single(
+        var resource = resources.Single(
             resource =>
                 resource.ResourceName == "BACKUP-SERVER-01"
         );
 
         Assert.Equal(
             "Customer Alpha",
-            healthyResource.TenantName
+            resource.TenantName
         );
 
         Assert.Equal(
             "idle",
-            healthyResource.Status
+            resource.Status
         );
 
         Assert.NotNull(
-            healthyResource.LastSuccessfulBackup
+            resource.LastSuccessfulBackup
         );
     }
 
@@ -57,19 +57,19 @@ public class BackupHealthServiceTests
         var resources =
             await service.GetBackupResourcesAsync();
 
-        var failedResource = resources.Single(
+        var resource = resources.Single(
             resource =>
                 resource.ResourceName == "FILES-01"
         );
 
         Assert.Equal(
             "Customer Beta",
-            failedResource.TenantName
+            resource.TenantName
         );
 
         Assert.Equal(
             "error",
-            failedResource.Status
+            resource.Status
         );
 
         Assert.Equal(
@@ -82,7 +82,51 @@ public class BackupHealthServiceTests
                 0,
                 TimeSpan.Zero
             ),
-            failedResource.LastSuccessfulBackup
+            resource.LastSuccessfulBackup
         );
+    }
+
+    [Fact]
+    public async Task GetBackupResourcesAsync_AttachesAlertsToMatchingResource()
+    {
+        var service = CreateService();
+
+        var resources =
+            await service.GetBackupResourcesAsync();
+
+        var resource = resources.Single(
+            resource =>
+                resource.ResourceName == "FILES-01"
+        );
+
+        Assert.Single(resource.Alerts);
+
+        var alert = resource.Alerts[0];
+
+        Assert.Equal(
+            "BackupFailed",
+            alert.Type
+        );
+
+        Assert.Equal(
+            "critical",
+            alert.Severity
+        );
+    }
+
+    [Fact]
+    public async Task GetBackupResourcesAsync_ResourceWithoutAlertsHasEmptyAlertList()
+    {
+        var service = CreateService();
+
+        var resources =
+            await service.GetBackupResourcesAsync();
+
+        var resource = resources.Single(
+            resource =>
+                resource.ResourceName == "OLD-PC-01"
+        );
+
+        Assert.Empty(resource.Alerts);
     }
 }
