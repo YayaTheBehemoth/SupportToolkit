@@ -1,0 +1,60 @@
+{
+  "paging": {
+    "cursors": {}
+  },
+  "timestamp": "2026-09-30T08:00:00Z",
+  "items": [
+    {
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "parent_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "version": 1,
+      "created_at": "2025-01-01T08:00:00Z",
+      "updated_at": "2026-09-30T07:00:00Z",
+      "deleted_at": null,
+      "contacts": [],
+      "offering_items": [],
+      "name": "Example MSP",
+      "kind": "partner",
+      "enabled": true
+    },
+    {
+      "id": "11111111-aaaa-aaaa-aaaa-111111111111",
+      "parent_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "version": 1,
+      "created_at": "2025-02-01T08:00:00Z",
+      "updated_at": "2026-09-30T07:00:00Z",
+      "deleted_at": null,
+      "contacts": [],
+      "offering_items": [],
+      "name": "Customer Alpha",
+      "kind": "customer",
+      "enabled": true
+    },
+    {
+      "id": "22222222-bbbb-bbbb-bbbb-222222222222",
+      "parent_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "version": 1,
+      "created_at": "2025-03-01T08:00:00Z",
+      "updated_at": "2026-09-30T07:00:00Z",
+      "deleted_at": null,
+      "contacts": [],
+      "offering_items": [],
+      "name": "Customer Beta",
+      "kind": "customer",
+      "enabled": true
+    },
+    {
+      "id": "33333333-cccc-cccc-cccc-333333333333",
+      "parent_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "version": 1,
+      "created_at": "2025-04-01T08:00:00Z",
+      "updated_at": "2026-09-30T07:00:00Z",
+      "deleted_at": null,
+      "contacts": [],
+      "offering_items": [],
+      "name": "Customer Gamma",
+      "kind": "customer",
+      "enabled": true
+    }
+  ]
+}
