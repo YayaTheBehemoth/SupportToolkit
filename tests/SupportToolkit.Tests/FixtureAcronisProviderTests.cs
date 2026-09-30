@@ -6,21 +6,13 @@ public class FixtureAcronisProviderTests
 {
     private static FixtureAcronisProvider CreateProvider()
     {
-        var resourceStatusesPath = Path.Combine(
+        var fixtureDirectory = Path.Combine(
             "Fixtures",
-            "Acronis",
-            "resource-statuses.json"
-        );
-
-        var tenantsPath = Path.Combine(
-            "Fixtures",
-            "Acronis",
-            "tenants.json"
+            "Acronis"
         );
 
         return new FixtureAcronisProvider(
-            resourceStatusesPath,
-            tenantsPath
+            fixtureDirectory
         );
     }
 
@@ -29,7 +21,8 @@ public class FixtureAcronisProviderTests
     {
         var provider = CreateProvider();
 
-        var resources = await provider.GetResourceStatusesAsync();
+        var resources =
+            await provider.GetResourceStatusesAsync();
 
         Assert.Equal(3, resources.Count);
 
@@ -54,7 +47,8 @@ public class FixtureAcronisProviderTests
     {
         var provider = CreateProvider();
 
-        var tenants = await provider.GetTenantsAsync();
+        var tenants =
+            await provider.GetTenantsAsync();
 
         Assert.Equal(4, tenants.Count);
 
@@ -71,6 +65,27 @@ public class FixtureAcronisProviderTests
         Assert.Contains(
             tenants,
             tenant => tenant.Name == "Customer Gamma"
+        );
+    }
+
+    [Fact]
+    public async Task GetAlertsAsync_ReturnsFixtureAlerts()
+    {
+        var provider = CreateProvider();
+
+        var alerts =
+            await provider.GetAlertsAsync();
+
+        Assert.Equal(2, alerts.Count);
+
+        Assert.Contains(
+            alerts,
+            alert => alert.Type == "BackupFailed"
+        );
+
+        Assert.Contains(
+            alerts,
+            alert => alert.Severity == "critical"
         );
     }
 }

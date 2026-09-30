@@ -5,31 +5,21 @@ namespace SupportToolkit.Providers.Acronis;
 
 public sealed class FixtureAcronisProvider : IAcronisProvider
 {
-    private readonly string _resourceStatusesPath;
-    private readonly string _tenantsPath;
+    private readonly string _fixtureDirectory;
 
-    public FixtureAcronisProvider(
-        string resourceStatusesPath,
-        string tenantsPath)
+    public FixtureAcronisProvider(string fixtureDirectory)
     {
-        _resourceStatusesPath = resourceStatusesPath;
-        _tenantsPath = tenantsPath;
+        _fixtureDirectory = fixtureDirectory;
     }
 
     public async Task<IReadOnlyList<ResourceStatusDto>>
         GetResourceStatusesAsync(
             CancellationToken cancellationToken = default)
     {
-        var json = await File.ReadAllTextAsync(
-            _resourceStatusesPath,
+        var page = await ReadFixtureAsync<ResourceStatusPageDto>(
+            "resource-statuses.json",
             cancellationToken
         );
-
-        var page =
-            JsonSerializer.Deserialize<ResourceStatusPageDto>(json)
-            ?? throw new InvalidOperationException(
-                "Unable to deserialize Acronis resource status fixture."
-            );
 
         return page.Items;
     }
@@ -38,17 +28,43 @@ public sealed class FixtureAcronisProvider : IAcronisProvider
         GetTenantsAsync(
             CancellationToken cancellationToken = default)
     {
-        var json = await File.ReadAllTextAsync(
-            _tenantsPath,
+        var page = await ReadFixtureAsync<TenantPageDto>(
+            "tenants.json",
             cancellationToken
         );
 
-        var page =
-            JsonSerializer.Deserialize<TenantPageDto>(json)
-            ?? throw new InvalidOperationException(
-                "Unable to deserialize Acronis tenant fixture."
-            );
+        return page.Items;
+    }
+
+    public async Task<IReadOnlyList<AlertDto>>
+        GetAlertsAsync(
+            CancellationToken cancellationToken = default)
+    {
+        var page = await ReadFixtureAsync<AlertPageDto>(
+            "alerts.json",
+            cancellationToken
+        );
 
         return page.Items;
+    }
+
+    private async Task<T> ReadFixtureAsync<T>(
+        string fileName,
+        CancellationToken cancellationToken)
+    {
+        var path = Path.Combine(
+            _fixtureDirectory,
+            fileName
+        );
+
+        var json = await File.ReadAllTextAsync(
+            path,
+            cancellationToken
+        );
+
+        return JsonSerializer.Deserialize<T>(json)
+            ?? throw new InvalidOperationException(
+                $"Unable to deserialize Acronis fixture '{fileName}'."
+            );
     }
 }

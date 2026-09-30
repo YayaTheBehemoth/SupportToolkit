@@ -7,21 +7,13 @@ public class BackupHealthServiceTests
 {
     private static BackupHealthService CreateService()
     {
-        var resourceStatusesPath = Path.Combine(
+        var fixtureDirectory = Path.Combine(
             "Fixtures",
-            "Acronis",
-            "resource-statuses.json"
-        );
-
-        var tenantsPath = Path.Combine(
-            "Fixtures",
-            "Acronis",
-            "tenants.json"
+            "Acronis"
         );
 
         var provider = new FixtureAcronisProvider(
-            resourceStatusesPath,
-            tenantsPath
+            fixtureDirectory
         );
 
         return new BackupHealthService(provider);
@@ -32,7 +24,8 @@ public class BackupHealthServiceTests
     {
         var service = CreateService();
 
-        var resources = await service.GetBackupResourcesAsync();
+        var resources =
+            await service.GetBackupResourcesAsync();
 
         Assert.Equal(3, resources.Count);
 
@@ -61,7 +54,8 @@ public class BackupHealthServiceTests
     {
         var service = CreateService();
 
-        var resources = await service.GetBackupResourcesAsync();
+        var resources =
+            await service.GetBackupResourcesAsync();
 
         var failedResource = resources.Single(
             resource =>
