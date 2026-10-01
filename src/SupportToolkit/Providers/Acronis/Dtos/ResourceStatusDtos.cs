@@ -2,10 +2,11 @@ using System.Text.Json.Serialization;
 
 namespace SupportToolkit.Providers.Acronis.Dtos;
 
-
+/// <summary>
 /// Represents the top-level Acronis resource status response.
-/// This contract mirrors the external API payload and intentionally remains separate from SupportToolkit domain models.
-
+/// This contract mirrors the external API payload and intentionally remains
+/// separate from SupportToolkit domain models.
+/// </summary>
 public sealed class ResourceStatusPageDto
 {
     [JsonPropertyName("paging")]
@@ -71,11 +72,16 @@ public sealed class ResourceDto
     [JsonPropertyName("type")]
     public required string Type { get; init; }
 
+    /*
+     * These fields are useful transport metadata but are not required by
+     * BackupHealth. Keeping them optional prevents an otherwise valid
+     * resource from failing deserialization when Acronis omits them.
+     */
     [JsonPropertyName("cti")]
-    public required string Cti { get; init; }
+    public string? Cti { get; init; }
 
     [JsonPropertyName("parent_group_ids")]
-    public required List<string> ParentGroupIds { get; init; }
+    public List<string> ParentGroupIds { get; init; } = [];
 
     [JsonPropertyName("created_at")]
     public DateTimeOffset? CreatedAt { get; init; }
@@ -89,15 +95,21 @@ public sealed class ResourceDto
 
 public sealed class AggregateStatusDto
 {
+    /*
+     * Acronis does not necessarily include running-state metadata when a
+     * resource is idle, so aggregate status must remain usable without it.
+     */
     [JsonPropertyName("running")]
-    public required RunningStatusDto Running { get; init; }
+    public RunningStatusDto? Running { get; init; }
 
     [JsonPropertyName("names")]
     public string? Names { get; init; }
 
-    
-    /// Gets the external Acronis status value. This remains a string so previously unknown Acronis status values can still deserialize without breaking the integration.
-    
+    /// <summary>
+    /// Gets the external Acronis status value. This remains a string so
+    /// previously unknown status values can deserialize without breaking
+    /// the integration.
+    /// </summary>
     [JsonPropertyName("status")]
     public required string Status { get; init; }
 }
@@ -105,7 +117,7 @@ public sealed class AggregateStatusDto
 public sealed class RunningStatusDto
 {
     [JsonPropertyName("state")]
-    public required string State { get; init; }
+    public string? State { get; init; }
 
     [JsonPropertyName("activities")]
     public List<string>? Activities { get; init; }
@@ -117,10 +129,10 @@ public sealed class RunningStatusDto
 public sealed class LicensingStatusDto
 {
     [JsonPropertyName("current_offering_item")]
-    public required string CurrentOfferingItem { get; init; }
+    public string? CurrentOfferingItem { get; init; }
 
     [JsonPropertyName("previous_offering_item")]
-    public required string PreviousOfferingItem { get; init; }
+    public string? PreviousOfferingItem { get; init; }
 }
 
 public sealed class PolicyExecutionDto

@@ -72,13 +72,13 @@ public sealed class BackupHealthService
                     policy.Type.StartsWith("policy.backup")
                 );
 
-     IReadOnlyList<BackupAlert> resourceAlerts =
-    alertsByResourceId.TryGetValue(
-        context.Id,
-        out var matchedAlerts
-    )
-        ? matchedAlerts
-        : Array.Empty<BackupAlert>();
+            IReadOnlyList<BackupAlert> resourceAlerts =
+           alertsByResourceId.TryGetValue(
+               context.Id,
+               out var matchedAlerts
+           )
+               ? matchedAlerts
+               : Array.Empty<BackupAlert>();
 
             resources.Add(new BackupResource
             {

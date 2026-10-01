@@ -3,10 +3,11 @@ using System.Text.Json.Serialization;
 
 namespace SupportToolkit.Providers.Acronis.Dtos;
 
-
+/// <summary>
 /// Represents the top-level Acronis tenant response.
-/// This contract mirrors the external API payload and intentionally remains separate from SupportToolkit domain models.
-
+/// This contract mirrors the external API payload and intentionally remains
+/// separate from SupportToolkit domain models.
+/// </summary>
 public sealed class TenantPageDto
 {
     [JsonPropertyName("paging")]
@@ -19,9 +20,9 @@ public sealed class TenantPageDto
     public required List<TenantDto> Items { get; init; }
 }
 
-
-/// Represents the paging metadata returned with an Acronis tenant collection.
-
+/// <summary>
+/// Represents paging metadata returned with an Acronis tenant collection.
+/// </summary>
 public sealed class TenantPagingDto
 {
     [JsonPropertyName("cursors")]
@@ -36,36 +37,44 @@ public sealed class TenantPagingCursorsDto
 
 public sealed class TenantDto
 {
+    /*
+     * Id and Name are the only tenant fields BackupHealth fundamentally
+     * requires for resource-to-customer correlation.
+     */
     [JsonPropertyName("id")]
     public required string Id { get; init; }
-
-    [JsonPropertyName("parent_id")]
-    public required string ParentId { get; init; }
-
-    [JsonPropertyName("version")]
-    public required int Version { get; init; }
-
-    [JsonPropertyName("created_at")]
-    public required DateTimeOffset CreatedAt { get; init; }
-
-    [JsonPropertyName("updated_at")]
-    public required DateTimeOffset UpdatedAt { get; init; }
-
-    [JsonPropertyName("deleted_at")]
-    public DateTimeOffset? DeletedAt { get; init; }
 
     [JsonPropertyName("name")]
     public required string Name { get; init; }
 
+    /*
+     * Remaining fields describe the external account structure but should
+     * not prevent an otherwise usable tenant from being deserialized.
+     */
+    [JsonPropertyName("parent_id")]
+    public string? ParentId { get; init; }
+
+    [JsonPropertyName("version")]
+    public int? Version { get; init; }
+
+    [JsonPropertyName("created_at")]
+    public DateTimeOffset? CreatedAt { get; init; }
+
+    [JsonPropertyName("updated_at")]
+    public DateTimeOffset? UpdatedAt { get; init; }
+
+    [JsonPropertyName("deleted_at")]
+    public DateTimeOffset? DeletedAt { get; init; }
+
     [JsonPropertyName("kind")]
-    public required string Kind { get; init; }
+    public string? Kind { get; init; }
 
     [JsonPropertyName("enabled")]
-    public required bool Enabled { get; init; }
+    public bool? Enabled { get; init; }
 
     [JsonPropertyName("contacts")]
-    public required List<JsonElement> Contacts { get; init; }
+    public List<JsonElement> Contacts { get; init; } = [];
 
     [JsonPropertyName("offering_items")]
-    public required List<JsonElement> OfferingItems { get; init; }
+    public List<JsonElement> OfferingItems { get; init; } = [];
 }

@@ -18,12 +18,16 @@ public sealed class AcronisOptions
     {
         environmentReader ??= Environment.GetEnvironmentVariable;
 
+        var datacenterUrl = Require(
+            environmentReader,
+            "ACRONIS_DATACENTER_URL"
+        );
+
+        ValidateDatacenterUrl(datacenterUrl);
+
         return new AcronisOptions
         {
-            DatacenterUrl = Require(
-                environmentReader,
-                "ACRONIS_DATACENTER_URL"
-            ),
+            DatacenterUrl = datacenterUrl,
 
             ClientId = Require(
                 environmentReader,
@@ -52,5 +56,20 @@ public sealed class AcronisOptions
         }
 
         return value;
+    }
+
+    private static void ValidateDatacenterUrl(
+        string datacenterUrl)
+    {
+        if (!Uri.TryCreate(
+                datacenterUrl,
+                UriKind.Absolute,
+                out var uri)
+            || uri.Scheme != Uri.UriSchemeHttps)
+        {
+            throw new InvalidOperationException(
+                "ACRONIS_DATACENTER_URL must be a valid absolute HTTPS URL."
+            );
+        }
     }
 }

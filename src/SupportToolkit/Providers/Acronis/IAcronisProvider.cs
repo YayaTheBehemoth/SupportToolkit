@@ -10,22 +10,22 @@ namespace SupportToolkit.Providers.Acronis;
 
 public interface IAcronisProvider
 {
-   
-   
+
+
     Task<IReadOnlyList<ResourceStatusDto>> GetResourceStatusesAsync(
         CancellationToken cancellationToken = default
     );
 
-    
-  
-  
-   
+
+
+
+
     Task<IReadOnlyList<TenantDto>> GetTenantsAsync(
         CancellationToken cancellationToken = default
     );
 
-    
- 
+
+
     Task<IReadOnlyList<AlertDto>> GetAlertsAsync(
         CancellationToken cancellationToken = default
     );

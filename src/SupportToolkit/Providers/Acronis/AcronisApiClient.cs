@@ -61,7 +61,7 @@ public sealed class AcronisApiClient
         );
     }
 
-    
+
     public async Task<string> GetRootTenantIdAsync(
         CancellationToken cancellationToken = default)
     {

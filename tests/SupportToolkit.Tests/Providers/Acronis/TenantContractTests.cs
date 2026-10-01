@@ -35,4 +35,54 @@ public class TenantContractTests
             customer.ParentId
         );
     }
+    [Fact]
+    public void TenantWithoutOptionalAccountMetadata_DeserializesSuccessfully()
+    {
+        const string json =
+            """
+        {
+          "paging": {
+            "cursors": {}
+          },
+          "timestamp": "2026-10-01T12:00:00Z",
+          "items": [
+            {
+              "id": "tenant-001",
+              "name": "Customer Alpha"
+            }
+          ]
+        }
+        """;
+
+        var result =
+            JsonSerializer.Deserialize<TenantPageDto>(
+                json
+            );
+
+        Assert.NotNull(result);
+
+        var tenant =
+            Assert.Single(result.Items);
+
+        Assert.Equal(
+            "Customer Alpha",
+            tenant.Name
+        );
+
+        Assert.Null(
+            tenant.ParentId
+        );
+
+        Assert.Null(
+            tenant.Kind
+        );
+
+        Assert.Empty(
+            tenant.Contacts
+        );
+
+        Assert.Empty(
+            tenant.OfferingItems
+        );
+    }
 }

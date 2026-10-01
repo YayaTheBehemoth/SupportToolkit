@@ -48,10 +48,10 @@ public sealed class AlertDto
     [JsonPropertyName("tenant")]
     public AlertTenantDto? Tenant { get; init; }
 
-    
+
     /// Gets the alert payload details. This is represented as "JsonElement"
     /// because the payload varies by Acronis alert type and is intentionally kept flexible at the transport boundary.
-    
+
     [JsonPropertyName("details")]
     public required JsonElement Details { get; init; }
 

@@ -65,4 +65,57 @@ public class ResourceStatusContractTests
             healthyServer.Policies?[0].LastSuccessRunTime
         );
     }
+    [Fact]
+    public void ResourceStatusWithoutOptionalMetadata_DeserializesSuccessfully()
+    {
+        const string json =
+            """
+        {
+          "paging": {
+            "cursors": {}
+          },
+          "items": [
+            {
+              "context": {
+                "id": "resource-001",
+                "name": "SERVER-01",
+                "tenant_id": "tenant-001",
+                "type": "resource.machine"
+              },
+              "aggregate": {
+                "status": "idle"
+              }
+            }
+          ],
+          "timestamp": "2026-10-01T12:00:00Z"
+        }
+        """;
+
+        var result =
+            JsonSerializer.Deserialize<ResourceStatusPageDto>(
+                json
+            );
+
+        Assert.NotNull(result);
+
+        var resource =
+            Assert.Single(result.Items);
+
+        Assert.Equal(
+            "SERVER-01",
+            resource.Context.Name
+        );
+
+        Assert.Null(
+            resource.Context.Cti
+        );
+
+        Assert.Empty(
+            resource.Context.ParentGroupIds
+        );
+
+        Assert.Null(
+            resource.Aggregate?.Running
+        );
+    }
 }

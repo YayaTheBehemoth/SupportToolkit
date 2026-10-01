@@ -73,4 +73,73 @@ public class AcronisOptionsTests
             exception.Message
         );
     }
+    [Fact]
+    public void FromEnvironment_WhenDatacenterUrlIsNotHttps_Throws()
+    {
+        var values = new Dictionary<string, string>
+        {
+            ["ACRONIS_DATACENTER_URL"] =
+                "http://fixture.acronis.invalid",
+
+            ["ACRONIS_CLIENT_ID"] =
+                "fixture-client",
+
+            ["ACRONIS_CLIENT_SECRET"] =
+                "fixture-secret"
+        };
+
+        var exception = Assert.Throws<
+            InvalidOperationException>(
+            () =>
+                AcronisOptions.FromEnvironment(
+                    variable =>
+                        values.TryGetValue(
+                            variable,
+                            out var value
+                        )
+                            ? value
+                            : null
+                )
+        );
+
+        Assert.Contains(
+            "HTTPS",
+            exception.Message
+        );
+    }
+
+    [Fact]
+    public void FromEnvironment_WhenDatacenterUrlIsInvalid_Throws()
+    {
+        var values = new Dictionary<string, string>
+        {
+            ["ACRONIS_DATACENTER_URL"] =
+                "definitely-not-a-url",
+
+            ["ACRONIS_CLIENT_ID"] =
+                "fixture-client",
+
+            ["ACRONIS_CLIENT_SECRET"] =
+                "fixture-secret"
+        };
+
+        var exception = Assert.Throws<
+            InvalidOperationException>(
+            () =>
+                AcronisOptions.FromEnvironment(
+                    variable =>
+                        values.TryGetValue(
+                            variable,
+                            out var value
+                        )
+                            ? value
+                            : null
+                )
+        );
+
+        Assert.Contains(
+            "HTTPS",
+            exception.Message
+        );
+    }
 }

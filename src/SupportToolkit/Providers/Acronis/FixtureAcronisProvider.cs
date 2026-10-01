@@ -13,7 +13,7 @@ public sealed class FixtureAcronisProvider : IAcronisProvider
 {
     private readonly string _fixtureDirectory;
 
- 
+
     public FixtureAcronisProvider(string fixtureDirectory)
     {
         _fixtureDirectory = fixtureDirectory;
@@ -31,7 +31,7 @@ public sealed class FixtureAcronisProvider : IAcronisProvider
         return page.Items;
     }
 
-  
+
     public async Task<IReadOnlyList<TenantDto>>
         GetTenantsAsync(
             CancellationToken cancellationToken = default)
