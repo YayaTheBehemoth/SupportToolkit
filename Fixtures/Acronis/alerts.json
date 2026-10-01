@@ -36,7 +36,7 @@
         "resourceName": "BACKUP-SERVER-01",
         "planName": "Standard Backup",
         "planId": "fixture-plan-001",
-        "daysPassed": 2
+        "daysPassed": 1
       },
       "category": "Backup",
       "receivedAt": "2026-09-30T06:00:05Z",

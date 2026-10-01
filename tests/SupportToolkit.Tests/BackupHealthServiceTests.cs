@@ -27,7 +27,7 @@ public class BackupHealthServiceTests
         var resources =
             await service.GetBackupResourcesAsync();
 
-        Assert.Equal(3, resources.Count);
+        Assert.Equal(4, resources.Count);
 
         var resource = resources.Single(
             resource =>
@@ -124,7 +124,46 @@ public class BackupHealthServiceTests
 
         var resource = resources.Single(
             resource =>
-                resource.ResourceName == "OLD-PC-01"
+                resource.ResourceName == "APP-SERVER-01"
+        );
+
+        Assert.Empty(resource.Alerts);
+    }
+
+    [Fact]
+    public async Task GetBackupResourcesAsync_MapsHealthyResource()
+    {
+        var service = CreateService();
+
+        var resources =
+            await service.GetBackupResourcesAsync();
+
+        var resource = resources.Single(
+            resource =>
+                resource.ResourceName == "APP-SERVER-01"
+        );
+
+        Assert.Equal(
+            "Customer Alpha",
+            resource.TenantName
+        );
+
+        Assert.Equal(
+            "idle",
+            resource.Status
+        );
+
+        Assert.Equal(
+            new DateTimeOffset(
+                2026,
+                10,
+                1,
+                4,
+                0,
+                0,
+                TimeSpan.Zero
+            ),
+            resource.LastSuccessfulBackup
         );
 
         Assert.Empty(resource.Alerts);

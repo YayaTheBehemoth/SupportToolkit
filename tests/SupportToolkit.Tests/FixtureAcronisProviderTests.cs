@@ -24,21 +24,34 @@ public class FixtureAcronisProviderTests
         var resources =
             await provider.GetResourceStatusesAsync();
 
-        Assert.Equal(3, resources.Count);
+        Assert.Equal(4, resources.Count);
 
-        Assert.Equal(
-            "BACKUP-SERVER-01",
-            resources[0].Context.Name
+        Assert.Contains(
+            resources,
+            resource =>
+                resource.Context.Name == "BACKUP-SERVER-01"
         );
 
-        Assert.Equal(
-            "error",
-            resources[1].Aggregate?.Status
+        Assert.Contains(
+            resources,
+            resource =>
+                resource.Context.Name == "FILES-01"
+                && resource.Aggregate?.Status == "error"
         );
 
-        Assert.Equal(
-            "no_policies_applied",
-            resources[2].Aggregate?.Status
+        Assert.Contains(
+            resources,
+            resource =>
+                resource.Context.Name == "OLD-PC-01"
+                && resource.Aggregate?.Status
+                    == "no_policies_applied"
+        );
+
+        Assert.Contains(
+            resources,
+            resource =>
+                resource.Context.Name == "APP-SERVER-01"
+                && resource.Aggregate?.Status == "idle"
         );
     }
 
@@ -85,7 +98,7 @@ public class FixtureAcronisProviderTests
 
         Assert.Contains(
             alerts,
-            alert => alert.Severity == "critical"
+            alert => alert.Type == "NoBackupForXDays"
         );
     }
 }

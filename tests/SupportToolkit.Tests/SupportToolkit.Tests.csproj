@@ -21,9 +21,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\SupportToolkit\SupportToolkit.csproj" />
   </ItemGroup>
-  <ItemGroup>
-    <None Update="Fixtures\**\*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
+ <ItemGroup>
+  <None Include="..\..\Fixtures\Acronis\**\*">
+    <Link>Fixtures\Acronis\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  </None>
+</ItemGroup>
 </Project>
