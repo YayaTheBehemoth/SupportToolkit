@@ -1,117 +1,151 @@
 ﻿using SupportToolkit.Core.Configuration;
+using SupportToolkit.Core.ErrorHandling;
 using SupportToolkit.Modules.BackupHealth;
 using SupportToolkit.Providers.Acronis;
 using SupportToolkit.Reporting;
 
-var runtime =
-    SupportToolkitRuntimeOptions.FromEnvironment();
-
-Console.WriteLine("SupportToolkit");
-Console.WriteLine(
-    $"Mode: {runtime.Mode}"
-);
-Console.WriteLine();
-
-IAcronisProvider provider;
-TimeProvider timeProvider;
-TimeSpan staleAfter;
-
-if (runtime.Mode == SupportToolkitMode.Fixture)
+try
 {
-    /*
-     * Fixture mode uses deterministic synthetic data and a fixed clock.
-     * This keeps local development and demonstrations repeatable.
-     */
-    var fixtureDirectory = Path.Combine(
-        AppContext.BaseDirectory,
-        "Fixtures",
-        "Acronis"
+    var runtime =
+        SupportToolkitRuntimeOptions.FromEnvironment();
+
+    Console.WriteLine("SupportToolkit");
+    Console.WriteLine(
+        $"Mode: {runtime.Mode}"
     );
+    Console.WriteLine();
 
-    provider =
-        new FixtureAcronisProvider(
-            fixtureDirectory
+    IAcronisProvider provider;
+    TimeProvider timeProvider;
+    TimeSpan staleAfter;
+
+    if (runtime.Mode == SupportToolkitMode.Fixture)
+    {
+        /*
+         * Fixture mode uses deterministic synthetic data and a fixed clock.
+         * This keeps local development and demonstrations repeatable.
+         */
+        var fixtureDirectory = Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            "Acronis"
         );
 
-    timeProvider =
-        new FixedTimeProvider(
-            new DateTimeOffset(
-                2026,
-                10,
-                1,
-                12,
-                0,
-                0,
-                TimeSpan.Zero
-            )
+        provider =
+            new FixtureAcronisProvider(
+                fixtureDirectory
+            );
+
+        timeProvider =
+            new FixedTimeProvider(
+                new DateTimeOffset(
+                    2026,
+                    10,
+                    1,
+                    12,
+                    0,
+                    0,
+                    TimeSpan.Zero
+                )
+            );
+
+        staleAfter =
+            TimeSpan.FromHours(48);
+    }
+    else
+    {
+        /*
+         * Production mode must be explicitly enabled and requires credentials
+         * to be supplied through environment variables.
+         */
+        var acronisOptions =
+            AcronisOptions.FromEnvironment();
+
+        var httpClient =
+            new HttpClient
+            {
+                Timeout = TimeSpan.FromSeconds(30)
+            };
+
+        var apiClient =
+            new AcronisApiClient(
+                httpClient,
+                acronisOptions
+            );
+
+        provider =
+            new HttpAcronisProvider(
+                apiClient
+            );
+
+        timeProvider =
+            TimeProvider.System;
+
+        /*
+         * Temporary validation threshold.
+         *
+         * This should be replaced by plan-aware scheduling logic once real
+         * production data has been inspected.
+         */
+        staleAfter =
+            TimeSpan.FromHours(48);
+    }
+
+    var backupHealthService =
+        new BackupHealthService(
+            provider
         );
 
-    staleAfter =
-        TimeSpan.FromHours(48);
+    var exceptionEngine =
+        new BackupExceptionEngine(
+            timeProvider,
+            staleAfter
+        );
+
+    var reporter =
+        new ConsoleBackupHealthReporter();
+
+    var resources =
+        await backupHealthService
+            .GetBackupResourcesAsync();
+
+    var exceptions =
+        exceptionEngine.Evaluate(
+            resources
+        );
+
+    reporter.Write(
+        resources,
+        exceptions
+    );
 }
-else
+catch (Exception exception)
 {
-    /*
-     * Production mode must be explicitly enabled and requires credentials
-     * to be supplied through environment variables.
-     */
-    var acronisOptions =
-        AcronisOptions.FromEnvironment();
+    Console.Error.WriteLine();
 
-    var httpClient =
-        new HttpClient();
-
-    var apiClient =
-        new AcronisApiClient(
-            httpClient,
-            acronisOptions
-        );
-
-    provider =
-        new HttpAcronisProvider(
-            apiClient
-        );
-
-    timeProvider =
-        TimeProvider.System;
+    Console.Error.WriteLine(
+        $"ERROR: {ConsoleErrorFormatter.Format(exception)}"
+    );
 
     /*
-     * Temporary validation threshold.
-     *
-     * This should be replaced by plan-aware scheduling logic once real
-     * production data has been inspected.
+     * Stack traces remain available during development without exposing
+     * implementation details during normal operator use.
      */
-    staleAfter =
-        TimeSpan.FromHours(48);
+    var debugMode =
+        Environment.GetEnvironmentVariable(
+            "SUPPORTTOOLKIT_DEBUG"
+        );
+
+    if (debugMode?.Equals(
+            "true",
+            StringComparison.OrdinalIgnoreCase) == true)
+    {
+        Console.Error.WriteLine();
+        Console.Error.WriteLine(exception);
+    }
+
+    Environment.ExitCode = 1;
 }
-
-var backupHealthService =
-    new BackupHealthService(
-        provider
-    );
-
-var exceptionEngine =
-    new BackupExceptionEngine(
-        timeProvider,
-        staleAfter
-    );
-
-var reporter =
-    new ConsoleBackupHealthReporter();
-
-var resources =
-    await backupHealthService
-        .GetBackupResourcesAsync();
-
-var exceptions =
-    exceptionEngine.Evaluate(
-        resources
-    );
-
-reporter.Write(
-    resources,
-    exceptions
-);
 
 sealed class FixedTimeProvider : TimeProvider
 {
