@@ -5,7 +5,22 @@ namespace SupportToolkit.Tests;
 
 public class BackupExceptionEngineTests
 {
-    private readonly BackupExceptionEngine _engine = new();
+    private static readonly DateTimeOffset Now =
+        new(
+            2026,
+            10,
+            1,
+            12,
+            0,
+            0,
+            TimeSpan.Zero
+        );
+
+    private readonly BackupExceptionEngine _engine =
+        new(
+            new FixedTimeProvider(Now),
+            TimeSpan.FromHours(24)
+        );
 
     [Fact]
     public void Evaluate_HealthyResource_IsSuppressed()
@@ -56,7 +71,7 @@ public class BackupExceptionEngineTests
                     Type = "BackupFailed",
                     Category = "Backup",
                     Severity = "critical",
-                    CreatedAt = DateTimeOffset.UtcNow
+                    CreatedAt = Now
                 }
             ]
         );
@@ -106,7 +121,7 @@ public class BackupExceptionEngineTests
                     Type = "BackupFailed",
                     Category = "Backup",
                     Severity = "critical",
-                    CreatedAt = DateTimeOffset.UtcNow
+                    CreatedAt = Now
                 }
             ]
         );
@@ -128,9 +143,57 @@ public class BackupExceptionEngineTests
         );
     }
 
+    [Fact]
+    public void Evaluate_StaleSuccessfulBackup_CreatesWarningException()
+    {
+        var resource = CreateResource(
+            status: "idle",
+            lastSuccessfulBackup: Now.AddDays(-3)
+        );
+
+        var exception = Assert.Single(
+            _engine.Evaluate(new[] { resource })
+        );
+
+        Assert.Equal(
+            BackupExceptionSeverity.Warning,
+            exception.Severity
+        );
+
+        Assert.Contains(
+            exception.Reasons,
+            reason =>
+                reason.Contains("Last successful backup")
+        );
+    }
+
+    [Fact]
+    public void Evaluate_StaleBackupDoesNotDowngradeCriticalException()
+    {
+        var resource = CreateResource(
+            status: "error",
+            lastSuccessfulBackup: Now.AddDays(-3)
+        );
+
+        var exception = Assert.Single(
+            _engine.Evaluate(new[] { resource })
+        );
+
+        Assert.Equal(
+            BackupExceptionSeverity.Critical,
+            exception.Severity
+        );
+
+        Assert.Equal(
+            2,
+            exception.Reasons.Count
+        );
+    }
+
     private static BackupResource CreateResource(
         string status,
-        IReadOnlyList<BackupAlert>? alerts = null)
+        IReadOnlyList<BackupAlert>? alerts = null,
+        DateTimeOffset? lastSuccessfulBackup = null)
     {
         return new BackupResource
         {
@@ -149,10 +212,26 @@ public class BackupExceptionEngineTests
             Status = status,
 
             LastSuccessfulBackup =
-                DateTimeOffset.UtcNow.AddHours(-8),
+                lastSuccessfulBackup ?? Now.AddHours(-8),
 
             Alerts =
                 alerts ?? Array.Empty<BackupAlert>()
         };
+    }
+
+    private sealed class FixedTimeProvider : TimeProvider
+    {
+        private readonly DateTimeOffset _utcNow;
+
+        public FixedTimeProvider(
+            DateTimeOffset utcNow)
+        {
+            _utcNow = utcNow;
+        }
+
+        public override DateTimeOffset GetUtcNow()
+        {
+            return _utcNow;
+        }
     }
 }

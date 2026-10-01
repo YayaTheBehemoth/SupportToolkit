@@ -4,6 +4,17 @@ namespace SupportToolkit.Modules.BackupHealth;
 
 public sealed class BackupExceptionEngine
 {
+    private readonly TimeProvider _timeProvider;
+    private readonly TimeSpan _staleAfter;
+
+    public BackupExceptionEngine(
+        TimeProvider timeProvider,
+        TimeSpan staleAfter)
+    {
+        _timeProvider = timeProvider;
+        _staleAfter = staleAfter;
+    }
+
     public IReadOnlyList<BackupException> Evaluate(
         IEnumerable<BackupResource> resources)
     {
@@ -22,7 +33,7 @@ public sealed class BackupExceptionEngine
         return exceptions;
     }
 
-    private static BackupException? EvaluateResource(
+    private BackupException? EvaluateResource(
         BackupResource resource)
     {
         var reasons = new List<string>();
@@ -98,6 +109,23 @@ public sealed class BackupExceptionEngine
             }
         }
 
+        if (resource.LastSuccessfulBackup is not null)
+        {
+            var now = _timeProvider.GetUtcNow();
+
+            var backupAge =
+                now - resource.LastSuccessfulBackup.Value;
+
+            if (backupAge > _staleAfter)
+            {
+                hasException = true;
+
+                reasons.Add(
+                    $"Last successful backup is {FormatAge(backupAge)} old."
+                );
+            }
+        }
+
         if (!hasException)
         {
             return null;
@@ -113,5 +141,15 @@ public sealed class BackupExceptionEngine
             LastSuccessfulBackup =
                 resource.LastSuccessfulBackup
         };
+    }
+
+    private static string FormatAge(TimeSpan age)
+    {
+        if (age.TotalDays >= 1)
+        {
+            return $"{age.TotalDays:F1} days";
+        }
+
+        return $"{age.TotalHours:F1} hours";
     }
 }
