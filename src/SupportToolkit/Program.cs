@@ -105,18 +105,19 @@ try
     var reporter =
         new ConsoleBackupHealthReporter();
 
-    var resources =
-        await backupHealthService
-            .GetBackupResourcesAsync();
+    var snapshot =
+     await backupHealthService
+         .GetSnapshotAsync();
 
     var exceptions =
         exceptionEngine.Evaluate(
-            resources
+            snapshot.Resources
         );
 
     reporter.Write(
-        resources,
-        exceptions
+        snapshot.Resources,
+        exceptions,
+        snapshot.Diagnostics
     );
 }
 catch (Exception exception)

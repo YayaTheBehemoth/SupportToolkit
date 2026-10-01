@@ -1,0 +1,12 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "dotnet test BackupHealth",
+			"type": "shell",
+			"command": "dotnet test \"tests\\SupportToolkit.Tests\\SupportToolkit.Tests.csproj\" --nologo --filter BackupHealth",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}
