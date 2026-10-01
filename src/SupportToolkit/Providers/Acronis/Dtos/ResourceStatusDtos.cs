@@ -2,6 +2,10 @@ using System.Text.Json.Serialization;
 
 namespace SupportToolkit.Providers.Acronis.Dtos;
 
+
+/// Represents the top-level Acronis resource status response.
+/// This contract mirrors the external API payload and intentionally remains separate from SupportToolkit domain models.
+
 public sealed class ResourceStatusPageDto
 {
     [JsonPropertyName("paging")]
@@ -91,6 +95,9 @@ public sealed class AggregateStatusDto
     [JsonPropertyName("names")]
     public string? Names { get; init; }
 
+    
+    /// Gets the external Acronis status value. This remains a string so previously unknown Acronis status values can still deserialize without breaking the integration.
+    
     [JsonPropertyName("status")]
     public required string Status { get; init; }
 }

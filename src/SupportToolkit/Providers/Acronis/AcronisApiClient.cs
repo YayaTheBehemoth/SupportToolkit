@@ -6,6 +6,11 @@ using SupportToolkit.Providers.Acronis.Dtos;
 
 namespace SupportToolkit.Providers.Acronis;
 
+
+/// Encapsulates the raw Acronis HTTP and authentication flow for the SupportToolkit integration.
+/// This class isolates transport and credential concerns so consuming code can treat Acronis as a data source
+/// rather than dealing with client-credentials authentication, bearer token handling, or network details.
+
 public sealed class AcronisApiClient
 {
     private readonly HttpClient _httpClient;
@@ -15,6 +20,11 @@ public sealed class AcronisApiClient
     private string? _accessToken;
     private DateTimeOffset _accessTokenExpiresAt;
 
+
+    /// Initializes a new Acronis API client.
+    /// <param name="httpClient">The HTTP client used to send requests to Acronis.</param>
+    /// <param name="options">The Acronis configuration options.</param>    
+    /// <param name="timeProvider">An optional time provider for testing or fixture scenarios.</param>
     public AcronisApiClient(
         HttpClient httpClient,
         AcronisOptions options,
@@ -25,10 +35,12 @@ public sealed class AcronisApiClient
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
+
     public async Task<HttpResponseMessage> GetAsync(
         string path,
         CancellationToken cancellationToken = default)
     {
+        // Subsequent requests use the bearer token issued from the client-credentials flow rather than the client secret.
         var accessToken =
             await GetAccessTokenAsync(cancellationToken);
 
@@ -49,9 +61,11 @@ public sealed class AcronisApiClient
         );
     }
 
+    
     public async Task<string> GetRootTenantIdAsync(
         CancellationToken cancellationToken = default)
     {
+        // The root tenant is resolved once at the API boundary so callers do not need to know the client-specific tenant hierarchy.
         using var response = await GetAsync(
             $"/api/2/clients/{Uri.EscapeDataString(_options.ClientId)}",
             cancellationToken
@@ -75,6 +89,8 @@ public sealed class AcronisApiClient
     {
         var now = _timeProvider.GetUtcNow();
 
+        // Refresh before expiry to avoid reusing a token that may expire mid-request.
+        // The one-minute safety margin keeps the cached token valid for a short buffer beyond the server's expiration.
         if (_accessToken is not null
             && now < _accessTokenExpiresAt.AddMinutes(-1))
         {
@@ -86,6 +102,7 @@ public sealed class AcronisApiClient
             BuildUri("/api/2/idp/token")
         );
 
+        // The client-credentials flow authenticates the application itself, not a user, so Acronis expects Basic auth with the client id and secret.
         var credentials = Convert.ToBase64String(
             Encoding.ASCII.GetBytes(
                 $"{_options.ClientId}:{_options.ClientSecret}"

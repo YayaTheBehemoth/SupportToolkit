@@ -3,6 +3,10 @@ using System.Text.Json.Serialization;
 
 namespace SupportToolkit.Providers.Acronis.Dtos;
 
+
+/// Represents the top-level Acronis tenant response.
+/// This contract mirrors the external API payload and intentionally remains separate from SupportToolkit domain models.
+
 public sealed class TenantPageDto
 {
     [JsonPropertyName("paging")]
@@ -14,6 +18,9 @@ public sealed class TenantPageDto
     [JsonPropertyName("items")]
     public required List<TenantDto> Items { get; init; }
 }
+
+
+/// Represents the paging metadata returned with an Acronis tenant collection.
 
 public sealed class TenantPagingDto
 {

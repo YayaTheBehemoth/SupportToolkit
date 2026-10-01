@@ -11,6 +11,8 @@ var fixtureDirectory = Path.Combine(
     "Acronis"
 );
 
+// Fixture mode wires the synthetic Acronis provider into the BackupHealth pipeline so the rest of the application
+// can evaluate domain results without depending on real credentials, network access, or live Acronis responses.
 IAcronisProvider provider =
     new FixtureAcronisProvider(
         fixtureDirectory
@@ -21,8 +23,7 @@ var backupHealthService =
         provider
     );
 
-// Fixture mode uses a fixed clock so our synthetic test
-// environment behaves the same regardless of when we run it.
+// A fixed clock keeps fixture-driven time-based rules deterministic and repeatable for local development and tests.
 var fixtureNow = new DateTimeOffset(
     2026,
     10,

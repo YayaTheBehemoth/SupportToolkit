@@ -6,6 +6,8 @@ namespace SupportToolkit.Tests;
 
 public class AcronisApiClientTests
 {
+    // StubHttpMessageHandler replaces the network boundary so the test can verify Acronis authentication and HTTP behavior
+    // without making real requests or requiring credentials.
     [Fact]
     public async Task GetRootTenantIdAsync_AuthenticatesAndReturnsTenantId()
     {

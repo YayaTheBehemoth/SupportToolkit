@@ -2,6 +2,11 @@ using SupportToolkit.Modules.BackupHealth.Models;
 
 namespace SupportToolkit.Reporting;
 
+
+/// Writes BackupHealth results to the console.
+/// This reporter is a presentation layer for the BackupHealth domain and deliberately has no knowledge of Acronis APIs, DTOs, authentication,
+/// or transport concerns. That separation allows other reporters, such as HTML or JSON output, to be added later without changing exception evaluation.
+
 public sealed class ConsoleBackupHealthReporter
 {
     public void Write(

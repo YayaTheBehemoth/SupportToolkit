@@ -3,6 +3,10 @@ using System.Text.Json.Serialization;
 
 namespace SupportToolkit.Providers.Acronis.Dtos;
 
+
+/// Represents the top-level Acronis alerts response.
+/// This contract mirrors the external API payload and intentionally remains separate from SupportToolkit domain models.
+
 public sealed class AlertPageDto
 {
     [JsonPropertyName("items")]
@@ -11,6 +15,9 @@ public sealed class AlertPageDto
     [JsonPropertyName("paging")]
     public required AlertPagingDto Paging { get; init; }
 }
+
+
+/// Represents the paging metadata returned with Acronis alert collections.
 
 public sealed class AlertPagingDto
 {
@@ -41,6 +48,10 @@ public sealed class AlertDto
     [JsonPropertyName("tenant")]
     public AlertTenantDto? Tenant { get; init; }
 
+    
+    /// Gets the alert payload details. This is represented as "JsonElement"
+    /// because the payload varies by Acronis alert type and is intentionally kept flexible at the transport boundary.
+    
     [JsonPropertyName("details")]
     public required JsonElement Details { get; init; }
 

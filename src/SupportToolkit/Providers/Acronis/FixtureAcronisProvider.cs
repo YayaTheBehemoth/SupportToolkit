@@ -3,10 +3,17 @@ using SupportToolkit.Providers.Acronis.Dtos;
 
 namespace SupportToolkit.Providers.Acronis;
 
+
+/// Development and test implementation of "IAcronisProvider" that serves
+/// production-shaped synthetic Acronis responses from local fixture files.
+/// This allows the rest of SupportToolkit to be developed and exercised independently of
+/// real credentials, API availability, or network access.
+
 public sealed class FixtureAcronisProvider : IAcronisProvider
 {
     private readonly string _fixtureDirectory;
 
+ 
     public FixtureAcronisProvider(string fixtureDirectory)
     {
         _fixtureDirectory = fixtureDirectory;
@@ -24,6 +31,7 @@ public sealed class FixtureAcronisProvider : IAcronisProvider
         return page.Items;
     }
 
+  
     public async Task<IReadOnlyList<TenantDto>>
         GetTenantsAsync(
             CancellationToken cancellationToken = default)
@@ -47,6 +55,7 @@ public sealed class FixtureAcronisProvider : IAcronisProvider
 
         return page.Items;
     }
+
 
     private async Task<T> ReadFixtureAsync<T>(
         string fileName,

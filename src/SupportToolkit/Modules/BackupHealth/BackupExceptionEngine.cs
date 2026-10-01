@@ -2,6 +2,12 @@ using SupportToolkit.Modules.BackupHealth.Models;
 
 namespace SupportToolkit.Modules.BackupHealth;
 
+
+/// Evaluates normalized see cref="BackupResource" instances and produces conservative backup exceptions for actionable conditions.
+/// The engine reviews each resource, suppresses entries with no actionable conditions, preserves all reasons that contributed to an exception,
+/// and escalates severity without allowing warning conditions to downgrade a critical result. It uses see cref="TimeProvider" so time-based
+/// rules remain deterministic and testable. The current rules are intentionally conservative while the production Acronis data model is still being validated.
+
 public sealed class BackupExceptionEngine
 {
     private readonly TimeProvider _timeProvider;
