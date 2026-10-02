@@ -61,10 +61,41 @@ try
         var acronisOptions =
             AcronisOptions.FromEnvironment();
 
-        var httpClient =
-            new HttpClient
+        /*
+         * Redirects are deliberately disabled.
+         *
+         * A permitted Acronis request must not be allowed to redirect to
+         * another location without going through the read-only policy again.
+         */
+        var networkHandler =
+            new HttpClientHandler
             {
-                Timeout = TimeSpan.FromSeconds(30)
+                AllowAutoRedirect = false
+            };
+
+        /*
+         * The read-only handler is the final application-level security
+         * boundary before outbound Acronis traffic reaches the network.
+         *
+         * It permits only:
+         * - OAuth token acquisition
+         * - explicitly approved GET endpoints
+         *
+         * Everything else fails closed.
+         */
+        var readOnlyHandler =
+            new AcronisReadOnlyHandler(
+                acronisOptions.DatacenterUrl,
+                networkHandler
+            );
+
+        var httpClient =
+            new HttpClient(
+                readOnlyHandler
+            )
+            {
+                Timeout =
+                    TimeSpan.FromSeconds(30)
             };
 
         var apiClient =
@@ -106,8 +137,8 @@ try
         new ConsoleBackupHealthReporter();
 
     var snapshot =
-     await backupHealthService
-         .GetSnapshotAsync();
+        await backupHealthService
+            .GetSnapshotAsync();
 
     var exceptions =
         exceptionEngine.Evaluate(

@@ -557,15 +557,18 @@ public class BackupHealthServiceTests
         : IAcronisProvider
     {
         public IReadOnlyList<ResourceStatusDto>
-            ResourceStatuses { get; init; }
+            ResourceStatuses
+        { get; init; }
             = [];
 
         public IReadOnlyList<TenantDto>
-            Tenants { get; init; }
+            Tenants
+        { get; init; }
             = [];
 
         public IReadOnlyList<AlertDto>
-            Alerts { get; init; }
+            Alerts
+        { get; init; }
             = [];
 
         public Task<IReadOnlyList<ResourceStatusDto>>
