@@ -1,9 +1,13 @@
-﻿using SupportToolkit.Core.Configuration;
+﻿using System.Diagnostics;
+using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.ErrorHandling;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Modules.BackupHealth;
 using SupportToolkit.Providers.Acronis;
 using SupportToolkit.Reporting;
+
+var runStopwatch =
+    Stopwatch.StartNew();
 
 try
 {
@@ -49,10 +53,6 @@ try
     if (runtime.Mode
         == SupportToolkitMode.Fixture)
     {
-        /*
-         * Fixture mode uses deterministic synthetic data and a fixed clock.
-         * This keeps local development and demonstrations repeatable.
-         */
         var fixtureDirectory =
             Path.Combine(
                 AppContext.BaseDirectory,
@@ -90,28 +90,19 @@ try
         var acronisOptions =
             AcronisOptions.FromEnvironment();
 
-        /*
-         * Redirects are deliberately disabled.
-         *
-         * A permitted Acronis request must not be allowed to redirect to
-         * another location without going through the read-only policy again.
-         */
+        logger.Info(
+            "Production transport: " +
+            "read-only allowlist enabled, " +
+            "HTTPS required, redirects disabled, " +
+            "30-second request timeout."
+        );
+
         var networkHandler =
             new HttpClientHandler
             {
                 AllowAutoRedirect = false
             };
 
-        /*
-         * The read-only handler is the final application-level security
-         * boundary before outbound Acronis traffic reaches the network.
-         *
-         * It permits only:
-         * - OAuth token acquisition
-         * - explicitly approved GET endpoints
-         *
-         * Everything else fails closed.
-         */
         var readOnlyHandler =
             new AcronisReadOnlyHandler(
                 acronisOptions.DatacenterUrl,
@@ -144,10 +135,8 @@ try
             TimeProvider.System;
 
         /*
-         * Temporary validation threshold.
-         *
-         * This should be replaced by plan-aware scheduling logic once real
-         * production data has been inspected.
+         * Temporary threshold until production backup-plan scheduling has
+         * been validated.
          */
         staleAfter =
             TimeSpan.FromHours(48);
@@ -201,17 +190,27 @@ try
         snapshot.Diagnostics
     );
 
+    runStopwatch.Stop();
+
     logger.Info(
-        "BackupHealth run completed successfully."
+        $"BackupHealth run completed successfully " +
+        $"in {runStopwatch.Elapsed.TotalSeconds:F2} seconds."
     );
 }
 catch (Exception exception)
 {
+    runStopwatch.Stop();
+
     Console.Error.WriteLine();
 
     Console.Error.WriteLine(
         $"ERROR: " +
         $"{ConsoleErrorFormatter.Format(exception)}"
+    );
+
+    Console.Error.WriteLine(
+        $"Run aborted after " +
+        $"{runStopwatch.Elapsed.TotalSeconds:F2} seconds."
     );
 
     var debugMode =

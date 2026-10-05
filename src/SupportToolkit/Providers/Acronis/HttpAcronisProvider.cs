@@ -75,6 +75,14 @@ public sealed class HttpAcronisProvider : IAcronisProvider
             $"{tenants.Count}."
         );
 
+        if (tenants.Count == 0)
+        {
+            _logger?.Warning(
+                "Acronis returned zero tenants. " +
+                "Verify API-client scope and tenant discovery."
+            );
+        }
+
         return tenants;
     }
 
@@ -121,6 +129,14 @@ public sealed class HttpAcronisProvider : IAcronisProvider
             $"{resources.Count}."
         );
 
+        if (resources.Count == 0)
+        {
+            _logger?.Warning(
+                "Acronis returned zero resource statuses. " +
+                "Verify API-client scope and resource-status visibility."
+            );
+        }
+
         return resources;
     }
 
@@ -129,10 +145,8 @@ public sealed class HttpAcronisProvider : IAcronisProvider
             CancellationToken cancellationToken = default)
     {
         /*
-         * Only active alerts are relevant to the current exception report.
-         *
-         * We intentionally avoid filtering by alert category/type until
-         * production data confirms which Acronis alerts are relevant.
+         * Zero alerts is completely valid, so unlike tenants/resources
+         * it does not produce a warning.
          */
         _logger?.Info(
             "Fetching active Acronis alerts."
@@ -277,10 +291,6 @@ public sealed class HttpAcronisProvider : IAcronisProvider
             );
     }
 
-    /*
-     * AlertPagingDto currently keeps cursor values as JsonElement because
-     * the alert response contract is intentionally permissive.
-     */
     private static string? GetAlertAfterCursor(
         AlertPageDto page)
     {

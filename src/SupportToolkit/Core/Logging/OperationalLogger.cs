@@ -53,7 +53,7 @@ public sealed class OperationalLogger
         string message)
     {
         Console.WriteLine(
-            $"[{DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss}Z] " +
+            $"[{DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss.fff}Z] " +
             $"[{level}] {message}"
         );
     }
