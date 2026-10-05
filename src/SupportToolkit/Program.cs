@@ -1,5 +1,6 @@
 ﻿using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.ErrorHandling;
+using SupportToolkit.Core.Logging;
 using SupportToolkit.Modules.BackupHealth;
 using SupportToolkit.Providers.Acronis;
 using SupportToolkit.Reporting;
@@ -7,29 +8,57 @@ using SupportToolkit.Reporting;
 try
 {
     var runtime =
-        SupportToolkitRuntimeOptions.FromEnvironment();
+        SupportToolkitRuntimeOptions
+            .FromEnvironment();
 
-    Console.WriteLine("SupportToolkit");
+    var debugMode =
+        Environment.GetEnvironmentVariable(
+            "SUPPORTTOOLKIT_DEBUG"
+        );
+
+    var debugEnabled =
+        debugMode?.Equals(
+            "true",
+            StringComparison.OrdinalIgnoreCase
+        ) == true;
+
+    var logger =
+        new OperationalLogger(
+            debugEnabled
+        );
+
+    Console.WriteLine(
+        "SupportToolkit"
+    );
+
     Console.WriteLine(
         $"Mode: {runtime.Mode}"
     );
+
     Console.WriteLine();
+
+    logger.Info(
+        $"Starting BackupHealth run in " +
+        $"{runtime.Mode} mode."
+    );
 
     IAcronisProvider provider;
     TimeProvider timeProvider;
     TimeSpan staleAfter;
 
-    if (runtime.Mode == SupportToolkitMode.Fixture)
+    if (runtime.Mode
+        == SupportToolkitMode.Fixture)
     {
         /*
          * Fixture mode uses deterministic synthetic data and a fixed clock.
          * This keeps local development and demonstrations repeatable.
          */
-        var fixtureDirectory = Path.Combine(
-            AppContext.BaseDirectory,
-            "Fixtures",
-            "Acronis"
-        );
+        var fixtureDirectory =
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "Fixtures",
+                "Acronis"
+            );
 
         provider =
             new FixtureAcronisProvider(
@@ -54,10 +83,10 @@ try
     }
     else
     {
-        /*
-         * Production mode must be explicitly enabled and requires credentials
-         * to be supplied through environment variables.
-         */
+        logger.Info(
+            "Loading Acronis production configuration."
+        );
+
         var acronisOptions =
             AcronisOptions.FromEnvironment();
 
@@ -101,12 +130,14 @@ try
         var apiClient =
             new AcronisApiClient(
                 httpClient,
-                acronisOptions
+                acronisOptions,
+                logger: logger
             );
 
         provider =
             new HttpAcronisProvider(
-                apiClient
+                apiClient,
+                logger
             );
 
         timeProvider =
@@ -121,6 +152,10 @@ try
         staleAfter =
             TimeSpan.FromHours(48);
     }
+
+    logger.Info(
+        "Loading BackupHealth source data."
+    );
 
     var backupHealthService =
         new BackupHealthService(
@@ -140,15 +175,34 @@ try
         await backupHealthService
             .GetSnapshotAsync();
 
+    logger.Info(
+        $"Normalization completed: " +
+        $"{snapshot.Resources.Count} resource(s), " +
+        $"{snapshot.Diagnostics.Count} diagnostic(s)."
+    );
+
+    logger.Info(
+        "Evaluating backup exceptions."
+    );
+
     var exceptions =
         exceptionEngine.Evaluate(
             snapshot.Resources
         );
 
+    logger.Info(
+        $"Exception evaluation completed: " +
+        $"{exceptions.Count} exception(s)."
+    );
+
     reporter.Write(
         snapshot.Resources,
         exceptions,
         snapshot.Diagnostics
+    );
+
+    logger.Info(
+        "BackupHealth run completed successfully."
     );
 }
 catch (Exception exception)
@@ -156,13 +210,10 @@ catch (Exception exception)
     Console.Error.WriteLine();
 
     Console.Error.WriteLine(
-        $"ERROR: {ConsoleErrorFormatter.Format(exception)}"
+        $"ERROR: " +
+        $"{ConsoleErrorFormatter.Format(exception)}"
     );
 
-    /*
-     * Stack traces remain available during development without exposing
-     * implementation details during normal operator use.
-     */
     var debugMode =
         Environment.GetEnvironmentVariable(
             "SUPPORTTOOLKIT_DEBUG"
@@ -170,16 +221,20 @@ catch (Exception exception)
 
     if (debugMode?.Equals(
             "true",
-            StringComparison.OrdinalIgnoreCase) == true)
+            StringComparison.OrdinalIgnoreCase
+        ) == true)
     {
         Console.Error.WriteLine();
-        Console.Error.WriteLine(exception);
+        Console.Error.WriteLine(
+            exception
+        );
     }
 
     Environment.ExitCode = 1;
 }
 
-sealed class FixedTimeProvider : TimeProvider
+sealed class FixedTimeProvider
+    : TimeProvider
 {
     private readonly DateTimeOffset _utcNow;
 

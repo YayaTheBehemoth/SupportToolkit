@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using SupportToolkit.Core.Logging;
 using SupportToolkit.Providers.Acronis.Dtos;
 
 namespace SupportToolkit.Providers.Acronis;
@@ -13,40 +14,68 @@ namespace SupportToolkit.Providers.Acronis;
 /// </summary>
 public sealed class HttpAcronisProvider : IAcronisProvider
 {
-    // Conservative page size until production API behaviour is validated.
+    /*
+     * Conservative page size until production API behaviour is validated.
+     */
     private const int PageSize = 100;
 
     private readonly AcronisApiClient _apiClient;
+    private readonly OperationalLogger? _logger;
 
     public HttpAcronisProvider(
-        AcronisApiClient apiClient)
+        AcronisApiClient apiClient,
+        OperationalLogger? logger = null)
     {
         _apiClient = apiClient;
+        _logger = logger;
     }
 
-    public async Task<IReadOnlyList<TenantDto>> GetTenantsAsync(
-        CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<TenantDto>>
+        GetTenantsAsync(
+            CancellationToken cancellationToken = default)
     {
+        _logger?.Info(
+            "Fetching Acronis tenants."
+        );
+
         var rootTenantId =
-            await _apiClient.GetRootTenantIdAsync(
-                cancellationToken
-            );
+            await _apiClient
+                .GetRootTenantIdAsync(
+                    cancellationToken
+                );
 
         var firstRequestPath =
             "/api/2/tenants" +
-            $"?subtree_root_id={Uri.EscapeDataString(rootTenantId)}" +
+            $"?subtree_root_id=" +
+            $"{Uri.EscapeDataString(rootTenantId)}" +
             "&lod=basic" +
             $"&limit={PageSize}";
 
-        return await FetchAllPagesAsync<
-            TenantPageDto,
-            TenantDto>(
-            firstRequestPath,
-            "/api/2/tenants",
-            page => page.Items,
-            page => page.Paging.Cursors.After,
-            cancellationToken
+        var tenants =
+            await FetchAllPagesAsync<
+                TenantPageDto,
+                TenantDto>(
+                datasetName:
+                    "tenants",
+                firstRequestPath:
+                    firstRequestPath,
+                endpointPath:
+                    "/api/2/tenants",
+                getItems:
+                    page => page.Items,
+                getAfterCursor:
+                    page =>
+                        page.Paging.Cursors.After,
+                cancellationToken:
+                    cancellationToken
+            );
+
+        _logger?.Info(
+            $"Acronis tenants fetched: " +
+            $"{tenants.Count}."
         );
+
+        return tenants;
     }
 
     public async Task<IReadOnlyList<ResourceStatusDto>>
@@ -57,45 +86,87 @@ public sealed class HttpAcronisProvider : IAcronisProvider
          * Do not filter to resource.machine here.
          *
          * BackupHealth may eventually need non-machine workloads such as
-         * Microsoft 365 resources. Filtering belongs here only once the
-         * actual production resource types have been validated.
+         * Microsoft 365 resources. Filtering belongs here only once actual
+         * production resource types have been validated.
          */
+        _logger?.Info(
+            "Fetching Acronis resource statuses."
+        );
+
         var firstRequestPath =
             "/api/resource_management/v4/resource_statuses" +
             $"?limit={PageSize}";
 
-        return await FetchAllPagesAsync<
-            ResourceStatusPageDto,
-            ResourceStatusDto>(
-            firstRequestPath,
-            "/api/resource_management/v4/resource_statuses",
-            page => page.Items,
-            page => page.Paging.Cursors.After,
-            cancellationToken
+        var resources =
+            await FetchAllPagesAsync<
+                ResourceStatusPageDto,
+                ResourceStatusDto>(
+                datasetName:
+                    "resource statuses",
+                firstRequestPath:
+                    firstRequestPath,
+                endpointPath:
+                    "/api/resource_management/v4/resource_statuses",
+                getItems:
+                    page => page.Items,
+                getAfterCursor:
+                    page =>
+                        page.Paging.Cursors.After,
+                cancellationToken:
+                    cancellationToken
+            );
+
+        _logger?.Info(
+            $"Acronis resource statuses fetched: " +
+            $"{resources.Count}."
         );
+
+        return resources;
     }
 
-    public async Task<IReadOnlyList<AlertDto>> GetAlertsAsync(
-        CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<AlertDto>>
+        GetAlertsAsync(
+            CancellationToken cancellationToken = default)
     {
         /*
          * Only active alerts are relevant to the current exception report.
+         *
          * We intentionally avoid filtering by alert category/type until
          * production data confirms which Acronis alerts are relevant.
          */
+        _logger?.Info(
+            "Fetching active Acronis alerts."
+        );
+
         var firstRequestPath =
             "/api/alert_manager/v1/alerts" +
-            $"?show_deleted=false&limit={PageSize}";
+            $"?show_deleted=false" +
+            $"&limit={PageSize}";
 
-        return await FetchAllPagesAsync<
-            AlertPageDto,
-            AlertDto>(
-            firstRequestPath,
-            "/api/alert_manager/v1/alerts",
-            page => page.Items,
-            GetAlertAfterCursor,
-            cancellationToken
+        var alerts =
+            await FetchAllPagesAsync<
+                AlertPageDto,
+                AlertDto>(
+                datasetName:
+                    "alerts",
+                firstRequestPath:
+                    firstRequestPath,
+                endpointPath:
+                    "/api/alert_manager/v1/alerts",
+                getItems:
+                    page => page.Items,
+                getAfterCursor:
+                    GetAlertAfterCursor,
+                cancellationToken:
+                    cancellationToken
+            );
+
+        _logger?.Info(
+            $"Active Acronis alerts fetched: " +
+            $"{alerts.Count}."
         );
+
+        return alerts;
     }
 
     /// <summary>
@@ -104,6 +175,7 @@ public sealed class HttpAcronisProvider : IAcronisProvider
     /// </summary>
     private async Task<IReadOnlyList<TItem>>
         FetchAllPagesAsync<TPage, TItem>(
+            string datasetName,
             string firstRequestPath,
             string endpointPath,
             Func<TPage, IEnumerable<TItem>> getItems,
@@ -111,20 +183,39 @@ public sealed class HttpAcronisProvider : IAcronisProvider
             CancellationToken cancellationToken)
         where TPage : class
     {
-        var allItems = new List<TItem>();
+        var allItems =
+            new List<TItem>();
 
         string? requestPath =
             firstRequestPath;
 
+        var pageNumber = 1;
+
         while (requestPath is not null)
         {
-            var page = await GetPageAsync<TPage>(
-                requestPath,
-                cancellationToken
+            _logger?.Info(
+                $"Fetching {datasetName} page " +
+                $"{pageNumber}."
             );
 
-            allItems.AddRange(
+            var page =
+                await GetPageAsync<TPage>(
+                    requestPath,
+                    cancellationToken
+                );
+
+            var pageItems =
                 getItems(page)
+                    .ToList();
+
+            allItems.AddRange(
+                pageItems
+            );
+
+            _logger?.Info(
+                $"{datasetName} page " +
+                $"{pageNumber}: " +
+                $"{pageItems.Count} item(s)."
             );
 
             var after =
@@ -137,17 +228,25 @@ public sealed class HttpAcronisProvider : IAcronisProvider
             }
 
             /*
-             * Acronis cursors are opaque. Do not parse or reconstruct them.
-             * URL-encode the cursor and return it exactly as supplied.
+             * Acronis cursors are opaque.
              *
-             * The cursor carries the original query state, so subsequent
-             * requests only need the endpoint, limit, and cursor.
+             * Do not parse or reconstruct them. URL-encode the cursor and
+             * return it exactly as supplied.
              */
             requestPath =
                 endpointPath +
                 $"?limit={PageSize}" +
-                $"&after={Uri.EscapeDataString(after)}";
+                $"&after=" +
+                $"{Uri.EscapeDataString(after)}";
+
+            pageNumber++;
         }
+
+        _logger?.Info(
+            $"Completed {datasetName} pagination: " +
+            $"{pageNumber} page(s), " +
+            $"{allItems.Count} item(s)."
+        );
 
         return allItems;
     }
@@ -170,10 +269,11 @@ public sealed class HttpAcronisProvider : IAcronisProvider
 
         return await response.Content
             .ReadFromJsonAsync<TPage>(
-                cancellationToken: cancellationToken
+                cancellationToken:
+                    cancellationToken
             )
             ?? throw new InvalidOperationException(
-                $"Acronis returned an empty response for '{requestPath}'."
+                "Acronis returned an empty API response."
             );
     }
 
@@ -191,8 +291,9 @@ public sealed class HttpAcronisProvider : IAcronisProvider
             return null;
         }
 
-        return after.ValueKind == JsonValueKind.String
-            ? after.GetString()
-            : null;
+        return after.ValueKind
+            == JsonValueKind.String
+                ? after.GetString()
+                : null;
     }
 }
