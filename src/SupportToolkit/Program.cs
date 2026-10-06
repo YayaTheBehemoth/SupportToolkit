@@ -1,10 +1,12 @@
 ﻿using SupportToolkit.Core.ErrorHandling;
 using SupportToolkit.Core.Modules;
+using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupHealth;
 
 ISupportToolkitModule[] modules =
 [
-    new BackupHealthModule()
+    new BackupHealthModule(),
+    new BackupAggregatorModule()
 ];
 
 try
@@ -12,7 +14,10 @@ try
     if (args.Length == 0 ||
         args[0] is "--help" or "-h")
     {
-        PrintUsage(modules);
+        PrintUsage(
+            modules
+        );
+
         return 0;
     }
 
@@ -37,7 +42,9 @@ try
 
         Console.Error.WriteLine();
 
-        PrintUsage(modules);
+        PrintUsage(
+            modules
+        );
 
         return 1;
     }
@@ -55,7 +62,9 @@ catch (Exception exception)
     if (IsDebugEnabled())
     {
         Console.Error.WriteLine();
-        Console.Error.WriteLine(exception);
+        Console.Error.WriteLine(
+            exception
+        );
     }
 
     return 1;
