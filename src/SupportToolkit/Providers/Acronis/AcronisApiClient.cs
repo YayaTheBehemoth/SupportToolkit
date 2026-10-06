@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -17,6 +18,14 @@ public sealed class AcronisApiClient
     private readonly AcronisOptions _options;
     private readonly TimeProvider _timeProvider;
     private readonly OperationalLogger? _logger;
+
+    private readonly ConcurrentDictionary<
+        string,
+        CachedAccessToken>
+        _scopedAccessTokens =
+            new(
+                StringComparer.OrdinalIgnoreCase
+            );
 
     private string? _accessToken;
     private DateTimeOffset _accessTokenExpiresAt;
@@ -50,6 +59,35 @@ public sealed class AcronisApiClient
             await GetAccessTokenAsync(
                 cancellationToken
             );
+
+        return await GetWithAccessTokenAsync(
+            path,
+            accessToken,
+            cancellationToken
+        );
+    }
+
+    /// <summary>
+    /// Sends an authenticated GET request using an explicitly supplied
+    /// Acronis access token.
+    ///
+    /// This is used for customer-scoped API operations where the normal
+    /// API-client token is too broad.
+    /// </summary>
+    public async Task<HttpResponseMessage>
+        GetWithAccessTokenAsync(
+            string path,
+            string accessToken,
+            CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(
+                accessToken))
+        {
+            throw new ArgumentException(
+                "An Acronis access token is required.",
+                nameof(accessToken)
+            );
+        }
 
         using var request =
             new HttpRequestMessage(
@@ -90,6 +128,130 @@ public sealed class AcronisApiClient
         );
 
         return response;
+    }
+
+    /// <summary>
+    /// Exchanges the API client's base token for a token scoped to one
+    /// customer tenant.
+    ///
+    /// Scoped tokens are cached until shortly before their expiry.
+    /// </summary>
+    public async Task<string>
+        GetScopedAccessTokenAsync(
+            string tenantId,
+            CancellationToken cancellationToken = default)
+    {
+        if (!Guid.TryParse(
+                tenantId,
+                out _))
+        {
+            throw new ArgumentException(
+                "Acronis customer-scoped authentication requires " +
+                "a tenant UUID.",
+                nameof(tenantId)
+            );
+        }
+
+        var now =
+            _timeProvider.GetUtcNow();
+
+        if (_scopedAccessTokens.TryGetValue(
+                tenantId,
+                out var cachedToken)
+            && now
+            < cachedToken.ExpiresAt.AddMinutes(-1))
+        {
+            _logger?.Debug(
+                "Using cached Acronis customer-scoped access token."
+            );
+
+            return cachedToken.AccessToken;
+        }
+
+        var baseAccessToken =
+            await GetAccessTokenAsync(
+                cancellationToken
+            );
+
+        _logger?.Info(
+            "Issuing Acronis customer-scoped access token."
+        );
+
+        using var request =
+            new HttpRequestMessage(
+                HttpMethod.Post,
+                BuildUri(
+                    "/api/2/idp/token"
+                )
+            );
+
+        request.Headers.Authorization =
+            new AuthenticationHeaderValue(
+                "Bearer",
+                baseAccessToken
+            );
+
+        request.Content =
+            new FormUrlEncodedContent(
+                new Dictionary<string, string>
+                {
+                    ["grant_type"] =
+                        "urn:ietf:params:oauth:" +
+                        "grant-type:jwt-bearer",
+
+                    ["assertion"] =
+                        baseAccessToken,
+
+                    ["scope"] =
+                        $"urn:acronis.com:tenant-id:{tenantId}"
+                }
+            );
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        using var response =
+            await _httpClient.SendAsync(
+                request,
+                cancellationToken
+            );
+
+        stopwatch.Stop();
+
+        _logger?.Info(
+            $"POST /api/2/idp/token -> " +
+            $"{(int)response.StatusCode} " +
+            $"({stopwatch.ElapsedMilliseconds} ms)"
+        );
+
+        response.EnsureSuccessStatusCode();
+
+        var token =
+            await response.Content
+                .ReadFromJsonAsync<AcronisTokenDto>(
+                    cancellationToken:
+                        cancellationToken
+                )
+            ?? throw new InvalidOperationException(
+                "Acronis returned an empty scoped-token response."
+            );
+
+        var expiresAt =
+            DateTimeOffset.FromUnixTimeSeconds(
+                token.ExpiresOn
+            );
+
+        _scopedAccessTokens[tenantId] =
+            new CachedAccessToken(
+                token.AccessToken,
+                expiresAt
+            );
+
+        _logger?.Info(
+            "Acronis customer-scoped authentication succeeded."
+        );
+
+        return token.AccessToken;
     }
 
     public async Task<string> GetRootTenantIdAsync(
@@ -293,4 +455,9 @@ public sealed class AcronisApiClient
 
         return path;
     }
+
+    private sealed record CachedAccessToken(
+        string AccessToken,
+        DateTimeOffset ExpiresAt
+    );
 }
