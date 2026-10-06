@@ -1,250 +1,104 @@
-﻿using System.Diagnostics;
-using SupportToolkit.Core.Configuration;
-using SupportToolkit.Core.ErrorHandling;
-using SupportToolkit.Core.Logging;
+﻿using SupportToolkit.Core.ErrorHandling;
+using SupportToolkit.Core.Modules;
 using SupportToolkit.Modules.BackupHealth;
-using SupportToolkit.Providers.Acronis;
-using SupportToolkit.Modules.BackupHealth.Reporting;
 
-var runStopwatch =
-    Stopwatch.StartNew();
+ISupportToolkitModule[] modules =
+[
+    new BackupHealthModule()
+];
 
 try
 {
-    var runtime =
-        SupportToolkitRuntimeOptions
-            .FromEnvironment();
-
-    var debugMode =
-        Environment.GetEnvironmentVariable(
-            "SUPPORTTOOLKIT_DEBUG"
-        );
-
-    var debugEnabled =
-        debugMode?.Equals(
-            "true",
-            StringComparison.OrdinalIgnoreCase
-        ) == true;
-
-    var logger =
-        new OperationalLogger(
-            debugEnabled
-        );
-
-    Console.WriteLine(
-        "SupportToolkit"
-    );
-
-    Console.WriteLine(
-        $"Mode: {runtime.Mode}"
-    );
-
-    Console.WriteLine();
-
-    logger.Info(
-        $"Starting BackupHealth run in " +
-        $"{runtime.Mode} mode."
-    );
-
-    IAcronisProvider provider;
-    TimeProvider timeProvider;
-    TimeSpan staleAfter;
-
-    if (runtime.Mode
-        == SupportToolkitMode.Fixture)
+    if (args.Length == 0 ||
+        args[0] is "--help" or "-h")
     {
-        var fixtureDirectory =
-            Path.Combine(
-                AppContext.BaseDirectory,
-                "Fixtures",
-                "Acronis"
-            );
+        PrintUsage(modules);
+        return 0;
+    }
 
-        provider =
-            new FixtureAcronisProvider(
-                fixtureDirectory
-            );
+    var command =
+        args[0];
 
-        timeProvider =
-            new FixedTimeProvider(
-                new DateTimeOffset(
-                    2026,
-                    10,
-                    1,
-                    12,
-                    0,
-                    0,
-                    TimeSpan.Zero
+    var module =
+        modules.FirstOrDefault(
+            candidate =>
+                string.Equals(
+                    candidate.Command,
+                    command,
+                    StringComparison.OrdinalIgnoreCase
                 )
-            );
+        );
 
-        staleAfter =
-            TimeSpan.FromHours(48);
-    }
-    else
+    if (module is null)
     {
-        logger.Info(
-            "Loading Acronis production configuration."
+        Console.Error.WriteLine(
+            $"Unknown module: {command}"
         );
 
-        var acronisOptions =
-            AcronisOptions.FromEnvironment();
+        Console.Error.WriteLine();
 
-        logger.Info(
-            "Production transport: " +
-            "read-only allowlist enabled, " +
-            "HTTPS required, redirects disabled, " +
-            "30-second request timeout."
-        );
+        PrintUsage(modules);
 
-        var networkHandler =
-            new HttpClientHandler
-            {
-                AllowAutoRedirect = false
-            };
-
-        var readOnlyHandler =
-            new AcronisReadOnlyHandler(
-                acronisOptions.DatacenterUrl,
-                networkHandler
-            );
-
-        var httpClient =
-            new HttpClient(
-                readOnlyHandler
-            )
-            {
-                Timeout =
-                    TimeSpan.FromSeconds(30)
-            };
-
-        var apiClient =
-            new AcronisApiClient(
-                httpClient,
-                acronisOptions,
-                logger: logger
-            );
-
-        provider =
-            new HttpAcronisProvider(
-                apiClient,
-                logger
-            );
-
-        timeProvider =
-            TimeProvider.System;
-
-        /*
-         * Temporary threshold until production backup-plan scheduling has
-         * been validated.
-         */
-        staleAfter =
-            TimeSpan.FromHours(48);
+        return 1;
     }
 
-    logger.Info(
-        "Loading BackupHealth source data."
-    );
-
-    var backupHealthService =
-        new BackupHealthService(
-            provider
-        );
-
-    var exceptionEngine =
-        new BackupExceptionEngine(
-            timeProvider,
-            staleAfter
-        );
-
-    var reporter =
-        new ConsoleBackupHealthReporter();
-
-    var snapshot =
-        await backupHealthService
-            .GetSnapshotAsync();
-
-    logger.Info(
-        $"Normalization completed: " +
-        $"{snapshot.Resources.Count} resource(s), " +
-        $"{snapshot.Diagnostics.Count} diagnostic(s)."
-    );
-
-    logger.Info(
-        "Evaluating backup exceptions."
-    );
-
-    var exceptions =
-        exceptionEngine.Evaluate(
-            snapshot.Resources
-        );
-
-    logger.Info(
-        $"Exception evaluation completed: " +
-        $"{exceptions.Count} exception(s)."
-    );
-
-    reporter.Write(
-        snapshot.Resources,
-        exceptions,
-        snapshot.Diagnostics
-    );
-
-    runStopwatch.Stop();
-
-    logger.Info(
-        $"BackupHealth run completed successfully " +
-        $"in {runStopwatch.Elapsed.TotalSeconds:F2} seconds."
+    return await module.RunAsync(
+        args[1..]
     );
 }
 catch (Exception exception)
 {
-    runStopwatch.Stop();
-
-    Console.Error.WriteLine();
-
     Console.Error.WriteLine(
-        $"ERROR: " +
-        $"{ConsoleErrorFormatter.Format(exception)}"
+        $"ERROR: {ConsoleErrorFormatter.Format(exception)}"
     );
 
-    Console.Error.WriteLine(
-        $"Run aborted after " +
-        $"{runStopwatch.Elapsed.TotalSeconds:F2} seconds."
-    );
-
-    var debugMode =
-        Environment.GetEnvironmentVariable(
-            "SUPPORTTOOLKIT_DEBUG"
-        );
-
-    if (debugMode?.Equals(
-            "true",
-            StringComparison.OrdinalIgnoreCase
-        ) == true)
+    if (IsDebugEnabled())
     {
         Console.Error.WriteLine();
-        Console.Error.WriteLine(
-            exception
-        );
+        Console.Error.WriteLine(exception);
     }
 
-    Environment.ExitCode = 1;
+    return 1;
 }
 
-sealed class FixedTimeProvider
-    : TimeProvider
+static void PrintUsage(
+    IEnumerable<ISupportToolkitModule> modules)
 {
-    private readonly DateTimeOffset _utcNow;
+    Console.WriteLine(
+        "SupportToolkit"
+    );
 
-    public FixedTimeProvider(
-        DateTimeOffset utcNow)
-    {
-        _utcNow = utcNow;
-    }
+    Console.WriteLine();
 
-    public override DateTimeOffset GetUtcNow()
+    Console.WriteLine(
+        "Usage:"
+    );
+
+    Console.WriteLine(
+        "  SupportToolkit <module> [options]"
+    );
+
+    Console.WriteLine();
+
+    Console.WriteLine(
+        "Modules:"
+    );
+
+    foreach (var module in modules)
     {
-        return _utcNow;
+        Console.WriteLine(
+            $"  {module.Command,-20} {module.Description}"
+        );
     }
+}
+
+static bool IsDebugEnabled()
+{
+    return string.Equals(
+        Environment.GetEnvironmentVariable(
+            "SUPPORTTOOLKIT_DEBUG"
+        ),
+        "true",
+        StringComparison.OrdinalIgnoreCase
+    );
 }
