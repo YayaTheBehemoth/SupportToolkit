@@ -91,7 +91,8 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
     private void ValidateOrigin(
         Uri uri)
     {
-        if (uri.Scheme != Uri.UriSchemeHttps)
+        if (uri.Scheme
+            != Uri.UriSchemeHttps)
         {
             throw new InvalidOperationException(
                 "Blocked Acronis request: only HTTPS is permitted."
@@ -106,7 +107,8 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
             );
 
         var samePort =
-            uri.Port == _allowedOrigin.Port;
+            uri.Port
+            == _allowedOrigin.Port;
 
         if (!sameHost || !samePort)
         {
@@ -156,7 +158,9 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
             return true;
         }
 
-        return IsApiClientMetadataEndpoint(path);
+        return IsApiClientMetadataEndpoint(path)
+            || IsLegacyTenantBootstrapEndpoint(path)
+            || IsLegacyTenantChildrenEndpoint(path);
     }
 
     private static bool IsApiClientMetadataEndpoint(
@@ -172,18 +176,99 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
             && string.Equals(
                 segments[0],
                 "api",
-                StringComparison.Ordinal)
+                StringComparison.Ordinal
+            )
             && string.Equals(
                 segments[1],
                 "2",
-                StringComparison.Ordinal)
+                StringComparison.Ordinal
+            )
             && string.Equals(
                 segments[2],
                 "clients",
-                StringComparison.Ordinal)
+                StringComparison.Ordinal
+            )
             && !string.IsNullOrWhiteSpace(
                 segments[3]
             );
+    }
+
+    /// <summary>
+    /// Allows the one-time UUID -> legacy numeric-ID bootstrap lookup.
+    /// </summary>
+    private static bool IsLegacyTenantBootstrapEndpoint(
+        string path)
+    {
+        var segments =
+            path.Split(
+                '/',
+                StringSplitOptions.RemoveEmptyEntries
+            );
+
+        return segments.Length == 4
+            && string.Equals(
+                segments[0],
+                "api",
+                StringComparison.Ordinal
+            )
+            && string.Equals(
+                segments[1],
+                "1",
+                StringComparison.Ordinal
+            )
+            && string.Equals(
+                segments[2],
+                "groups",
+                StringComparison.Ordinal
+            )
+            && Guid.TryParse(
+                segments[3],
+                out _
+            );
+    }
+
+    /// <summary>
+    /// Hierarchy traversal uses the legacy numeric group IDs returned by
+    /// Acronis's Account Management API v1.
+    /// </summary>
+    private static bool IsLegacyTenantChildrenEndpoint(
+        string path)
+    {
+        var segments =
+            path.Split(
+                '/',
+                StringSplitOptions.RemoveEmptyEntries
+            );
+
+        if (segments.Length != 5)
+        {
+            return false;
+        }
+
+        if (!string.Equals(
+                segments[0],
+                "api",
+                StringComparison.Ordinal)
+            || !string.Equals(
+                segments[1],
+                "1",
+                StringComparison.Ordinal)
+            || !string.Equals(
+                segments[2],
+                "groups",
+                StringComparison.Ordinal)
+            || !string.Equals(
+                segments[4],
+                "children",
+                StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return long.TryParse(
+                   segments[3],
+                   out var numericId)
+               && numericId > 0;
     }
 
     private static InvalidOperationException Blocked(

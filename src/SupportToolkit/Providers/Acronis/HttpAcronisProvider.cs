@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
 using SupportToolkit.Core.Logging;
@@ -8,26 +10,41 @@ namespace SupportToolkit.Providers.Acronis;
 /// <summary>
 /// Production Acronis provider backed by the Acronis HTTP APIs.
 ///
-/// Transport concerns such as endpoint paths, pagination, cursor handling,
-/// and response deserialization are contained here so consuming modules
-/// only depend on IAcronisProvider.
+/// Transport concerns such as endpoint paths, pagination, legacy identifier
+/// compatibility, hierarchy traversal, production-shape diagnostics, and
+/// response deserialization are contained here so consuming modules remain
+/// isolated from Acronis transport details.
 /// </summary>
-public sealed class HttpAcronisProvider : IAcronisProvider
+public sealed class HttpAcronisProvider
+    : IAcronisProvider,
+      IAcronisTenantMappingProvider
 {
-    /*
-     * Conservative page size until production API behaviour is validated.
-     */
     private const int PageSize = 100;
+
+    /*
+     * Defensive upper bound for hierarchy traversal.
+     *
+     * The Acronis tenant hierarchy should be finite, but external traversal
+     * code should never be capable of making unbounded requests if vendor
+     * data is malformed.
+     */
+    private const int MaxHierarchyNodes = 10_000;
 
     private readonly AcronisApiClient _apiClient;
     private readonly OperationalLogger? _logger;
+
+    private IReadOnlyDictionary<string, string>?
+        _tenantIdMappings;
 
     public HttpAcronisProvider(
         AcronisApiClient apiClient,
         OperationalLogger? logger = null)
     {
-        _apiClient = apiClient;
-        _logger = logger;
+        _apiClient =
+            apiClient;
+
+        _logger =
+            logger;
     }
 
     public async Task<IReadOnlyList<TenantDto>>
@@ -82,6 +99,12 @@ public sealed class HttpAcronisProvider : IAcronisProvider
                 "Verify API-client scope and tenant discovery."
             );
         }
+        else
+        {
+            LogTenantShapeSummary(
+                tenants
+            );
+        }
 
         return tenants;
     }
@@ -91,11 +114,11 @@ public sealed class HttpAcronisProvider : IAcronisProvider
             CancellationToken cancellationToken = default)
     {
         /*
-         * Do not filter to resource.machine here.
+         * Fetch the complete resource-status surface.
          *
-         * BackupHealth may eventually need non-machine workloads such as
-         * Microsoft 365 resources. Filtering belongs here only once actual
-         * production resource types have been validated.
+         * resource.group.* filtering belongs in BackupHealth normalization,
+         * not transport, because future modules may legitimately need those
+         * structural objects.
          */
         _logger?.Info(
             "Fetching Acronis resource statuses."
@@ -136,6 +159,12 @@ public sealed class HttpAcronisProvider : IAcronisProvider
                 "Verify API-client scope and resource-status visibility."
             );
         }
+        else
+        {
+            LogResourceShapeSummary(
+                resources
+            );
+        }
 
         return resources;
     }
@@ -145,8 +174,8 @@ public sealed class HttpAcronisProvider : IAcronisProvider
             CancellationToken cancellationToken = default)
     {
         /*
-         * Zero alerts is completely valid, so unlike tenants/resources
-         * it does not produce a warning.
+         * Zero active alerts is valid and therefore does not produce a
+         * warning.
          */
         _logger?.Info(
             "Fetching active Acronis alerts."
@@ -184,8 +213,531 @@ public sealed class HttpAcronisProvider : IAcronisProvider
     }
 
     /// <summary>
-    /// Fetches every page for a cursor-paginated Acronis endpoint and
-    /// exposes the caller to one combined collection.
+    /// Builds the complete accessible mapping between legacy numeric Acronis
+    /// tenant identifiers and Account Management v2 UUIDs.
+    ///
+    /// The root UUID is converted exactly once through the legacy API.
+    /// Hierarchy traversal then uses only the numeric IDs returned by Acronis.
+    ///
+    /// The completed map is cached for the lifetime of this provider instance.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, string>>
+        GetTenantIdMappingsAsync(
+            CancellationToken cancellationToken = default)
+    {
+        if (_tenantIdMappings is not null)
+        {
+            _logger?.Debug(
+                "Using cached Acronis tenant ID mapping."
+            );
+
+            return _tenantIdMappings;
+        }
+
+        _logger?.Info(
+            "Building Acronis tenant ID mapping from hierarchy."
+        );
+
+        var rootUuid =
+            await _apiClient
+                .GetRootTenantIdAsync(
+                    cancellationToken
+                );
+
+        /*
+         * Bootstrap Account Management v1.
+         *
+         * The v2 client metadata endpoint gives us a UUID. The legacy
+         * hierarchy API exposes the corresponding numeric ID that older
+         * Acronis API surfaces still use.
+         *
+         * IMPORTANT:
+         * Account Management API v1 uses /groups/, plural.
+         */
+        using var rootResponse =
+            await _apiClient.GetAsync(
+                $"/api/1/groups/" +
+                $"{Uri.EscapeDataString(rootUuid)}",
+                cancellationToken
+            );
+
+        rootResponse.EnsureSuccessStatusCode();
+
+        var root =
+            await rootResponse.Content
+                .ReadFromJsonAsync<
+                    LegacyTenantGroupDto>(
+                    cancellationToken:
+                        cancellationToken
+                )
+            ?? throw new InvalidOperationException(
+                "Acronis returned an empty legacy root tenant response."
+            );
+
+        if (root.Id <= 0)
+        {
+            throw new InvalidOperationException(
+                "Acronis returned an invalid legacy root tenant ID."
+            );
+        }
+
+        if (string.IsNullOrWhiteSpace(
+                root.Uuid)
+            || !Guid.TryParse(
+                root.Uuid,
+                out _))
+        {
+            throw new InvalidOperationException(
+                "Acronis returned an invalid root tenant UUID."
+            );
+        }
+
+        var mappings =
+            new Dictionary<string, string>(
+                StringComparer.Ordinal
+            );
+
+        AddMapping(
+            mappings,
+            root.Id,
+            root.Uuid
+        );
+
+        /*
+         * Queue and visited-set deliberately contain numeric IDs.
+         *
+         * Production validation showed that /children does not accept the
+         * root UUID in this environment.
+         */
+        var queue =
+            new Queue<long>();
+
+        var visited =
+            new HashSet<long>();
+
+        queue.Enqueue(
+            root.Id
+        );
+
+        while (queue.Count > 0)
+        {
+            var currentNumericId =
+                queue.Dequeue();
+
+            if (!visited.Add(
+                    currentNumericId))
+            {
+                continue;
+            }
+
+            if (visited.Count
+                > MaxHierarchyNodes)
+            {
+                throw new InvalidOperationException(
+                    $"Acronis tenant hierarchy traversal exceeded " +
+                    $"{MaxHierarchyNodes} branch nodes. The run was " +
+                    "aborted to prevent unbounded API traversal."
+                );
+            }
+
+            _logger?.Debug(
+                $"Fetching tenant hierarchy children for branch " +
+                $"{visited.Count}."
+            );
+
+            using var response =
+                await _apiClient.GetAsync(
+                    $"/api/1/groups/" +
+                    $"{currentNumericId.ToString(CultureInfo.InvariantCulture)}" +
+                    "/children",
+                    cancellationToken
+                );
+
+            response.EnsureSuccessStatusCode();
+
+            var page =
+                await response.Content
+                    .ReadFromJsonAsync<
+                        LegacyTenantChildrenPageDto>(
+                        cancellationToken:
+                            cancellationToken
+                    )
+                ?? throw new InvalidOperationException(
+                    "Acronis returned an empty tenant hierarchy response."
+                );
+
+            foreach (var child
+                     in page.Items)
+            {
+                if (child.Id <= 0)
+                {
+                    _logger?.Warning(
+                        "Acronis returned a hierarchy item with an " +
+                        "invalid legacy tenant ID."
+                    );
+
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(
+                        child.Uuid)
+                    || !Guid.TryParse(
+                        child.Uuid,
+                        out _))
+                {
+                    _logger?.Warning(
+                        "Acronis returned a hierarchy item with an " +
+                        "invalid tenant UUID."
+                    );
+
+                    continue;
+                }
+
+                AddMapping(
+                    mappings,
+                    child.Id,
+                    child.Uuid
+                );
+
+                /*
+                 * Leaf tenants are already fully mapped by the current
+                 * response. Only branch nodes require another API request.
+                 */
+                if (child.HasChildren > 0)
+                {
+                    queue.Enqueue(
+                        child.Id
+                    );
+                }
+            }
+        }
+
+        _tenantIdMappings =
+            new ReadOnlyDictionary<
+                string,
+                string>(
+                mappings
+            );
+
+        _logger?.Info(
+            $"Acronis tenant hierarchy mapping completed: " +
+            $"{mappings.Count} mapping(s) across " +
+            $"{visited.Count} traversed branch node(s)."
+        );
+
+        return _tenantIdMappings;
+    }
+
+    /// <summary>
+    /// Adds one legacy numeric-ID to UUID relationship while protecting
+    /// against contradictory vendor data.
+    /// </summary>
+    private static void AddMapping(
+        IDictionary<string, string> mappings,
+        long numericId,
+        string uuid)
+    {
+        var key =
+            numericId.ToString(
+                CultureInfo.InvariantCulture
+            );
+
+        if (mappings.TryGetValue(
+                key,
+                out var existingUuid)
+            && !string.Equals(
+                existingUuid,
+                uuid,
+                StringComparison.OrdinalIgnoreCase
+            ))
+        {
+            throw new InvalidOperationException(
+                "Acronis returned conflicting UUID mappings " +
+                "for the same legacy tenant ID."
+            );
+        }
+
+        mappings[key] =
+            uuid;
+    }
+
+    /// <summary>
+    /// Logs privacy-safe aggregate information about production tenant data.
+    ///
+    /// No tenant IDs, names, customer IDs, or unknown-field values are
+    /// written to the console.
+    /// </summary>
+    private void LogTenantShapeSummary(
+        IReadOnlyList<TenantDto> tenants)
+    {
+        if (_logger is null)
+        {
+            return;
+        }
+
+        _logger.Info(
+            "Production tenant-shape summary:"
+        );
+
+        var tenantIdGroups =
+            tenants
+                .GroupBy(
+                    tenant =>
+                        ClassifyIdentifier(
+                            tenant.Id
+                        )
+                )
+                .OrderByDescending(
+                    group =>
+                        group.Count()
+                )
+                .ThenBy(
+                    group =>
+                        group.Key,
+                    StringComparer.OrdinalIgnoreCase
+                );
+
+        foreach (var group
+                 in tenantIdGroups)
+        {
+            _logger.Info(
+                $"  tenant-id format '{group.Key}': " +
+                $"{group.Count()}"
+            );
+        }
+
+        var customerIdGroups =
+            tenants
+                .GroupBy(
+                    tenant =>
+                        ClassifyIdentifier(
+                            tenant.CustomerId
+                        )
+                )
+                .OrderByDescending(
+                    group =>
+                        group.Count()
+                )
+                .ThenBy(
+                    group =>
+                        group.Key,
+                    StringComparer.OrdinalIgnoreCase
+                );
+
+        foreach (var group
+                 in customerIdGroups)
+        {
+            _logger.Info(
+                $"  customer-id format '{group.Key}': " +
+                $"{group.Count()}"
+            );
+        }
+
+        LogAdditionalTenantFields(
+            tenants
+        );
+    }
+
+    /// <summary>
+    /// Summarizes unknown tenant properties by field name and JSON value kind.
+    /// Values themselves are never logged.
+    /// </summary>
+    private void LogAdditionalTenantFields(
+        IReadOnlyList<TenantDto> tenants)
+    {
+        if (_logger is null)
+        {
+            return;
+        }
+
+        var additionalFields =
+            tenants
+                .SelectMany(
+                    tenant =>
+                        tenant.AdditionalProperties
+                            .Select(
+                                property =>
+                                    new
+                                    {
+                                        Name =
+                                            property.Key,
+
+                                        Kind =
+                                            property.Value.ValueKind
+                                    }
+                            )
+                )
+                .GroupBy(
+                    field =>
+                        new
+                        {
+                            field.Name,
+                            field.Kind
+                        }
+                )
+                .OrderByDescending(
+                    group =>
+                        group.Count()
+                )
+                .ThenBy(
+                    group =>
+                        group.Key.Name,
+                    StringComparer.OrdinalIgnoreCase
+                )
+                .ThenBy(
+                    group =>
+                        group.Key.Kind
+                )
+                .ToList();
+
+        if (additionalFields.Count == 0)
+        {
+            _logger.Info(
+                "  no additional tenant fields observed."
+            );
+
+            return;
+        }
+
+        _logger.Info(
+            "  additional tenant fields observed:"
+        );
+
+        foreach (var group
+                 in additionalFields)
+        {
+            _logger.Info(
+                $"    '{group.Key.Name}' " +
+                $"({group.Key.Kind}): " +
+                $"{group.Count()}"
+            );
+        }
+    }
+
+    /// <summary>
+    /// Logs privacy-safe aggregate information about the shape of production
+    /// resource-status data.
+    ///
+    /// No resource names, resource IDs, tenant IDs, or payload values are
+    /// emitted.
+    /// </summary>
+    private void LogResourceShapeSummary(
+        IReadOnlyList<ResourceStatusDto> resources)
+    {
+        if (_logger is null)
+        {
+            return;
+        }
+
+        _logger.Info(
+            "Production resource-shape summary:"
+        );
+
+        var typeGroups =
+            resources
+                .GroupBy(
+                    resource =>
+                        string.IsNullOrWhiteSpace(
+                            resource.Context.Type
+                        )
+                            ? "<missing>"
+                            : resource.Context.Type
+                )
+                .OrderByDescending(
+                    group =>
+                        group.Count()
+                )
+                .ThenBy(
+                    group =>
+                        group.Key,
+                    StringComparer.OrdinalIgnoreCase
+                );
+
+        foreach (var group
+                 in typeGroups)
+        {
+            _logger.Info(
+                $"  resource type '{group.Key}': " +
+                $"{group.Count()}"
+            );
+        }
+
+        var tenantIdGroups =
+            resources
+                .GroupBy(
+                    resource =>
+                        ClassifyResourceTenantId(
+                            resource.Context.TenantId
+                        )
+                )
+                .OrderByDescending(
+                    group =>
+                        group.Count()
+                )
+                .ThenBy(
+                    group =>
+                        group.Key,
+                    StringComparer.OrdinalIgnoreCase
+                );
+
+        foreach (var group
+                 in tenantIdGroups)
+        {
+            _logger.Info(
+                $"  tenant-id format '{group.Key}': " +
+                $"{group.Count()}"
+            );
+        }
+    }
+
+    private static string ClassifyResourceTenantId(
+        string? tenantId)
+    {
+        if (string.IsNullOrWhiteSpace(
+                tenantId))
+        {
+            return "missing";
+        }
+
+        if (tenantId == "0")
+        {
+            return "zero";
+        }
+
+        return ClassifyIdentifier(
+            tenantId
+        );
+    }
+
+    private static string ClassifyIdentifier(
+        string? identifier)
+    {
+        if (string.IsNullOrWhiteSpace(
+                identifier))
+        {
+            return "missing";
+        }
+
+        if (Guid.TryParse(
+                identifier,
+                out _))
+        {
+            return "guid";
+        }
+
+        if (long.TryParse(
+                identifier,
+                out _))
+        {
+            return "numeric";
+        }
+
+        return "other";
+    }
+
+    /// <summary>
+    /// Fetches every page for a cursor-paginated Acronis endpoint and returns
+    /// one combined collection.
     /// </summary>
     private async Task<IReadOnlyList<TItem>>
         FetchAllPagesAsync<TPage, TItem>(
@@ -203,7 +755,8 @@ public sealed class HttpAcronisProvider : IAcronisProvider
         string? requestPath =
             firstRequestPath;
 
-        var pageNumber = 1;
+        var pageNumber =
+            1;
 
         while (requestPath is not null)
         {
@@ -235,17 +788,17 @@ public sealed class HttpAcronisProvider : IAcronisProvider
             var after =
                 getAfterCursor(page);
 
-            if (string.IsNullOrWhiteSpace(after))
+            if (string.IsNullOrWhiteSpace(
+                    after))
             {
-                requestPath = null;
+                requestPath =
+                    null;
+
                 continue;
             }
 
             /*
-             * Acronis cursors are opaque.
-             *
-             * Do not parse or reconstruct them. URL-encode the cursor and
-             * return it exactly as supplied.
+             * Cursors are opaque. Never inspect or reconstruct them.
              */
             requestPath =
                 endpointPath +
@@ -265,9 +818,6 @@ public sealed class HttpAcronisProvider : IAcronisProvider
         return allItems;
     }
 
-    /// <summary>
-    /// Executes one authenticated API request and deserializes its page.
-    /// </summary>
     private async Task<TPage> GetPageAsync<TPage>(
         string requestPath,
         CancellationToken cancellationToken)

@@ -10,23 +10,27 @@ public class BackupHealthServiceTests
 {
     private static BackupHealthService CreateService()
     {
-        var fixtureDirectory = Path.Combine(
-            "Fixtures",
-            "Acronis"
-        );
+        var fixtureDirectory =
+            Path.Combine(
+                "Fixtures",
+                "Acronis"
+            );
 
         var provider =
             new FixtureAcronisProvider(
                 fixtureDirectory
             );
 
-        return new BackupHealthService(provider);
+        return new BackupHealthService(
+            provider
+        );
     }
 
     [Fact]
     public async Task GetSnapshotAsync_JoinsResourcesWithTenants()
     {
-        var service = CreateService();
+        var service =
+            CreateService();
 
         var resources =
             (await service.GetSnapshotAsync())
@@ -62,7 +66,8 @@ public class BackupHealthServiceTests
     [Fact]
     public async Task GetSnapshotAsync_MapsFailedResource()
     {
-        var service = CreateService();
+        var service =
+            CreateService();
 
         var resources =
             (await service.GetSnapshotAsync())
@@ -102,7 +107,8 @@ public class BackupHealthServiceTests
     [Fact]
     public async Task GetSnapshotAsync_AttachesAlertsToMatchingResource()
     {
-        var service = CreateService();
+        var service =
+            CreateService();
 
         var resources =
             (await service.GetSnapshotAsync())
@@ -136,7 +142,8 @@ public class BackupHealthServiceTests
     [Fact]
     public async Task GetSnapshotAsync_ResourceWithoutAlertsHasEmptyAlertList()
     {
-        var service = CreateService();
+        var service =
+            CreateService();
 
         var resources =
             (await service.GetSnapshotAsync())
@@ -157,7 +164,8 @@ public class BackupHealthServiceTests
     [Fact]
     public async Task GetSnapshotAsync_MapsHealthyResource()
     {
-        var service = CreateService();
+        var service =
+            CreateService();
 
         var resources =
             (await service.GetSnapshotAsync())
@@ -223,7 +231,9 @@ public class BackupHealthServiceTests
             };
 
         var service =
-            new BackupHealthService(provider);
+            new BackupHealthService(
+                provider
+            );
 
         var snapshot =
             await service.GetSnapshotAsync();
@@ -273,7 +283,9 @@ public class BackupHealthServiceTests
             };
 
         var service =
-            new BackupHealthService(provider);
+            new BackupHealthService(
+                provider
+            );
 
         var snapshot =
             await service.GetSnapshotAsync();
@@ -315,7 +327,9 @@ public class BackupHealthServiceTests
             };
 
         var service =
-            new BackupHealthService(provider);
+            new BackupHealthService(
+                provider
+            );
 
         var snapshot =
             await service.GetSnapshotAsync();
@@ -341,6 +355,16 @@ public class BackupHealthServiceTests
         );
 
         Assert.Contains(
+            "could not be correlated",
+            diagnostic.Message,
+            StringComparison.OrdinalIgnoreCase
+        );
+
+        /*
+         * Tenant identifiers should not be emitted in operator-facing
+         * diagnostics.
+         */
+        Assert.DoesNotContain(
             "unknown-tenant",
             diagnostic.Message
         );
@@ -379,7 +403,9 @@ public class BackupHealthServiceTests
             };
 
         var service =
-            new BackupHealthService(provider);
+            new BackupHealthService(
+                provider
+            );
 
         var snapshot =
             await service.GetSnapshotAsync();
@@ -447,7 +473,9 @@ public class BackupHealthServiceTests
             };
 
         var service =
-            new BackupHealthService(provider);
+            new BackupHealthService(
+                provider
+            );
 
         var snapshot =
             await service.GetSnapshotAsync();
@@ -472,6 +500,16 @@ public class BackupHealthServiceTests
         );
 
         Assert.Contains(
+            "normalized BackupHealth workload set",
+            diagnostic.Message,
+            StringComparison.OrdinalIgnoreCase
+        );
+
+        /*
+         * Resource identifiers should not be emitted in operator-facing
+         * diagnostics.
+         */
+        Assert.DoesNotContain(
             "resource-does-not-exist",
             diagnostic.Message
         );
@@ -483,8 +521,11 @@ public class BackupHealthServiceTests
     {
         return new TenantDto
         {
-            Id = id,
-            Name = name
+            Id =
+                id,
+
+            Name =
+                name
         };
     }
 
@@ -498,19 +539,28 @@ public class BackupHealthServiceTests
             Context =
                 new ResourceDto
                 {
-                    Id = id,
-                    TenantId = tenantId,
-                    Name = name,
-                    Type = "resource.machine"
+                    Id =
+                        id,
+
+                    TenantId =
+                        tenantId,
+
+                    Name =
+                        name,
+
+                    Type =
+                        "resource.machine"
                 },
 
             Aggregate =
                 new AggregateStatusDto
                 {
-                    Status = "idle"
+                    Status =
+                        "idle"
                 },
 
-            Policies = []
+            Policies =
+                []
         };
     }
 
@@ -520,7 +570,8 @@ public class BackupHealthServiceTests
     {
         return new AlertDto
         {
-            Id = id,
+            Id =
+                id,
 
             CreatedAt =
                 new DateTimeOffset(
@@ -533,9 +584,14 @@ public class BackupHealthServiceTests
                     TimeSpan.Zero
                 ),
 
-            Category = "Backup",
-            Severity = "warning",
-            Type = "FixtureAlert",
+            Category =
+                "Backup",
+
+            Severity =
+                "warning",
+
+            Type =
+                "FixtureAlert",
 
             Details =
                 ParseJsonElement(
@@ -548,9 +604,13 @@ public class BackupHealthServiceTests
         string json)
     {
         using var document =
-            JsonDocument.Parse(json);
+            JsonDocument.Parse(
+                json
+            );
 
-        return document.RootElement.Clone();
+        return document
+            .RootElement
+            .Clone();
     }
 
     private sealed class StubAcronisProvider

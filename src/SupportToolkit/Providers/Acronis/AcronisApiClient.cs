@@ -10,11 +10,6 @@ namespace SupportToolkit.Providers.Acronis;
 /// <summary>
 /// Encapsulates the raw Acronis HTTP and authentication flow for the
 /// SupportToolkit integration.
-///
-/// This class isolates transport and credential concerns so consuming code
-/// can treat Acronis as a data source rather than dealing with
-/// client-credentials authentication, bearer-token handling, or network
-/// details.
 /// </summary>
 public sealed class AcronisApiClient
 {
@@ -25,34 +20,32 @@ public sealed class AcronisApiClient
 
     private string? _accessToken;
     private DateTimeOffset _accessTokenExpiresAt;
+    private string? _rootTenantId;
 
-    /// <summary>
-    /// Initializes a new Acronis API client.
-    /// </summary>
     public AcronisApiClient(
         HttpClient httpClient,
         AcronisOptions options,
         TimeProvider? timeProvider = null,
         OperationalLogger? logger = null)
     {
-        _httpClient = httpClient;
-        _options = options;
+        _httpClient =
+            httpClient;
+
+        _options =
+            options;
 
         _timeProvider =
             timeProvider
             ?? TimeProvider.System;
 
-        _logger = logger;
+        _logger =
+            logger;
     }
 
     public async Task<HttpResponseMessage> GetAsync(
         string path,
         CancellationToken cancellationToken = default)
     {
-        /*
-         * Subsequent requests use the bearer token issued from the
-         * client-credentials flow rather than the client secret.
-         */
         var accessToken =
             await GetAccessTokenAsync(
                 cancellationToken
@@ -71,8 +64,9 @@ public sealed class AcronisApiClient
             );
 
         var safePath =
-            request.RequestUri?.AbsolutePath
-            ?? "<unknown>";
+            GetSafeLogPath(
+                request.RequestUri
+            );
 
         _logger?.Info(
             $"GET {safePath}"
@@ -101,6 +95,15 @@ public sealed class AcronisApiClient
     public async Task<string> GetRootTenantIdAsync(
         CancellationToken cancellationToken = default)
     {
+        if (_rootTenantId is not null)
+        {
+            _logger?.Debug(
+                "Using cached Acronis root tenant ID."
+            );
+
+            return _rootTenantId;
+        }
+
         _logger?.Info(
             "Resolving Acronis root tenant."
         );
@@ -124,11 +127,14 @@ public sealed class AcronisApiClient
                 "Acronis returned an empty API client response."
             );
 
+        _rootTenantId =
+            client.TenantId;
+
         _logger?.Info(
             "Acronis root tenant resolved."
         );
 
-        return client.TenantId;
+        return _rootTenantId;
     }
 
     private async Task<string> GetAccessTokenAsync(
@@ -137,10 +143,6 @@ public sealed class AcronisApiClient
         var now =
             _timeProvider.GetUtcNow();
 
-        /*
-         * Refresh before expiry to avoid reusing a token that may expire
-         * mid-request.
-         */
         if (_accessToken is not null
             && now
             < _accessTokenExpiresAt.AddMinutes(-1))
@@ -164,11 +166,6 @@ public sealed class AcronisApiClient
                 )
             );
 
-        /*
-         * The client-credentials flow authenticates the application itself,
-         * not a user, so Acronis expects Basic authentication with the client
-         * ID and secret.
-         */
         var credentials =
             Convert.ToBase64String(
                 Encoding.ASCII.GetBytes(
@@ -250,5 +247,50 @@ public sealed class AcronisApiClient
         return new Uri(
             $"{baseUrl}{normalizedPath}"
         );
+    }
+
+    private static string GetSafeLogPath(
+        Uri? uri)
+    {
+        if (uri is null)
+        {
+            return "<unknown>";
+        }
+
+        var path =
+            uri.AbsolutePath;
+
+        var segments =
+            path.Split(
+                '/',
+                StringSplitOptions.RemoveEmptyEntries
+            );
+
+        if (segments.Length == 4
+            && segments[0] == "api"
+            && segments[1] == "2"
+            && segments[2] == "clients")
+        {
+            return "/api/2/clients/{client_id}";
+        }
+
+        if (segments.Length == 4
+            && segments[0] == "api"
+            && segments[1] == "1"
+            && segments[2] == "groups")
+        {
+            return "/api/1/groups/{tenant_id}";
+        }
+
+        if (segments.Length == 5
+            && segments[0] == "api"
+            && segments[1] == "1"
+            && segments[2] == "groups"
+            && segments[4] == "children")
+        {
+            return "/api/1/groups/{tenant_id}/children";
+        }
+
+        return path;
     }
 }

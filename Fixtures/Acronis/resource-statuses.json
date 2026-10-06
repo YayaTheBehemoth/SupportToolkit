@@ -1,22 +1,52 @@
 {
   "paging": {
     "cursors": {
-      "total": 4
+      "total": 7
     }
   },
   "items": [
+    {
+      "context": {
+        "id": "fixture-group-all",
+        "name": "All machines",
+        "tenant_id": "0",
+        "type": "resource.group.all"
+      },
+      "aggregate": {
+        "status": "critical"
+      }
+    },
+    {
+      "context": {
+        "id": "fixture-group-computers",
+        "name": "Machines with agents",
+        "tenant_id": "0",
+        "type": "resource.group.computers"
+      },
+      "aggregate": {
+        "status": "warning"
+      }
+    },
+    {
+      "context": {
+        "id": "fixture-group-hosts",
+        "name": "Hosts and clusters",
+        "tenant_id": "0",
+        "type": "resource.group.hosts_and_clusters"
+      },
+      "aggregate": {
+        "status": "no_policies_applied"
+      }
+    },
     {
       "context": {
         "id": "11111111-1111-1111-1111-111111111111",
         "external_id": "fixture-backup-server-01",
         "name": "BACKUP-SERVER-01",
         "user_defined_name": "BACKUP-SERVER-01",
-        "tenant_id": "11111111-aaaa-aaaa-aaaa-111111111111",
+        "tenant_id": "1001",
         "type": "resource.machine",
-        "cti": "cti.supporttoolkit.fixture.machine.v1.0",
-        "parent_group_ids": [],
-        "created_at": "2026-09-01T08:00:00Z",
-        "updated_at": "2026-09-30T07:00:00Z"
+        "parent_group_ids": []
       },
       "aggregate": {
         "running": {
@@ -40,12 +70,9 @@
         "external_id": "fixture-files-01",
         "name": "FILES-01",
         "user_defined_name": "FILES-01",
-        "tenant_id": "22222222-bbbb-bbbb-bbbb-222222222222",
+        "tenant_id": "1002",
         "type": "resource.machine",
-        "cti": "cti.supporttoolkit.fixture.machine.v1.0",
-        "parent_group_ids": [],
-        "created_at": "2026-09-01T08:00:00Z",
-        "updated_at": "2026-09-30T07:00:00Z"
+        "parent_group_ids": []
       },
       "aggregate": {
         "running": {
@@ -69,12 +96,9 @@
         "external_id": "fixture-old-pc-01",
         "name": "OLD-PC-01",
         "user_defined_name": "OLD-PC-01",
-        "tenant_id": "33333333-cccc-cccc-cccc-333333333333",
-        "type": "resource.machine",
-        "cti": "cti.supporttoolkit.fixture.machine.v1.0",
-        "parent_group_ids": [],
-        "created_at": "2026-08-01T08:00:00Z",
-        "updated_at": "2026-09-25T07:00:00Z"
+        "tenant_id": "1003",
+        "type": "resource.virtual_machine.mshyperv",
+        "parent_group_ids": []
       },
       "aggregate": {
         "running": {
@@ -89,12 +113,9 @@
         "external_id": "fixture-app-server-01",
         "name": "APP-SERVER-01",
         "user_defined_name": "APP-SERVER-01",
-        "tenant_id": "11111111-aaaa-aaaa-aaaa-111111111111",
+        "tenant_id": "1001",
         "type": "resource.machine",
-        "cti": "cti.supporttoolkit.fixture.machine.v1.0",
-        "parent_group_ids": [],
-        "created_at": "2026-09-15T08:00:00Z",
-        "updated_at": "2026-10-01T04:30:00Z"
+        "parent_group_ids": []
       },
       "aggregate": {
         "running": {
@@ -112,6 +133,5 @@
         }
       ]
     }
-  ],
-  "timestamp": "2026-10-01T08:00:00Z"
+  ]
 }

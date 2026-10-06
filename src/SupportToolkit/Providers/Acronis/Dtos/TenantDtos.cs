@@ -5,6 +5,7 @@ namespace SupportToolkit.Providers.Acronis.Dtos;
 
 /// <summary>
 /// Represents the top-level Acronis tenant response.
+///
 /// This contract mirrors the external API payload and intentionally remains
 /// separate from SupportToolkit domain models.
 /// </summary>
@@ -37,10 +38,6 @@ public sealed class TenantPagingCursorsDto
 
 public sealed class TenantDto
 {
-    /*
-     * Id and Name are the only tenant fields BackupHealth fundamentally
-     * requires for resource-to-customer correlation.
-     */
     [JsonPropertyName("id")]
     public required string Id { get; init; }
 
@@ -48,9 +45,15 @@ public sealed class TenantDto
     public required string Name { get; init; }
 
     /*
-     * Remaining fields describe the external account structure but should
-     * not prevent an otherwise usable tenant from being deserialized.
+     * Production validation showed that resource-management tenant IDs are
+     * numeric while Account Management tenant IDs are UUIDs.
+     *
+     * customer_id was investigated as a possible cross-API identifier, but
+     * production currently returns it as absent for all observed tenants.
      */
+    [JsonPropertyName("customer_id")]
+    public string? CustomerId { get; init; }
+
     [JsonPropertyName("parent_id")]
     public string? ParentId { get; init; }
 
@@ -77,4 +80,19 @@ public sealed class TenantDto
 
     [JsonPropertyName("offering_items")]
     public List<JsonElement> OfferingItems { get; init; } = [];
+
+    /*
+     * Unknown production fields are retained instead of silently discarded.
+     *
+     * This is primarily useful while validating Acronis's real tenant
+     * contract against the documented contract. Values are never written to
+     * operational logs; only field names and JSON value kinds may be
+     * summarized.
+     */
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement> AdditionalProperties
+    {
+        get;
+        set;
+    } = [];
 }

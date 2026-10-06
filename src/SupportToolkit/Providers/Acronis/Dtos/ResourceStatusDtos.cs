@@ -15,8 +15,14 @@ public sealed class ResourceStatusPageDto
     [JsonPropertyName("items")]
     public required List<ResourceStatusDto> Items { get; init; }
 
+    /*
+     * Acronis production responses do not consistently include the
+     * top-level timestamp field, and BackupHealth does not depend on it.
+     *
+     * Keep it optional so an otherwise valid page remains usable.
+     */
     [JsonPropertyName("timestamp")]
-    public required DateTimeOffset Timestamp { get; init; }
+    public DateTimeOffset? Timestamp { get; init; }
 }
 
 public sealed class PagingDto
