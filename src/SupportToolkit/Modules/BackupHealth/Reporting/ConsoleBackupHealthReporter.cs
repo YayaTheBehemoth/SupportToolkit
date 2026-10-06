@@ -1,6 +1,6 @@
 using SupportToolkit.Modules.BackupHealth.Models;
 
-namespace SupportToolkit.Reporting;
+namespace SupportToolkit.Modules.BackupHealth.Reporting;
 
 /// <summary>
 /// Writes BackupHealth results to the console.

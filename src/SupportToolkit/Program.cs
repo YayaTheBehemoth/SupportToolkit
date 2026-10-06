@@ -4,7 +4,7 @@ using SupportToolkit.Core.ErrorHandling;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Modules.BackupHealth;
 using SupportToolkit.Providers.Acronis;
-using SupportToolkit.Reporting;
+using SupportToolkit.Modules.BackupHealth.Reporting;
 
 var runStopwatch =
     Stopwatch.StartNew();
