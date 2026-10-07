@@ -116,8 +116,8 @@ public sealed class HttpAcronisProvider
         /*
          * Fetch the complete resource-status surface.
          *
-         * resource.group.* filtering belongs in BackupHealth normalization,
-         * not transport, because future modules may legitimately need those
+         * resource.group.* filtering belongs in consuming module normalization,
+         * not transport, because different modules may legitimately need those
          * structural objects.
          */
         _logger?.Info(
@@ -157,6 +157,87 @@ public sealed class HttpAcronisProvider
             _logger?.Warning(
                 "Acronis returned zero resource statuses. " +
                 "Verify API-client scope and resource-status visibility."
+            );
+        }
+        else
+        {
+            LogResourceShapeSummary(
+                resources
+            );
+        }
+
+        return resources;
+    }
+
+    /// <summary>
+    /// Fetches the complete resource-status surface visible from one
+    /// customer-scoped Acronis access token.
+    ///
+    /// The caller supplies the Account Management tenant UUID. Token exchange,
+    /// authentication, pagination, and transport concerns remain inside the
+    /// Acronis provider layer rather than leaking into consuming modules.
+    /// </summary>
+    public async Task<IReadOnlyList<ResourceStatusDto>>
+        GetResourceStatusesForTenantAsync(
+            string tenantId,
+            CancellationToken cancellationToken = default)
+    {
+        if (!Guid.TryParse(
+                tenantId,
+                out _))
+        {
+            throw new ArgumentException(
+                "A tenant UUID is required for a " +
+                "customer-scoped resource-status request.",
+                nameof(tenantId)
+            );
+        }
+
+        _logger?.Info(
+            "Fetching customer-scoped Acronis resource statuses."
+        );
+
+        var scopedAccessToken =
+            await _apiClient
+                .GetScopedAccessTokenAsync(
+                    tenantId,
+                    cancellationToken
+                );
+
+        var firstRequestPath =
+            "/api/resource_management/v4/resource_statuses" +
+            $"?limit={PageSize}";
+
+        var resources =
+            await FetchAllPagesAsync<
+                ResourceStatusPageDto,
+                ResourceStatusDto>(
+                datasetName:
+                    "customer-scoped resource statuses",
+                firstRequestPath:
+                    firstRequestPath,
+                endpointPath:
+                    "/api/resource_management/v4/resource_statuses",
+                getItems:
+                    page => page.Items,
+                getAfterCursor:
+                    page =>
+                        page.Paging.Cursors.After,
+                cancellationToken:
+                    cancellationToken,
+                accessToken:
+                    scopedAccessToken
+            );
+
+        _logger?.Info(
+            $"Customer-scoped Acronis resource statuses fetched: " +
+            $"{resources.Count}."
+        );
+
+        if (resources.Count == 0)
+        {
+            _logger?.Warning(
+                "Acronis returned zero customer-scoped resource statuses."
             );
         }
         else
@@ -738,6 +819,11 @@ public sealed class HttpAcronisProvider
     /// <summary>
     /// Fetches every page for a cursor-paginated Acronis endpoint and returns
     /// one combined collection.
+    ///
+    /// When accessToken is supplied, every page in the sequence is fetched
+    /// using that explicit token. This is required for customer-scoped API
+    /// requests because pagination must remain inside the same authorization
+    /// scope.
     /// </summary>
     private async Task<IReadOnlyList<TItem>>
         FetchAllPagesAsync<TPage, TItem>(
@@ -746,7 +832,8 @@ public sealed class HttpAcronisProvider
             string endpointPath,
             Func<TPage, IEnumerable<TItem>> getItems,
             Func<TPage, string?> getAfterCursor,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            string? accessToken = null)
         where TPage : class
     {
         var allItems =
@@ -768,7 +855,8 @@ public sealed class HttpAcronisProvider
             var page =
                 await GetPageAsync<TPage>(
                     requestPath,
-                    cancellationToken
+                    cancellationToken,
+                    accessToken
                 );
 
             var pageItems =
@@ -820,14 +908,21 @@ public sealed class HttpAcronisProvider
 
     private async Task<TPage> GetPageAsync<TPage>(
         string requestPath,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? accessToken = null)
         where TPage : class
     {
         using var response =
-            await _apiClient.GetAsync(
-                requestPath,
-                cancellationToken
-            );
+            accessToken is null
+                ? await _apiClient.GetAsync(
+                    requestPath,
+                    cancellationToken
+                )
+                : await _apiClient.GetWithAccessTokenAsync(
+                    requestPath,
+                    accessToken,
+                    cancellationToken
+                );
 
         response.EnsureSuccessStatusCode();
 

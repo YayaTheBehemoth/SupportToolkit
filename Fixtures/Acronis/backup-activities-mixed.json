@@ -1,0 +1,162 @@
+{
+  "items": [
+    {
+      "uuid": "10000000-0000-0000-0000-000000000001",
+      "idString": "activity-001",
+      "type": "00000000-0000-0000-0000-000000000001",
+      "state": "completed",
+      "startedAt": "2026-10-06T01:00:00Z",
+      "completedAt": "2026-10-06T01:05:00Z",
+      "startedByUser": "BY_SCHEDULE",
+      "taskIdString": "task-001",
+      "policy": {
+        "id": "policy-001",
+        "name": "Fixture Backup Plan",
+        "type": "backup"
+      },
+      "resource": {
+        "id": "resource-001",
+        "name": "fixture-user-1@example.invalid",
+        "type": "MAILBOX"
+      },
+      "context": {
+        "activityType": "backup",
+        "policyId": "policy-001",
+        "policyName": "Fixture Backup Plan",
+        "resourceId": "resource-001",
+        "resourceName": "fixture-user-1@example.invalid",
+        "resourceKind": "MAILBOX",
+        "resourceSubtype": "UserMailbox",
+        "suite": "fixture"
+      },
+      "result": {
+        "code": "ok"
+      }
+    },
+    {
+      "uuid": "10000000-0000-0000-0000-000000000002",
+      "idString": "activity-002",
+      "type": "00000000-0000-0000-0000-000000000001",
+      "state": "completed",
+      "startedAt": "2026-10-06T02:00:00Z",
+      "completedAt": "2026-10-06T02:04:00Z",
+      "startedByUser": "BY_SCHEDULE",
+      "taskIdString": "task-002",
+      "policy": {
+        "id": "policy-001",
+        "name": "Fixture Backup Plan",
+        "type": "backup"
+      },
+      "resource": {
+        "id": "resource-002",
+        "name": "fixture-user-2@example.invalid",
+        "type": "MAILBOX"
+      },
+      "context": {
+        "activityType": "backup",
+        "policyId": "policy-001",
+        "policyName": "Fixture Backup Plan",
+        "resourceId": "resource-002",
+        "resourceName": "fixture-user-2@example.invalid",
+        "resourceKind": "MAILBOX",
+        "resourceSubtype": "UserMailbox",
+        "suite": "fixture"
+      },
+      "result": {
+        "code": "ok"
+      }
+    },
+    {
+      "uuid": "10000000-0000-0000-0000-000000000003",
+      "idString": "activity-003",
+      "type": "00000000-0000-0000-0000-000000000001",
+      "state": "running",
+      "startedAt": "2026-10-06T08:00:00Z",
+      "startedByUser": "BY_SCHEDULE",
+      "taskIdString": "task-003",
+      "policy": {
+        "id": "policy-001",
+        "name": "Fixture Backup Plan",
+        "type": "backup"
+      },
+      "resource": {
+        "id": "resource-002",
+        "name": "fixture-user-2@example.invalid",
+        "type": "MAILBOX"
+      },
+      "context": {
+        "activityType": "backup",
+        "policyId": "policy-001",
+        "policyName": "Fixture Backup Plan",
+        "resourceId": "resource-002",
+        "resourceName": "fixture-user-2@example.invalid",
+        "resourceKind": "MAILBOX",
+        "resourceSubtype": "UserMailbox",
+        "suite": "fixture"
+      },
+      "result": {}
+    },
+    {
+      "uuid": "10000000-0000-0000-0000-000000000004",
+      "idString": "activity-004",
+      "type": "00000000-0000-0000-0000-000000000001",
+      "state": "waiting",
+      "startedAt": "2026-10-06T03:00:00Z",
+      "startedByUser": "BY_SCHEDULE",
+      "taskIdString": "task-004",
+      "policy": {
+        "id": "policy-001",
+        "name": "Fixture Backup Plan",
+        "type": "backup"
+      },
+      "resource": {
+        "id": "resource-003",
+        "name": "fixture-site-1",
+        "type": "SITE"
+      },
+      "context": {
+        "activityType": "backup",
+        "policyId": "policy-001",
+        "policyName": "Fixture Backup Plan",
+        "resourceId": "resource-003",
+        "resourceName": "fixture-site-1",
+        "resourceKind": "SITE",
+        "resourceSubtype": "SiteCollection",
+        "suite": "fixture"
+      },
+      "result": {}
+    },
+    {
+      "uuid": "10000000-0000-0000-0000-000000000005",
+      "idString": "activity-005",
+      "type": "00000000-0000-0000-0000-000000000001",
+      "startedAt": "2026-10-06T04:00:00Z",
+      "startedByUser": "BY_SCHEDULE",
+      "taskIdString": "task-005",
+      "policy": {
+        "id": "policy-001",
+        "name": "Fixture Backup Plan",
+        "type": "backup"
+      },
+      "resource": {
+        "id": "resource-004",
+        "name": "fixture-user-4@example.invalid",
+        "type": "MAILBOX"
+      },
+      "context": {
+        "activityType": "backup",
+        "policyId": "policy-001",
+        "policyName": "Fixture Backup Plan",
+        "resourceId": "resource-004",
+        "resourceName": "fixture-user-4@example.invalid",
+        "resourceKind": "MAILBOX",
+        "resourceSubtype": "UserMailbox",
+        "suite": "fixture"
+      },
+      "result": {}
+    }
+  ],
+  "paging": {
+    "cursors": {}
+  }
+}
