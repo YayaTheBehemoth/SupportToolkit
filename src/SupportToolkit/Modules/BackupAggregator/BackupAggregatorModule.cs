@@ -6,6 +6,7 @@ using SupportToolkit.Modules.BackupAggregator.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Providers.Acronis;
 using SupportToolkit.Providers.Acronis.Activities;
+using SupportToolkit.Providers.Acronis.Activities.Dtos;
 using SupportToolkit.Providers.Acronis.Transport;
 
 namespace SupportToolkit.Modules.BackupAggregator;
@@ -25,22 +26,12 @@ public sealed class BackupAggregatorModule
         var runtimeOptions =
             SupportToolkitRuntimeOptions.FromEnvironment();
 
-        /*
-         * Fixture mode exercises the actual aggregation pipeline
-         * without making any production API calls.
-         */
         if (runtimeOptions.Mode
             == SupportToolkitMode.Fixture)
         {
             return await RunFixtureAsync();
         }
 
-        /*
-         * Production mode is still intentionally limited to the
-         * explicit single-tenant activity probe.
-         *
-         * The MSP-wide production run will be added later.
-         */
         if (args.Length == 0
             || args[0] is "--help" or "-h")
         {
@@ -49,17 +40,15 @@ public sealed class BackupAggregatorModule
             return 0;
         }
 
-        if (args.Length != 4
-            || !string.Equals(
-                args[0],
-                "activity-probe",
-                StringComparison.OrdinalIgnoreCase
-            ))
+        if (args.Length != 4)
         {
             PrintUsage();
 
             return 1;
         }
+
+        var command =
+            args[0];
 
         var tenantName =
             args[1];
@@ -106,17 +95,37 @@ public sealed class BackupAggregatorModule
         var logger =
             new OperationalLogger();
 
-        logger.Info(
-            "Starting backup-aggregator bounded activity probe " +
-            "in production mode."
-        );
+        if (string.Equals(
+                command,
+                "review",
+                StringComparison.OrdinalIgnoreCase
+            ))
+        {
+            return await RunProductionReviewAsync(
+                tenantName,
+                fromInclusive,
+                toExclusive,
+                logger
+            );
+        }
 
-        return await RunActivityProbeAsync(
-            tenantName,
-            fromInclusive,
-            toExclusive,
-            logger
-        );
+        if (string.Equals(
+                command,
+                "activity-probe",
+                StringComparison.OrdinalIgnoreCase
+            ))
+        {
+            return await RunActivityProbeAsync(
+                tenantName,
+                fromInclusive,
+                toExclusive,
+                logger
+            );
+        }
+
+        PrintUsage();
+
+        return 1;
     }
 
     private static async Task<int> RunFixtureAsync()
@@ -136,17 +145,8 @@ public sealed class BackupAggregatorModule
                     "backup-activities-healthy.json"
                 );
 
-        var normalizer =
-            new BackupActivityNormalizer();
-
-        var classifier =
-            new BackupActivityClassifier();
-
         var service =
-            new BackupAggregatorService(
-                normalizer,
-                classifier
-            );
+            CreateAggregatorService();
 
         var tenantReports =
             new[]
@@ -177,11 +177,95 @@ public sealed class BackupAggregatorModule
         return 0;
     }
 
+    private static async Task<int> RunProductionReviewAsync(
+        string tenantName,
+        DateTimeOffset fromInclusive,
+        DateTimeOffset toExclusive,
+        OperationalLogger logger)
+    {
+        logger.Info(
+            "Starting single-tenant BackupAggregator review " +
+            "in production mode."
+        );
+
+        var productionData =
+            await FetchProductionActivitiesAsync(
+                tenantName,
+                fromInclusive,
+                toExclusive,
+                logger
+            );
+
+        if (productionData is null)
+        {
+            return 1;
+        }
+
+        var service =
+            CreateAggregatorService();
+
+        var tenantReport =
+            service.BuildTenantReport(
+                productionData.TenantName,
+                productionData.Activities
+            );
+
+        var report =
+            service.BuildAggregatedReport(
+                new[]
+                {
+                    tenantReport
+                }
+            );
+
+        var reporter =
+            new ConsoleBackupAggregatorReporter();
+
+        reporter.Write(
+            report
+        );
+
+        return 0;
+    }
+
     private static async Task<int> RunActivityProbeAsync(
         string tenantName,
         DateTimeOffset fromInclusive,
         DateTimeOffset toExclusive,
         OperationalLogger logger)
+    {
+        logger.Info(
+            "Starting bounded BackupAggregator activity probe " +
+            "in production mode."
+        );
+
+        var productionData =
+            await FetchProductionActivitiesAsync(
+                tenantName,
+                fromInclusive,
+                toExclusive,
+                logger
+            );
+
+        if (productionData is null)
+        {
+            return 1;
+        }
+
+        var probe =
+            new BackupAggregatorProbeService();
+
+        return probe.ProbeActivities(
+            productionData.Activities
+        );
+    }
+
+    private static async Task<ProductionActivityData?>
+        FetchProductionActivitiesAsync(
+            string tenantName,
+            DateTimeOffset fromInclusive,
+            DateTimeOffset toExclusive,
+            OperationalLogger logger)
     {
         var acronisOptions =
             AcronisOptions.FromEnvironment();
@@ -244,7 +328,7 @@ public sealed class BackupAggregatorModule
                 $"No tenant named '{tenantName}' was found."
             );
 
-            return 1;
+            return null;
         }
 
         if (matchingTenants.Count > 1)
@@ -254,10 +338,10 @@ public sealed class BackupAggregatorModule
             );
 
             Console.Error.WriteLine(
-                "The probe will not guess which tenant to use."
+                "SupportToolkit will not guess which tenant to use."
             );
 
-            return 1;
+            return null;
         }
 
         var tenant =
@@ -291,11 +375,29 @@ public sealed class BackupAggregatorModule
                     toExclusive
                 );
 
-        var probe =
-            new BackupAggregatorProbeService();
+        logger.Info(
+            $"Production backup activities fetched: " +
+            $"{activities.Count}."
+        );
 
-        return probe.ProbeActivities(
+        return new ProductionActivityData(
+            tenant.Name,
             activities
+        );
+    }
+
+    private static BackupAggregatorService
+        CreateAggregatorService()
+    {
+        var normalizer =
+            new BackupActivityNormalizer();
+
+        var classifier =
+            new BackupActivityClassifier();
+
+        return new BackupAggregatorService(
+            normalizer,
+            classifier
         );
     }
 
@@ -320,7 +422,7 @@ public sealed class BackupAggregatorModule
         Console.WriteLine();
 
         Console.WriteLine(
-            "Fixture mode:"
+            "Fixture review:"
         );
 
         Console.WriteLine(
@@ -329,6 +431,17 @@ public sealed class BackupAggregatorModule
 
         Console.WriteLine(
             "  SupportToolkit backup-aggregator"
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Production review:"
+        );
+
+        Console.WriteLine(
+            "  SupportToolkit backup-aggregator " +
+            "review <tenant-name> <from> <to>"
         );
 
         Console.WriteLine();
@@ -345,7 +458,7 @@ public sealed class BackupAggregatorModule
         Console.WriteLine();
 
         Console.WriteLine(
-            "The production probe interval is half-open:"
+            "The requested interval is half-open:"
         );
 
         Console.WriteLine(
@@ -365,10 +478,13 @@ public sealed class BackupAggregatorModule
         );
 
         Console.WriteLine(
-            "  SupportToolkit backup-aggregator activity-probe " +
-            "\"Customer Name\" " +
-            "\"2026-10-06T00:00:00+02:00\" " +
-            "\"2026-10-07T00:00:00+02:00\""
+            "  SupportToolkit backup-aggregator review " +
+            "\"Customer Name\" <from> <to>"
         );
     }
+
+    private sealed record ProductionActivityData(
+        string TenantName,
+        IReadOnlyList<AcronisActivityDto> Activities
+    );
 }

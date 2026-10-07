@@ -154,6 +154,39 @@
         "suite": "fixture"
       },
       "result": {}
+    },
+    {
+      "uuid": "10000000-0000-0000-0000-000000000006",
+      "idString": "activity-006",
+      "type": "00000000-0000-0000-0000-000000000001",
+      "state": "completed",
+      "startedAt": "2026-10-06T05:00:00Z",
+      "completedAt": "2026-10-06T05:07:00Z",
+      "startedByUser": "BY_SCHEDULE",
+      "taskIdString": "task-006",
+      "policy": {
+        "id": "policy-001",
+        "name": "Fixture Backup Plan",
+        "type": "backup"
+      },
+      "resource": {
+        "id": "resource-005",
+        "name": "fixture-user-warning@example.invalid",
+        "type": "MAILBOX"
+      },
+      "context": {
+        "activityType": "backup",
+        "policyId": "policy-001",
+        "policyName": "Fixture Backup Plan",
+        "resourceId": "resource-005",
+        "resourceName": "fixture-user-warning@example.invalid",
+        "resourceKind": "MAILBOX",
+        "resourceSubtype": "UserMailbox",
+        "suite": "fixture"
+      },
+      "result": {
+        "code": "warning"
+      }
     }
   ],
   "paging": {
