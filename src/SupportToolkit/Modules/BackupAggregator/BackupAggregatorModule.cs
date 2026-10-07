@@ -1,6 +1,8 @@
+using System.Globalization;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Core.Modules;
+using SupportToolkit.Modules.BackupAggregator.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Providers.Acronis;
 
@@ -21,6 +23,23 @@ public sealed class BackupAggregatorModule
         var runtimeOptions =
             SupportToolkitRuntimeOptions.FromEnvironment();
 
+        /*
+         * Fixture mode exercises the real normalization,
+         * classification and reporting pipeline without
+         * touching the production Acronis API.
+         */
+        if (runtimeOptions.Mode
+            == SupportToolkitMode.Fixture)
+        {
+            return await RunFixtureAsync();
+        }
+
+        /*
+         * Production mode is still deliberately limited to
+         * the explicit single-tenant activity probe.
+         *
+         * The MSP-wide production aggregator does not exist yet.
+         */
         if (args.Length == 0
             || args[0] is "--help" or "-h")
         {
@@ -29,104 +48,120 @@ public sealed class BackupAggregatorModule
             return 0;
         }
 
-        var logger =
-            new OperationalLogger();
-
-        logger.Info(
-            $"Starting {Command} in " +
-            $"{runtimeOptions.Mode.ToString().ToLowerInvariant()} mode."
-        );
-
-        return runtimeOptions.Mode switch
-        {
-            SupportToolkitMode.Fixture =>
-                await RunFixtureAsync(
-                    args
-                ),
-
-            SupportToolkitMode.Production =>
-                await RunProductionAsync(
-                    args,
-                    logger
-                ),
-
-            _ =>
-                throw new InvalidOperationException(
-                    $"Unsupported SupportToolkit mode: " +
-                    $"{runtimeOptions.Mode}."
-                )
-        };
-    }
-
-    private static async Task<int> RunFixtureAsync(
-        string[] args)
-    {
-        var fixtureDirectory =
-            Path.Combine(
-                AppContext.BaseDirectory,
-                "Fixtures",
-                "Acronis"
-            );
-
-        var provider =
-            new FixtureAcronisProvider(
-                fixtureDirectory
-            );
-
-        var resources =
-            await provider
-                .GetResourceStatusesAsync();
-
-        var probe =
-            new BackupAggregatorProbeService();
-
-        if (args.Length == 1
-            && string.Equals(
+        if (args.Length != 4
+            || !string.Equals(
                 args[0],
-                "list",
+                "activity-probe",
                 StringComparison.OrdinalIgnoreCase
             ))
-        {
-            return probe.List(
-                resources
-            );
-        }
-
-        if (args.Length == 2
-            && string.Equals(
-                args[0],
-                "probe",
-                StringComparison.OrdinalIgnoreCase
-            ))
-        {
-            return probe.Probe(
-                resources,
-                args[1]
-            );
-        }
-
-        PrintUsage();
-
-        return 1;
-    }
-
-    private static async Task<int> RunProductionAsync(
-        string[] args,
-        OperationalLogger logger)
-    {
-        if (args.Length < 2)
         {
             PrintUsage();
 
             return 1;
         }
 
-        var operation =
-            args[0];
-
         var tenantName =
             args[1];
 
+        if (!TryParseTimestamp(
+                args[2],
+                out var fromInclusive))
+        {
+            Console.Error.WriteLine(
+                $"Invalid interval start: {args[2]}"
+            );
+
+            Console.Error.WriteLine(
+                "Use an RFC3339 timestamp including its UTC offset."
+            );
+
+            return 1;
+        }
+
+        if (!TryParseTimestamp(
+                args[3],
+                out var toExclusive))
+        {
+            Console.Error.WriteLine(
+                $"Invalid interval end: {args[3]}"
+            );
+
+            Console.Error.WriteLine(
+                "Use an RFC3339 timestamp including its UTC offset."
+            );
+
+            return 1;
+        }
+
+        if (toExclusive <= fromInclusive)
+        {
+            Console.Error.WriteLine(
+                "Interval end must be later than interval start."
+            );
+
+            return 1;
+        }
+
+        var logger =
+            new OperationalLogger();
+
+        logger.Info(
+            "Starting backup-aggregator bounded activity probe " +
+            "in production mode."
+        );
+
+        return await RunActivityProbeAsync(
+            tenantName,
+            fromInclusive,
+            toExclusive,
+            logger
+        );
+    }
+
+    private static async Task<int> RunFixtureAsync()
+    {
+        var fixtureLoader =
+            new BackupAggregatorFixtureLoader();
+
+        var activities =
+            await fixtureLoader
+                .LoadActivitiesAsync();
+
+        var normalizer =
+            new BackupActivityNormalizer();
+
+        var classifier =
+            new BackupActivityClassifier();
+
+        var service =
+            new BackupAggregatorService(
+                normalizer,
+                classifier
+            );
+
+        var report =
+            service.BuildTenantReport(
+                "Fixture Tenant",
+                activities
+            );
+
+        var reporter =
+            new ConsoleBackupAggregatorReporter();
+
+        reporter.Write(
+            report,
+            activities.Count
+        );
+
+        return 0;
+    }
+
+    private static async Task<int> RunActivityProbeAsync(
+        string tenantName,
+        DateTimeOffset fromInclusive,
+        DateTimeOffset toExclusive,
+        OperationalLogger logger)
+    {
         var acronisOptions =
             AcronisOptions.FromEnvironment();
 
@@ -160,14 +195,14 @@ public sealed class BackupAggregatorModule
                     logger
             );
 
-        var provider =
+        var tenantProvider =
             new HttpAcronisProvider(
                 apiClient,
                 logger
             );
 
         var tenants =
-            await provider
+            await tenantProvider
                 .GetTenantsAsync();
 
         var matchingTenants =
@@ -198,7 +233,7 @@ public sealed class BackupAggregatorModule
             );
 
             Console.Error.WriteLine(
-                "The tool will not guess which tenant to use."
+                "The probe will not guess which tenant to use."
             );
 
             return 1;
@@ -207,45 +242,52 @@ public sealed class BackupAggregatorModule
         var tenant =
             matchingTenants[0];
 
+        if (!Guid.TryParse(
+                tenant.Id,
+                out _))
+        {
+            throw new InvalidOperationException(
+                "The matched tenant does not contain the UUID " +
+                "required for customer-scoped authentication."
+            );
+        }
+
         logger.Info(
             "Matching customer tenant resolved."
         );
 
-        var resources =
-            await provider
-                .GetResourceStatusesForTenantAsync(
-                    tenant.Id
+        var activityProvider =
+            new AcronisActivityProvider(
+                apiClient,
+                logger
+            );
+
+        var activities =
+            await activityProvider
+                .GetBackupActivitiesForTenantAsync(
+                    tenant.Id,
+                    fromInclusive,
+                    toExclusive
                 );
 
         var probe =
             new BackupAggregatorProbeService();
 
-        if (string.Equals(
-                operation,
-                "list",
-                StringComparison.OrdinalIgnoreCase)
-            && args.Length == 2)
-        {
-            return probe.List(
-                resources
-            );
-        }
+        return probe.ProbeActivities(
+            activities
+        );
+    }
 
-        if (string.Equals(
-                operation,
-                "probe",
-                StringComparison.OrdinalIgnoreCase)
-            && args.Length == 3)
-        {
-            return probe.Probe(
-                resources,
-                args[2]
-            );
-        }
-
-        PrintUsage();
-
-        return 1;
+    private static bool TryParseTimestamp(
+        string value,
+        out DateTimeOffset timestamp)
+    {
+        return DateTimeOffset.TryParse(
+            value,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.RoundtripKind,
+            out timestamp
+        );
     }
 
     private static void PrintUsage()
@@ -261,26 +303,51 @@ public sealed class BackupAggregatorModule
         );
 
         Console.WriteLine(
-            "  SupportToolkit backup-aggregator list"
+            "  SUPPORTTOOLKIT_MODE=fixture"
         );
 
         Console.WriteLine(
-            "  SupportToolkit backup-aggregator probe <resource-name>"
+            "  SupportToolkit backup-aggregator"
         );
 
         Console.WriteLine();
 
         Console.WriteLine(
-            "Production mode:"
-        );
-
-        Console.WriteLine(
-            "  SupportToolkit backup-aggregator list <tenant-name>"
+            "Production diagnostic:"
         );
 
         Console.WriteLine(
             "  SupportToolkit backup-aggregator " +
-            "probe <tenant-name> <resource-name>"
+            "activity-probe <tenant-name> <from> <to>"
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "The production probe interval is half-open:"
+        );
+
+        Console.WriteLine(
+            "  from <= startedAt < to"
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Use RFC3339 timestamps with an explicit UTC offset."
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Example:"
+        );
+
+        Console.WriteLine(
+            "  SupportToolkit backup-aggregator activity-probe " +
+            "\"Customer Name\" " +
+            "\"2026-10-06T00:00:00+02:00\" " +
+            "\"2026-10-07T00:00:00+02:00\""
         );
     }
 }

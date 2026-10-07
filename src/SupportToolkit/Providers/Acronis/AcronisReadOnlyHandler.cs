@@ -158,6 +158,14 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
             return true;
         }
 
+        if (string.Equals(
+                path,
+                "/api/task_manager/v2/activities",
+                StringComparison.Ordinal))
+        {
+            return true;
+        }
+
         return IsApiClientMetadataEndpoint(path)
             || IsLegacyTenantBootstrapEndpoint(path)
             || IsLegacyTenantChildrenEndpoint(path);
