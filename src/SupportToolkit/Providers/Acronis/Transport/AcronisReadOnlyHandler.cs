@@ -38,7 +38,9 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
         HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
-        ValidateRequest(request);
+        ValidateRequest(
+            request
+        );
 
         return base.SendAsync(
             request,
@@ -55,7 +57,9 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
                 "Acronis request does not contain a URI."
             );
 
-        ValidateOrigin(uri);
+        ValidateOrigin(
+            uri
+        );
 
         var path =
             uri.AbsolutePath;
@@ -68,7 +72,8 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
         }
 
         if (request.Method == HttpMethod.Get
-            && IsAllowedReadEndpoint(path))
+            && IsAllowedReadEndpoint(
+                path))
         {
             if (request.Content is not null)
             {
@@ -110,7 +115,8 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
             uri.Port
             == _allowedOrigin.Port;
 
-        if (!sameHost || !samePort)
+        if (!sameHost
+            || !samePort)
         {
             throw new InvalidOperationException(
                 $"Blocked Acronis request to unexpected origin " +
@@ -166,9 +172,18 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
             return true;
         }
 
-        return IsApiClientMetadataEndpoint(path)
-            || IsLegacyTenantBootstrapEndpoint(path)
-            || IsLegacyTenantChildrenEndpoint(path);
+        return IsApiClientMetadataEndpoint(
+                   path
+               )
+               || IsLegacyTenantBootstrapEndpoint(
+                   path
+               )
+               || IsLegacyTenantChildrenEndpoint(
+                   path
+               )
+               || IsO365ResourceEndpoint(
+                   path
+               );
     }
 
     private static bool IsApiClientMetadataEndpoint(
@@ -236,8 +251,7 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
     }
 
     /// <summary>
-    /// Hierarchy traversal uses the legacy numeric group IDs returned by
-    /// Acronis's Account Management API v1.
+    /// Allows hierarchy traversal through legacy numeric Acronis group IDs.
     /// </summary>
     private static bool IsLegacyTenantChildrenEndpoint(
         string path)
@@ -248,46 +262,106 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
                 StringSplitOptions.RemoveEmptyEntries
             );
 
-        if (segments.Length != 5)
-        {
-            return false;
-        }
-
-        if (!string.Equals(
+        return segments.Length == 5
+            && string.Equals(
                 segments[0],
                 "api",
-                StringComparison.Ordinal)
-            || !string.Equals(
+                StringComparison.Ordinal
+            )
+            && string.Equals(
                 segments[1],
                 "1",
-                StringComparison.Ordinal)
-            || !string.Equals(
+                StringComparison.Ordinal
+            )
+            && string.Equals(
                 segments[2],
                 "groups",
-                StringComparison.Ordinal)
-            || !string.Equals(
+                StringComparison.Ordinal
+            )
+            && long.TryParse(
+                segments[3],
+                out _
+            )
+            && string.Equals(
                 segments[4],
                 "children",
-                StringComparison.Ordinal))
-        {
-            return false;
-        }
+                StringComparison.Ordinal
+            );
+    }
 
-        return long.TryParse(
-                   segments[3],
-                   out var numericId)
-               && numericId > 0;
+    /// <summary>
+    /// Allows read-only access to the Microsoft 365 resource inventory
+    /// endpoint used by the Acronis web client.
+    ///
+    /// Expected shape:
+    ///
+    /// /api/resource_manager/v1/o365/groups/{groupId}/resources
+    ///
+    /// Query-string validation is intentionally left to the caller. This
+    /// handler validates the endpoint path, HTTP method, HTTPS origin, and
+    /// absence of a GET request body.
+    /// </summary>
+    private static bool IsO365ResourceEndpoint(
+        string path)
+    {
+        var segments =
+            path.Split(
+                '/',
+                StringSplitOptions.RemoveEmptyEntries
+            );
+
+        return segments.Length == 7
+            && string.Equals(
+                segments[0],
+                "api",
+                StringComparison.Ordinal
+            )
+            && string.Equals(
+                segments[1],
+                "resource_manager",
+                StringComparison.Ordinal
+            )
+            && string.Equals(
+                segments[2],
+                "v1",
+                StringComparison.Ordinal
+            )
+            && string.Equals(
+                segments[3],
+                "o365",
+                StringComparison.Ordinal
+            )
+            && string.Equals(
+                segments[4],
+                "groups",
+                StringComparison.Ordinal
+            )
+            && Guid.TryParse(
+                segments[5],
+                out _
+            )
+            && string.Equals(
+                segments[6],
+                "resources",
+                StringComparison.Ordinal
+            );
     }
 
     private static InvalidOperationException Blocked(
         HttpRequestMessage request,
         string reason)
     {
+        var method =
+            request.Method.Method;
+
+        var path =
+            request.RequestUri?
+                .AbsolutePath
+            ?? "<unknown>";
+
         return new InvalidOperationException(
-            $"Blocked by SupportToolkit read-only Acronis transport: " +
-            $"{request.Method} " +
-            $"{request.RequestUri?.AbsolutePath}. " +
-            reason
+            $"Blocked Acronis request: " +
+            $"{method} {path}. {reason}"
         );
     }
 }

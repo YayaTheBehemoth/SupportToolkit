@@ -7,6 +7,7 @@ using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Providers.Acronis;
 using SupportToolkit.Providers.Acronis.Activities;
 using SupportToolkit.Providers.Acronis.Activities.Dtos;
+using SupportToolkit.Providers.Acronis.ResourceManagement.Dtos;
 using SupportToolkit.Providers.Acronis.Transport;
 
 namespace SupportToolkit.Modules.BackupAggregator;
@@ -40,15 +41,46 @@ public sealed class BackupAggregatorModule
             return 0;
         }
 
+        var command =
+            args[0];
+
+        /*
+         * Resource Management represents current workload state rather than
+         * an activity interval, so this diagnostic intentionally takes only
+         * a tenant name.
+         */
+        if (string.Equals(
+                command,
+                "resource-status-probe",
+                StringComparison.OrdinalIgnoreCase
+            ))
+        {
+            if (args.Length != 2)
+            {
+                PrintUsage();
+
+                return 1;
+            }
+
+            var logger =
+                new OperationalLogger();
+
+            return await RunResourceStatusProbeAsync(
+                args[1],
+                logger
+            );
+        }
+
+        /*
+         * Activity-based commands operate against an explicit bounded
+         * interval.
+         */
         if (args.Length != 4)
         {
             PrintUsage();
 
             return 1;
         }
-
-        var command =
-            args[0];
 
         var tenantName =
             args[1];
@@ -92,7 +124,7 @@ public sealed class BackupAggregatorModule
             return 1;
         }
 
-        var logger =
+        var activityLogger =
             new OperationalLogger();
 
         if (string.Equals(
@@ -105,7 +137,7 @@ public sealed class BackupAggregatorModule
                 tenantName,
                 fromInclusive,
                 toExclusive,
-                logger
+                activityLogger
             );
         }
 
@@ -119,7 +151,7 @@ public sealed class BackupAggregatorModule
                 tenantName,
                 fromInclusive,
                 toExclusive,
-                logger
+                activityLogger
             );
         }
 
@@ -260,6 +292,33 @@ public sealed class BackupAggregatorModule
         );
     }
 
+    private static async Task<int> RunResourceStatusProbeAsync(
+        string tenantName,
+        OperationalLogger logger)
+    {
+        logger.Info(
+            "Starting customer-scoped resource-status coverage probe."
+        );
+
+        var productionData =
+            await FetchProductionResourceStatusesAsync(
+                tenantName,
+                logger
+            );
+
+        if (productionData is null)
+        {
+            return 1;
+        }
+
+        var probe =
+            new BackupAggregatorResourceStatusProbeService();
+
+        return probe.Probe(
+            productionData.Resources
+        );
+    }
+
     private static async Task<ProductionActivityData?>
         FetchProductionActivitiesAsync(
             string tenantName,
@@ -306,6 +365,120 @@ public sealed class BackupAggregatorModule
                 logger
             );
 
+        var tenant =
+            await FindTenantAsync(
+                tenantProvider,
+                tenantName
+            );
+
+        if (tenant is null)
+        {
+            return null;
+        }
+
+        var activityProvider =
+            new AcronisActivityProvider(
+                apiClient,
+                logger
+            );
+
+        var activities =
+            await activityProvider
+                .GetBackupActivitiesForTenantAsync(
+                    tenant.Id,
+                    fromInclusive,
+                    toExclusive
+                );
+
+        logger.Info(
+            $"Production backup activities fetched: " +
+            $"{activities.Count}."
+        );
+
+        return new ProductionActivityData(
+            tenant.Name,
+            activities
+        );
+    }
+
+    private static async Task<ProductionResourceStatusData?>
+        FetchProductionResourceStatusesAsync(
+            string tenantName,
+            OperationalLogger logger)
+    {
+        var acronisOptions =
+            AcronisOptions.FromEnvironment();
+
+        using var innerHandler =
+            new HttpClientHandler
+            {
+                AllowAutoRedirect =
+                    false
+            };
+
+        using var readOnlyHandler =
+            new AcronisReadOnlyHandler(
+                acronisOptions.DatacenterUrl,
+                innerHandler
+            );
+
+        using var httpClient =
+            new HttpClient(
+                readOnlyHandler
+            )
+            {
+                Timeout =
+                    TimeSpan.FromSeconds(30)
+            };
+
+        var apiClient =
+            new AcronisApiClient(
+                httpClient,
+                acronisOptions,
+                logger:
+                    logger
+            );
+
+        var tenantProvider =
+            new HttpAcronisProvider(
+                apiClient,
+                logger
+            );
+
+        var tenant =
+            await FindTenantAsync(
+                tenantProvider,
+                tenantName
+            );
+
+        if (tenant is null)
+        {
+            return null;
+        }
+
+        var resources =
+            await tenantProvider
+                .GetResourceStatusesForTenantAsync(
+                    tenant.Id
+                );
+
+        logger.Info(
+            $"Customer-scoped resource statuses fetched: " +
+            $"{resources.Count}."
+        );
+
+        return new ProductionResourceStatusData(
+            tenant.Name,
+            resources
+        );
+    }
+
+    private static async Task<
+        SupportToolkit.Providers.Acronis.Tenants.Dtos.TenantDto?>
+        FindTenantAsync(
+            HttpAcronisProvider tenantProvider,
+            string tenantName)
+    {
         var tenants =
             await tenantProvider
                 .GetTenantsAsync();
@@ -357,47 +530,15 @@ public sealed class BackupAggregatorModule
             );
         }
 
-        logger.Info(
-            "Matching customer tenant resolved."
-        );
-
-        var activityProvider =
-            new AcronisActivityProvider(
-                apiClient,
-                logger
-            );
-
-        var activities =
-            await activityProvider
-                .GetBackupActivitiesForTenantAsync(
-                    tenant.Id,
-                    fromInclusive,
-                    toExclusive
-                );
-
-        logger.Info(
-            $"Production backup activities fetched: " +
-            $"{activities.Count}."
-        );
-
-        return new ProductionActivityData(
-            tenant.Name,
-            activities
-        );
+        return tenant;
     }
 
     private static BackupAggregatorService
         CreateAggregatorService()
     {
-        var normalizer =
-            new BackupActivityNormalizer();
-
-        var classifier =
-            new BackupActivityClassifier();
-
         return new BackupAggregatorService(
-            normalizer,
-            classifier
+            new BackupActivityNormalizer(),
+            new BackupActivityClassifier()
         );
     }
 
@@ -447,7 +588,7 @@ public sealed class BackupAggregatorModule
         Console.WriteLine();
 
         Console.WriteLine(
-            "Production diagnostic:"
+            "Production activity diagnostic:"
         );
 
         Console.WriteLine(
@@ -458,33 +599,32 @@ public sealed class BackupAggregatorModule
         Console.WriteLine();
 
         Console.WriteLine(
-            "The requested interval is half-open:"
+            "Production resource-status diagnostic:"
+        );
+
+        Console.WriteLine(
+            "  SupportToolkit backup-aggregator " +
+            "resource-status-probe <tenant-name>"
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Activity intervals are half-open:"
         );
 
         Console.WriteLine(
             "  from <= startedAt < to"
-        );
-
-        Console.WriteLine();
-
-        Console.WriteLine(
-            "Use RFC3339 timestamps with an explicit UTC offset."
-        );
-
-        Console.WriteLine();
-
-        Console.WriteLine(
-            "Example:"
-        );
-
-        Console.WriteLine(
-            "  SupportToolkit backup-aggregator review " +
-            "\"Customer Name\" <from> <to>"
         );
     }
 
     private sealed record ProductionActivityData(
         string TenantName,
         IReadOnlyList<AcronisActivityDto> Activities
+    );
+
+    private sealed record ProductionResourceStatusData(
+        string TenantName,
+        IReadOnlyList<ResourceStatusDto> Resources
     );
 }
