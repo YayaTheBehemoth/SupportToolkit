@@ -172,6 +172,22 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
             return true;
         }
 
+        if (string.Equals(
+                path,
+                "/api/resource_manager/v1/o365/applications",
+                StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (string.Equals(
+                path,
+                "/api/resource_manager/v1/o365/groups",
+                StringComparison.Ordinal))
+        {
+            return true;
+        }
+
         return IsApiClientMetadataEndpoint(
                    path
                )
@@ -296,10 +312,6 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
     /// Expected shape:
     ///
     /// /api/resource_manager/v1/o365/groups/{groupId}/resources
-    ///
-    /// Query-string validation is intentionally left to the caller. This
-    /// handler validates the endpoint path, HTTP method, HTTPS origin, and
-    /// absence of a GET request body.
     /// </summary>
     private static bool IsO365ResourceEndpoint(
         string path)
