@@ -1,5 +1,5 @@
 using SupportToolkit.Modules.BackupAggregator.Models;
-using SupportToolkit.Providers.Acronis.Dtos;
+using SupportToolkit.Providers.Acronis.Activities.Dtos;
 
 namespace SupportToolkit.Modules.BackupAggregator.Services;
 
@@ -31,10 +31,7 @@ public sealed class BackupAggregatorService
         var entries =
             latestActivities
                 .Select(
-                    activity =>
-                        ToReportEntry(
-                            activity
-                        )
+                    ToReportEntry
                 )
                 .ToList()
                 .AsReadOnly();
@@ -46,6 +43,16 @@ public sealed class BackupAggregatorService
 
             Entries =
                 entries
+        };
+    }
+
+    public AggregatedBackupReport BuildAggregatedReport(
+        IReadOnlyList<TenantBackupReport> tenantReports)
+    {
+        return new AggregatedBackupReport
+        {
+            Tenants =
+                tenantReports
         };
     }
 

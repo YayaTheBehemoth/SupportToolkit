@@ -1,19 +1,19 @@
 using System.Text.Json;
-using SupportToolkit.Providers.Acronis.Dtos;
+using SupportToolkit.Providers.Acronis.Activities.Dtos;
 
 namespace SupportToolkit.Modules.BackupAggregator.Services;
 
 public sealed class BackupAggregatorFixtureLoader
 {
-    private const string FixtureFileName =
-        "backup-activities-mixed.json";
-
     public async Task<IReadOnlyList<AcronisActivityDto>>
         LoadActivitiesAsync(
+            string fixtureFileName,
             CancellationToken cancellationToken = default)
     {
         var fixturePath =
-            FindFixturePath();
+            FindFixturePath(
+                fixtureFileName
+            );
 
         await using var stream =
             File.OpenRead(
@@ -33,18 +33,16 @@ public sealed class BackupAggregatorFixtureLoader
         return page.Items;
     }
 
-    private static string FindFixturePath()
+    private static string FindFixturePath(
+        string fixtureFileName)
     {
         var relativePath =
             Path.Combine(
                 "Fixtures",
                 "Acronis",
-                FixtureFileName
+                fixtureFileName
             );
 
-        /*
-         * Running from src/SupportToolkit.
-         */
         var directCandidate =
             Path.Combine(
                 Directory.GetCurrentDirectory(),
@@ -57,9 +55,6 @@ public sealed class BackupAggregatorFixtureLoader
             return directCandidate;
         }
 
-        /*
-         * Running from repository root.
-         */
         var repositoryCandidate =
             Path.Combine(
                 Directory.GetCurrentDirectory(),
@@ -74,11 +69,6 @@ public sealed class BackupAggregatorFixtureLoader
             return repositoryCandidate;
         }
 
-        /*
-         * Last fallback:
-         * walk upward from the application directory and look for the
-         * source-tree fixture.
-         */
         var directory =
             new DirectoryInfo(
                 AppContext.BaseDirectory
@@ -118,7 +108,7 @@ public sealed class BackupAggregatorFixtureLoader
 
         throw new FileNotFoundException(
             $"Could not locate BackupAggregator fixture " +
-            $"'{FixtureFileName}'."
+            $"'{fixtureFileName}'."
         );
     }
 }

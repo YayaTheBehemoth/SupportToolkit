@@ -1,0 +1,73 @@
+{
+  "items": [
+    {
+      "uuid": "20000000-0000-0000-0000-000000000001",
+      "idString": "activity-101",
+      "type": "00000000-0000-0000-0000-000000000001",
+      "state": "completed",
+      "startedAt": "2026-10-06T01:00:00Z",
+      "completedAt": "2026-10-06T01:05:00Z",
+      "startedByUser": "BY_SCHEDULE",
+      "taskIdString": "task-101",
+      "policy": {
+        "id": "policy-101",
+        "name": "Fixture Backup Plan",
+        "type": "backup"
+      },
+      "resource": {
+        "id": "resource-101",
+        "name": "healthy-user-1@example.invalid",
+        "type": "MAILBOX"
+      },
+      "context": {
+        "activityType": "backup",
+        "policyId": "policy-101",
+        "policyName": "Fixture Backup Plan",
+        "resourceId": "resource-101",
+        "resourceName": "healthy-user-1@example.invalid",
+        "resourceKind": "MAILBOX",
+        "resourceSubtype": "UserMailbox",
+        "suite": "fixture"
+      },
+      "result": {
+        "code": "ok"
+      }
+    },
+    {
+      "uuid": "20000000-0000-0000-0000-000000000002",
+      "idString": "activity-102",
+      "type": "00000000-0000-0000-0000-000000000001",
+      "state": "completed",
+      "startedAt": "2026-10-06T02:00:00Z",
+      "completedAt": "2026-10-06T02:03:00Z",
+      "startedByUser": "BY_SCHEDULE",
+      "taskIdString": "task-102",
+      "policy": {
+        "id": "policy-101",
+        "name": "Fixture Backup Plan",
+        "type": "backup"
+      },
+      "resource": {
+        "id": "resource-102",
+        "name": "healthy-site-1",
+        "type": "SITE"
+      },
+      "context": {
+        "activityType": "backup",
+        "policyId": "policy-101",
+        "policyName": "Fixture Backup Plan",
+        "resourceId": "resource-102",
+        "resourceName": "healthy-site-1",
+        "resourceKind": "SITE",
+        "resourceSubtype": "SiteCollection",
+        "suite": "fixture"
+      },
+      "result": {
+        "code": "ok"
+      }
+    }
+  ],
+  "paging": {
+    "cursors": {}
+  }
+}

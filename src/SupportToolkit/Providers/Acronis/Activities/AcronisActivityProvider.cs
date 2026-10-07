@@ -1,9 +1,10 @@
 using System.Globalization;
 using System.Net.Http.Json;
 using SupportToolkit.Core.Logging;
-using SupportToolkit.Providers.Acronis.Dtos;
+using SupportToolkit.Providers.Acronis.Activities.Dtos;
+using SupportToolkit.Providers.Acronis.Transport;
 
-namespace SupportToolkit.Providers.Acronis;
+namespace SupportToolkit.Providers.Acronis.Activities;
 
 /// <summary>
 /// Provides read-only access to the Acronis Task Manager Activities API.

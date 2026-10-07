@@ -5,6 +5,8 @@ using SupportToolkit.Core.Modules;
 using SupportToolkit.Modules.BackupAggregator.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Providers.Acronis;
+using SupportToolkit.Providers.Acronis.Activities;
+using SupportToolkit.Providers.Acronis.Transport;
 
 namespace SupportToolkit.Modules.BackupAggregator;
 
@@ -24,9 +26,8 @@ public sealed class BackupAggregatorModule
             SupportToolkitRuntimeOptions.FromEnvironment();
 
         /*
-         * Fixture mode exercises the real normalization,
-         * classification and reporting pipeline without
-         * touching the production Acronis API.
+         * Fixture mode exercises the actual aggregation pipeline
+         * without making any production API calls.
          */
         if (runtimeOptions.Mode
             == SupportToolkitMode.Fixture)
@@ -35,10 +36,10 @@ public sealed class BackupAggregatorModule
         }
 
         /*
-         * Production mode is still deliberately limited to
-         * the explicit single-tenant activity probe.
+         * Production mode is still intentionally limited to the
+         * explicit single-tenant activity probe.
          *
-         * The MSP-wide production aggregator does not exist yet.
+         * The MSP-wide production run will be added later.
          */
         if (args.Length == 0
             || args[0] is "--help" or "-h")
@@ -123,9 +124,17 @@ public sealed class BackupAggregatorModule
         var fixtureLoader =
             new BackupAggregatorFixtureLoader();
 
-        var activities =
+        var mixedActivities =
             await fixtureLoader
-                .LoadActivitiesAsync();
+                .LoadActivitiesAsync(
+                    "backup-activities-mixed.json"
+                );
+
+        var healthyActivities =
+            await fixtureLoader
+                .LoadActivitiesAsync(
+                    "backup-activities-healthy.json"
+                );
 
         var normalizer =
             new BackupActivityNormalizer();
@@ -139,18 +148,30 @@ public sealed class BackupAggregatorModule
                 classifier
             );
 
+        var tenantReports =
+            new[]
+            {
+                service.BuildTenantReport(
+                    "Fixture Tenant - Mixed",
+                    mixedActivities
+                ),
+
+                service.BuildTenantReport(
+                    "Fixture Tenant - Healthy",
+                    healthyActivities
+                )
+            };
+
         var report =
-            service.BuildTenantReport(
-                "Fixture Tenant",
-                activities
+            service.BuildAggregatedReport(
+                tenantReports
             );
 
         var reporter =
             new ConsoleBackupAggregatorReporter();
 
         reporter.Write(
-            report,
-            activities.Count
+            report
         );
 
         return 0;

@@ -6,7 +6,7 @@ using System.Text;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Providers.Acronis.Dtos;
 
-namespace SupportToolkit.Providers.Acronis;
+namespace SupportToolkit.Providers.Acronis.Transport;
 
 /// <summary>
 /// Encapsulates the raw Acronis HTTP and authentication flow for the
