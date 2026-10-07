@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace SupportToolkit.Providers.Acronis.Dtos;
+namespace SupportToolkit.Providers.Acronis.Tenants.Dtos;
 
 /// <summary>
 /// Represents the top-level Acronis tenant response.

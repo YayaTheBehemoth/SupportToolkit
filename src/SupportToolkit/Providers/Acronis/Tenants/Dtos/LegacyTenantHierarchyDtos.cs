@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace SupportToolkit.Providers.Acronis.Dtos;
+namespace SupportToolkit.Providers.Acronis.Tenants.Dtos;
 
 /// <summary>
 /// Represents one tenant/group returned by the legacy Account Management API.

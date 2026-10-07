@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace SupportToolkit.Providers.Acronis.Dtos;
+namespace SupportToolkit.Providers.Acronis.Activities.Dtos;
 
 public sealed class AcronisActivityDto
 {

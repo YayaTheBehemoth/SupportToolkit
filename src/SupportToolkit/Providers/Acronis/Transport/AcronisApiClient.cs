@@ -4,8 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using SupportToolkit.Core.Logging;
-using SupportToolkit.Providers.Acronis.Dtos;
-
+using SupportToolkit.Providers.Acronis.Transport.Dtos;
 namespace SupportToolkit.Providers.Acronis.Transport;
 
 /// <summary>

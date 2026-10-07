@@ -3,6 +3,7 @@ using SupportToolkit.Core.Logging;
 using SupportToolkit.Core.Modules;
 using SupportToolkit.Providers.Acronis;
 using SupportToolkit.Modules.BackupHealth.Reporting;
+using SupportToolkit.Providers.Acronis.Transport;
 
 namespace SupportToolkit.Modules.BackupHealth;
 

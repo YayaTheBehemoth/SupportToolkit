@@ -5,8 +5,7 @@ namespace SupportToolkit.Modules.BackupAggregator.Reporting;
 public sealed class ConsoleBackupAggregatorReporter
 {
     public void Write(
-        TenantBackupReport report,
-        int rawActivityCount)
+        AggregatedBackupReport report)
     {
         Console.WriteLine();
 
@@ -21,42 +20,37 @@ public sealed class ConsoleBackupAggregatorReporter
         Console.WriteLine();
 
         Console.WriteLine(
-            $"Tenant:                {report.TenantName}"
+            $"Tenants processed:       {report.TenantCount}"
         );
 
         Console.WriteLine(
-            $"Raw activities:        {rawActivityCount}"
+            $"Tenants needing review:  {report.TenantsRequiringReview}"
         );
 
         Console.WriteLine(
-            $"Resources checked:     {report.RowsChecked}"
+            $"Resources checked:       {report.RowsChecked}"
         );
 
         Console.WriteLine(
-            $"Completed suppressed:  {report.HealthyRowsSuppressed}"
+            $"Completed suppressed:    {report.HealthyRowsSuppressed}"
         );
 
         Console.WriteLine(
-            $"Needs review:           {report.FindingsCount}"
+            $"Needs review:             {report.FindingsCount}"
         );
 
         Console.WriteLine(
-            $"Unknown:                {report.UnknownRowsCount}"
+            $"Unknown:                  {report.UnknownRowsCount}"
         );
 
-        var accounted =
-            report.HealthyRowsSuppressed
-            + report.FindingsCount
-            + report.UnknownRowsCount;
-
         Console.WriteLine(
-            $"Accounted:              {accounted}/{report.RowsChecked}"
+            $"Accounted:                " +
+            $"{report.AccountedRows}/{report.RowsChecked}"
         );
 
         Console.WriteLine();
 
-        if (accounted
-            != report.RowsChecked)
+        if (!report.IsFullyAccountedFor)
         {
             Console.WriteLine(
                 "!!! ACCOUNTING FAILURE !!!"
@@ -65,7 +59,8 @@ public sealed class ConsoleBackupAggregatorReporter
             Console.WriteLine();
 
             Console.WriteLine(
-                "Not every normalized resource received a classification."
+                "Not every normalized backup resource " +
+                "received a classification."
             );
 
             Console.WriteLine();
@@ -73,99 +68,131 @@ public sealed class ConsoleBackupAggregatorReporter
             return;
         }
 
-        WriteFindings(
-            report.Findings
-        );
+        var tenantsRequiringReview =
+            report.Tenants
+                .Where(
+                    tenant =>
+                        tenant.RequiresReview
+                )
+                .OrderBy(
+                    tenant =>
+                        tenant.TenantName,
+                    StringComparer.OrdinalIgnoreCase
+                )
+                .ToList();
 
-        WriteUnknownRows(
-            report.UnknownRows
-        );
-
-        if (!report.RequiresReview)
+        if (tenantsRequiringReview.Count == 0)
         {
             Console.WriteLine(
                 "No backup resources require review."
             );
 
             Console.WriteLine();
-        }
-    }
 
-    private static void WriteFindings(
-        IReadOnlyList<BackupReportEntry> findings)
-    {
-        if (findings.Count == 0)
-        {
             return;
         }
 
         Console.WriteLine(
-            "NEEDS REVIEW"
+            "TENANTS REQUIRING REVIEW"
         );
 
         Console.WriteLine(
-            "============"
+            "========================"
+        );
+
+        Console.WriteLine();
+
+        foreach (var tenant
+                 in tenantsRequiringReview)
+        {
+            WriteTenant(
+                tenant
+            );
+        }
+    }
+
+    private static void WriteTenant(
+        TenantBackupReport tenant)
+    {
+        Console.WriteLine(
+            tenant.TenantName
+        );
+
+        Console.WriteLine(
+            new string(
+                '-',
+                tenant.TenantName.Length
+            )
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            $"Resources checked:     {tenant.RowsChecked}"
+        );
+
+        Console.WriteLine(
+            $"Completed suppressed:  {tenant.HealthyRowsSuppressed}"
+        );
+
+        Console.WriteLine(
+            $"Needs review:           {tenant.FindingsCount}"
+        );
+
+        Console.WriteLine(
+            $"Unknown:                {tenant.UnknownRowsCount}"
         );
 
         Console.WriteLine();
 
         foreach (var entry
-                 in findings)
+                 in tenant.Findings)
         {
+            Console.WriteLine(
+                "NEEDS REVIEW"
+            );
+
             WriteEntry(
                 entry
             );
         }
-    }
-
-    private static void WriteUnknownRows(
-        IReadOnlyList<BackupReportEntry> unknownRows)
-    {
-        if (unknownRows.Count == 0)
-        {
-            return;
-        }
-
-        Console.WriteLine(
-            "UNKNOWN"
-        );
-
-        Console.WriteLine(
-            "======="
-        );
-
-        Console.WriteLine();
 
         foreach (var entry
-                 in unknownRows)
+                 in tenant.UnknownRows)
         {
+            Console.WriteLine(
+                "UNKNOWN"
+            );
+
             WriteEntry(
                 entry
             );
         }
+
+        Console.WriteLine();
     }
 
     private static void WriteEntry(
         BackupReportEntry entry)
     {
         Console.WriteLine(
-            $"Resource: {entry.DeviceName}"
+            $"  Resource: {entry.DeviceName}"
         );
 
         Console.WriteLine(
-            $"  State:  {entry.DeviceState ?? "<missing>"}"
+            $"  State:    {entry.DeviceState ?? "<missing>"}"
         );
 
         Console.WriteLine(
-            $"  Result: {entry.LastResult}"
+            $"  Result:   {entry.LastResult}"
         );
 
         Console.WriteLine(
-            $"  Plan:   {entry.PlanName ?? "<missing>"}"
+            $"  Plan:     {entry.PlanName ?? "<missing>"}"
         );
 
         Console.WriteLine(
-            $"  Time:   {FormatTimestamp(entry.LastBackupRun)}"
+            $"  Time:     {FormatTimestamp(entry.LastBackupRun)}"
         );
 
         Console.WriteLine();

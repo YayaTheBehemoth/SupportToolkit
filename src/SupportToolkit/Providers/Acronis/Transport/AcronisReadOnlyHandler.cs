@@ -1,4 +1,4 @@
-namespace SupportToolkit.Providers.Acronis;
+namespace SupportToolkit.Providers.Acronis.Transport;
 
 /// <summary>
 /// Enforces SupportToolkit's read-only Acronis integration boundary.

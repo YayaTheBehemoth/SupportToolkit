@@ -1,4 +1,4 @@
-namespace SupportToolkit.Providers.Acronis;
+namespace SupportToolkit.Providers.Acronis.Transport;
 
 /// <summary>
 /// Runtime configuration required to authenticate against an Acronis

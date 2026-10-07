@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using SupportToolkit.Providers.Acronis;
+using SupportToolkit.Providers.Acronis.Transport;
 
 namespace SupportToolkit.Tests;
 

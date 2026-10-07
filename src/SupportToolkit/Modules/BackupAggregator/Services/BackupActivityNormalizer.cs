@@ -1,6 +1,5 @@
 using SupportToolkit.Modules.BackupAggregator.Models;
-using SupportToolkit.Providers.Acronis.Dtos;
-
+using SupportToolkit.Providers.Acronis.Activities.Dtos;
 namespace SupportToolkit.Modules.BackupAggregator.Services;
 
 public sealed class BackupActivityNormalizer

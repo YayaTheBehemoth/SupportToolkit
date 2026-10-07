@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace SupportToolkit.Providers.Acronis.Dtos;
+namespace SupportToolkit.Providers.Acronis.Transport.Dtos;
 
 
 /// Represents the OAuth token response returned by Acronis.

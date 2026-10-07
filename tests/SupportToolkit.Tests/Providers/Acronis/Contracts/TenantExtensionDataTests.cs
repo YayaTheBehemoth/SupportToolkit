@@ -1,6 +1,5 @@
 using System.Text.Json;
-using SupportToolkit.Providers.Acronis.Dtos;
-
+using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 namespace SupportToolkit.Tests;
 
 public class TenantExtensionDataTests

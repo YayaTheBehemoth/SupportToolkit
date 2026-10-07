@@ -1,6 +1,5 @@
 using System.Text.Json;
-using SupportToolkit.Providers.Acronis.Dtos;
-
+using SupportToolkit.Providers.Acronis.Alerts.Dtos;
 namespace SupportToolkit.Tests;
 
 public class AlertContractTests

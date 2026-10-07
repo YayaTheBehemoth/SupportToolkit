@@ -1,7 +1,9 @@
 using SupportToolkit.Modules.BackupHealth;
 using SupportToolkit.Providers.Acronis;
-using SupportToolkit.Providers.Acronis.Dtos;
-
+using SupportToolkit.Providers.Acronis.Alerts.Dtos;
+using SupportToolkit.Providers.Acronis.ResourceManagement.Dtos;
+using SupportToolkit.Providers.Acronis.Tenants.Dtos;
+using SupportToolkit.Providers.Acronis.Tenants;
 namespace SupportToolkit.Tests;
 
 public class BackupHealthTenantMappingTests

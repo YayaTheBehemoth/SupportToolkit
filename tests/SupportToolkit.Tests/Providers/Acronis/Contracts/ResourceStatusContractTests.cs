@@ -1,6 +1,6 @@
-﻿using System.Text.Json;
-using SupportToolkit.Providers.Acronis.Dtos;
+using SupportToolkit.Providers.Acronis.ResourceManagement.Dtos;
 
+﻿using System.Text.Json;
 namespace SupportToolkit.Tests;
 
 public class ResourceStatusContractTests

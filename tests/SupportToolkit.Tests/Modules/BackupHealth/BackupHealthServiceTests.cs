@@ -2,8 +2,9 @@ using System.Text.Json;
 using SupportToolkit.Modules.BackupHealth;
 using SupportToolkit.Modules.BackupHealth.Models;
 using SupportToolkit.Providers.Acronis;
-using SupportToolkit.Providers.Acronis.Dtos;
-
+using SupportToolkit.Providers.Acronis.Alerts.Dtos;
+using SupportToolkit.Providers.Acronis.ResourceManagement.Dtos;
+using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 namespace SupportToolkit.Tests;
 
 public class BackupHealthServiceTests

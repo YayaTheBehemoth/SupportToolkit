@@ -1,8 +1,9 @@
 using System.Text.Json;
 using SupportToolkit.Modules.BackupHealth.Models;
 using SupportToolkit.Providers.Acronis;
-using SupportToolkit.Providers.Acronis.Dtos;
-
+using SupportToolkit.Providers.Acronis.Alerts.Dtos;
+using SupportToolkit.Providers.Acronis.Tenants.Dtos;
+using SupportToolkit.Providers.Acronis.Tenants;
 namespace SupportToolkit.Modules.BackupHealth;
 
 /// <summary>

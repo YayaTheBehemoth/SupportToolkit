@@ -1,4 +1,4 @@
-namespace SupportToolkit.Providers.Acronis;
+namespace SupportToolkit.Providers.Acronis.Tenants;
 
 /// <summary>
 /// Provides mappings between legacy numeric Acronis tenant identifiers and

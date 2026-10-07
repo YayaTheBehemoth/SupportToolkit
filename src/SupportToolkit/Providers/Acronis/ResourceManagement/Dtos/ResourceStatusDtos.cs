@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace SupportToolkit.Providers.Acronis.Dtos;
+namespace SupportToolkit.Providers.Acronis.ResourceManagement.Dtos;
 
 /// <summary>
 /// Represents the top-level Acronis resource status response.
