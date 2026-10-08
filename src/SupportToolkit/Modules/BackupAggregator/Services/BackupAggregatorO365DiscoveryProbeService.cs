@@ -4,10 +4,10 @@ using SupportToolkit.Providers.Acronis.O365.Dtos;
 namespace SupportToolkit.Modules.BackupAggregator.Services;
 
 /// <summary>
-/// Privacy-safe console diagnostic for Microsoft 365 discovery.
+/// Privacy-safe diagnostic for Microsoft 365 group discovery.
 ///
-/// Customer names, resource names, IDs, account IDs, tenant IDs, and
-/// locators are intentionally not written to the console.
+/// Customer names, group names, resource names, IDs, account IDs,
+/// tenant IDs, and locators are intentionally not emitted.
 /// </summary>
 public sealed class BackupAggregatorO365DiscoveryProbeService
 {
@@ -35,11 +35,6 @@ public sealed class BackupAggregatorO365DiscoveryProbeService
         );
 
         WriteSummaryRow(
-            "O365 applications",
-            discovery.Applications.Count
-        );
-
-        WriteSummaryRow(
             "Groups discovered",
             discovery.Groups.Count
         );
@@ -61,10 +56,18 @@ public sealed class BackupAggregatorO365DiscoveryProbeService
         );
 
         WriteSummaryRow(
-            "Groups with unknown leaf state",
+            "Unknown leaf state",
             discovery.Groups.Count(
                 group =>
                     group.Leaf is null
+            )
+        );
+
+        WriteSummaryRow(
+            "Custom groups",
+            discovery.Groups.Count(
+                group =>
+                    group.Custom == true
             )
         );
 
@@ -77,11 +80,11 @@ public sealed class BackupAggregatorO365DiscoveryProbeService
 
         Console.WriteLine();
 
-        WriteApplicationSummary(
+        WriteGroupKindSummary(
             discovery
         );
 
-        WriteGroupKindSummary(
+        WriteGroupTypeSummary(
             discovery
         );
 
@@ -90,61 +93,6 @@ public sealed class BackupAggregatorO365DiscoveryProbeService
         );
 
         return 0;
-    }
-
-    private static void WriteApplicationSummary(
-        AcronisO365DiscoveryResult discovery)
-    {
-        Console.WriteLine(
-            "APPLICATIONS"
-        );
-
-        Console.WriteLine(
-            "------------"
-        );
-
-        Console.WriteLine();
-
-        var suites =
-            discovery.Applications
-                .GroupBy(
-                    application =>
-                        Display(
-                            application.Suite
-                        ),
-                    StringComparer.OrdinalIgnoreCase
-                )
-                .OrderByDescending(
-                    group =>
-                        group.Count()
-                )
-                .ThenBy(
-                    group =>
-                        group.Key,
-                    StringComparer.OrdinalIgnoreCase
-                )
-                .ToList();
-
-        if (suites.Count == 0)
-        {
-            Console.WriteLine(
-                "  <none>"
-            );
-
-            Console.WriteLine();
-
-            return;
-        }
-
-        foreach (var group
-                 in suites)
-        {
-            Console.WriteLine(
-                $"  suite '{group.Key}': {group.Count()}"
-            );
-        }
-
-        Console.WriteLine();
     }
 
     private static void WriteGroupKindSummary(
@@ -204,6 +152,60 @@ public sealed class BackupAggregatorO365DiscoveryProbeService
         Console.WriteLine();
     }
 
+    private static void WriteGroupTypeSummary(
+        AcronisO365DiscoveryResult discovery)
+    {
+        Console.WriteLine(
+            "GROUP TYPES"
+        );
+
+        Console.WriteLine(
+            "-----------"
+        );
+
+        Console.WriteLine();
+
+        var groups =
+            discovery.Groups
+                .GroupBy(
+                    group =>
+                        group.GroupType?.ToString()
+                        ?? "<missing>",
+                    StringComparer.OrdinalIgnoreCase
+                )
+                .OrderByDescending(
+                    group =>
+                        group.Count()
+                )
+                .ThenBy(
+                    group =>
+                        group.Key,
+                    StringComparer.OrdinalIgnoreCase
+                )
+                .ToList();
+
+        if (groups.Count == 0)
+        {
+            Console.WriteLine(
+                "  <none>"
+            );
+
+            Console.WriteLine();
+
+            return;
+        }
+
+        foreach (var group
+                 in groups)
+        {
+            Console.WriteLine(
+                $"  {group.Key}: {group.Count()}"
+            );
+        }
+
+        Console.WriteLine();
+    }
+
     private static void WriteResourceTypeSummary(
         AcronisO365DiscoveryResult discovery)
     {
@@ -224,14 +226,14 @@ public sealed class BackupAggregatorO365DiscoveryProbeService
                         group.ResourceTypes
                 )
                 .Where(
-                    value =>
+                    resourceType =>
                         !string.IsNullOrWhiteSpace(
-                            value
+                            resourceType
                         )
                 )
                 .GroupBy(
-                    value =>
-                        value,
+                    resourceType =>
+                        resourceType,
                     StringComparer.OrdinalIgnoreCase
                 )
                 .OrderByDescending(

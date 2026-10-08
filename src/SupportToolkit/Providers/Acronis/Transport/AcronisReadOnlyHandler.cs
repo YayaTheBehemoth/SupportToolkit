@@ -174,7 +174,7 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
 
         if (string.Equals(
                 path,
-                "/api/resource_manager/v1/o365/applications",
+                "/bc/api/resource_manager/v1/o365/groups",
                 StringComparison.Ordinal))
         {
             return true;
@@ -182,7 +182,15 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
 
         if (string.Equals(
                 path,
-                "/api/resource_manager/v1/o365/groups",
+                "/bc/api/resource_manager/v1/epm/groups",
+                StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (string.Equals(
+                path,
+                "/bc/api/resource_manager/v1/epm/resources",
                 StringComparison.Ordinal))
         {
             return true;
@@ -232,9 +240,6 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
             );
     }
 
-    /// <summary>
-    /// Allows the one-time UUID -> legacy numeric-ID bootstrap lookup.
-    /// </summary>
     private static bool IsLegacyTenantBootstrapEndpoint(
         string path)
     {
@@ -266,9 +271,6 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
             );
     }
 
-    /// <summary>
-    /// Allows hierarchy traversal through legacy numeric Acronis group IDs.
-    /// </summary>
     private static bool IsLegacyTenantChildrenEndpoint(
         string path)
     {
@@ -305,14 +307,6 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
             );
     }
 
-    /// <summary>
-    /// Allows read-only access to the Microsoft 365 resource inventory
-    /// endpoint used by the Acronis web client.
-    ///
-    /// Expected shape:
-    ///
-    /// /api/resource_manager/v1/o365/groups/{groupId}/resources
-    /// </summary>
     private static bool IsO365ResourceEndpoint(
         string path)
     {
@@ -322,38 +316,43 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
                 StringSplitOptions.RemoveEmptyEntries
             );
 
-        return segments.Length == 7
+        return segments.Length == 8
             && string.Equals(
                 segments[0],
-                "api",
+                "bc",
                 StringComparison.Ordinal
             )
             && string.Equals(
                 segments[1],
-                "resource_manager",
+                "api",
                 StringComparison.Ordinal
             )
             && string.Equals(
                 segments[2],
-                "v1",
+                "resource_manager",
                 StringComparison.Ordinal
             )
             && string.Equals(
                 segments[3],
-                "o365",
+                "v1",
                 StringComparison.Ordinal
             )
             && string.Equals(
                 segments[4],
+                "o365",
+                StringComparison.Ordinal
+            )
+            && string.Equals(
+                segments[5],
                 "groups",
                 StringComparison.Ordinal
             )
             && Guid.TryParse(
-                segments[5],
+                segments[6],
                 out _
             )
             && string.Equals(
-                segments[6],
+                segments[7],
                 "resources",
                 StringComparison.Ordinal
             );

@@ -2,12 +2,15 @@ using System.Globalization;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Core.Modules;
+using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Modules.BackupAggregator.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Providers.Acronis;
 using SupportToolkit.Providers.Acronis.Activities;
 using SupportToolkit.Providers.Acronis.Activities.Dtos;
+using SupportToolkit.Providers.Acronis.Epm;
 using SupportToolkit.Providers.Acronis.O365;
+using SupportToolkit.Providers.Acronis.O365.Dtos;
 using SupportToolkit.Providers.Acronis.ResourceManagement.Dtos;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 using SupportToolkit.Providers.Acronis.Transport;
@@ -46,10 +49,28 @@ public sealed class BackupAggregatorModule
         var command =
             args[0];
 
-        /*
-         * O365 discovery is current-state based and does not require
-         * an activity interval.
-         */
+        if (string.Equals(
+                command,
+                "inventory-review",
+                StringComparison.OrdinalIgnoreCase
+            ))
+        {
+            if (args.Length != 2)
+            {
+                PrintUsage();
+
+                return 1;
+            }
+
+            var logger =
+                new OperationalLogger();
+
+            return await RunInventoryReviewAsync(
+                args[1],
+                logger
+            );
+        }
+
         if (string.Equals(
                 command,
                 "o365-discovery-probe",
@@ -72,9 +93,28 @@ public sealed class BackupAggregatorModule
             );
         }
 
-        /*
-         * Generic resource-status inspection is also current-state based.
-         */
+        if (string.Equals(
+                command,
+                "o365-resource-probe",
+                StringComparison.OrdinalIgnoreCase
+            ))
+        {
+            if (args.Length != 2)
+            {
+                PrintUsage();
+
+                return 1;
+            }
+
+            var logger =
+                new OperationalLogger();
+
+            return await RunO365ResourceProbeAsync(
+                args[1],
+                logger
+            );
+        }
+
         if (string.Equals(
                 command,
                 "resource-status-probe",
@@ -234,6 +274,134 @@ public sealed class BackupAggregatorModule
         return 0;
     }
 
+    private static async Task<int> RunInventoryReviewAsync(
+        string tenantName,
+        OperationalLogger logger)
+    {
+        logger.Info(
+            "Starting customer-scoped inventory backup review."
+        );
+
+        var context =
+            await CreateO365ContextAsync(
+                tenantName,
+                logger
+            );
+
+        if (context is null)
+        {
+            return 1;
+        }
+
+        using (context)
+        {
+            var discoveryProvider =
+                new AcronisO365DiscoveryProvider(
+                    context.ApiClient,
+                    logger
+                );
+
+            var discovery =
+                await discoveryProvider
+                    .DiscoverAsync(
+                        context.Tenant.Id
+                    );
+
+            var leafGroups =
+                discovery.Groups
+                    .Where(
+                        group =>
+                            group.Leaf == true
+                            && !string.IsNullOrWhiteSpace(
+                                group.Id
+                            )
+                            && Guid.TryParse(
+                                group.Id,
+                                out _
+                            )
+                    )
+                    .ToList();
+
+            logger.Info(
+                $"Queryable O365 leaf groups: {leafGroups.Count}."
+            );
+
+            var o365Provider =
+                new AcronisO365ResourceProvider(
+                    context.ApiClient,
+                    logger
+                );
+
+            var rawO365Resources =
+                new List<AcronisO365ResourceDto>();
+
+            foreach (var group in leafGroups)
+            {
+                var groupResources =
+                    await o365Provider
+                        .GetResourcesForGroupAsync(
+                            context.Tenant.Id,
+                            group.Id!
+                        );
+
+                rawO365Resources.AddRange(
+                    groupResources
+                );
+            }
+
+            logger.Info(
+                $"Raw O365 resource rows fetched: " +
+                $"{rawO365Resources.Count}."
+            );
+
+            var epmProvider =
+                new AcronisEpmResourceProvider(
+                    context.ApiClient,
+                    logger
+                );
+
+            var epmResources =
+                await epmProvider
+                    .GetResourcesForTenantAsync(
+                        context.Tenant.Id
+                    );
+
+            logger.Info(
+                $"EPM resource rows fetched: " +
+                $"{epmResources.Count}."
+            );
+
+            var normalizer =
+                new BackupInventoryNormalizer();
+
+            var tenantReport =
+                normalizer.BuildTenantReport(
+                    context.Tenant.Name,
+                    rawO365Resources.AsReadOnly(),
+                    epmResources
+                );
+
+            var report =
+                new AggregatedBackupReport
+                {
+                    Tenants =
+                        new[]
+                        {
+                            tenantReport
+                        }
+                };
+
+            var reporter =
+                new ConsoleBackupAggregatorReporter();
+
+            reporter.Write(
+                report
+            );
+
+            return 0;
+        }
+    }
+
     private static async Task<int> RunProductionReviewAsync(
         string tenantName,
         DateTimeOffset fromInclusive,
@@ -352,74 +520,132 @@ public sealed class BackupAggregatorModule
             "Starting customer-scoped O365 discovery probe."
         );
 
-        var acronisOptions =
-            AcronisOptions.FromEnvironment();
-
-        using var innerHandler =
-            new HttpClientHandler
-            {
-                AllowAutoRedirect =
-                    false
-            };
-
-        using var readOnlyHandler =
-            new AcronisReadOnlyHandler(
-                acronisOptions.DatacenterUrl,
-                innerHandler
-            );
-
-        using var httpClient =
-            new HttpClient(
-                readOnlyHandler
-            )
-            {
-                Timeout =
-                    TimeSpan.FromSeconds(30)
-            };
-
-        var apiClient =
-            new AcronisApiClient(
-                httpClient,
-                acronisOptions,
-                logger:
-                    logger
-            );
-
-        var tenantProvider =
-            new HttpAcronisProvider(
-                apiClient,
+        var context =
+            await CreateO365ContextAsync(
+                tenantName,
                 logger
             );
 
-        var tenant =
-            await FindTenantAsync(
-                tenantProvider,
-                tenantName
-            );
-
-        if (tenant is null)
+        if (context is null)
         {
             return 1;
         }
 
-        var discoveryProvider =
-            new AcronisO365DiscoveryProvider(
-                apiClient,
+        using (context)
+        {
+            var discoveryProvider =
+                new AcronisO365DiscoveryProvider(
+                    context.ApiClient,
+                    logger
+                );
+
+            var discovery =
+                await discoveryProvider
+                    .DiscoverAsync(
+                        context.Tenant.Id
+                    );
+
+            var probe =
+                new BackupAggregatorO365DiscoveryProbeService();
+
+            return probe.Probe(
+                discovery
+            );
+        }
+    }
+
+    private static async Task<int> RunO365ResourceProbeAsync(
+        string tenantName,
+        OperationalLogger logger)
+    {
+        logger.Info(
+            "Starting customer-scoped O365 resource coverage probe."
+        );
+
+        var context =
+            await CreateO365ContextAsync(
+                tenantName,
                 logger
             );
 
-        var discovery =
-            await discoveryProvider
-                .DiscoverAsync(
-                    tenant.Id
+        if (context is null)
+        {
+            return 1;
+        }
+
+        using (context)
+        {
+            var discoveryProvider =
+                new AcronisO365DiscoveryProvider(
+                    context.ApiClient,
+                    logger
                 );
 
-        var probe =
-            new BackupAggregatorO365DiscoveryProbeService();
+            var discovery =
+                await discoveryProvider
+                    .DiscoverAsync(
+                        context.Tenant.Id
+                    );
 
-        return probe.Probe(
-            discovery
-        );
+            var leafGroups =
+                discovery.Groups
+                    .Where(
+                        group =>
+                            group.Leaf == true
+                            && !string.IsNullOrWhiteSpace(
+                                group.Id
+                            )
+                            && Guid.TryParse(
+                                group.Id,
+                                out _
+                            )
+                    )
+                    .ToList();
+
+            if (leafGroups.Count == 0)
+            {
+                Console.Error.WriteLine(
+                    "No queryable O365 leaf groups were discovered."
+                );
+
+                return 1;
+            }
+
+            logger.Info(
+                $"Queryable O365 leaf groups: {leafGroups.Count}."
+            );
+
+            var resourceProvider =
+                new AcronisO365ResourceProvider(
+                    context.ApiClient,
+                    logger
+                );
+
+            var resources =
+                new List<AcronisO365ResourceDto>();
+
+            foreach (var group in leafGroups)
+            {
+                var groupResources =
+                    await resourceProvider
+                        .GetResourcesForGroupAsync(
+                            context.Tenant.Id,
+                            group.Id!
+                        );
+
+                resources.AddRange(
+                    groupResources
+                );
+            }
+
+            var probe =
+                new BackupAggregatorO365ResourceProbeService();
+
+            return probe.Probe(
+                resources.AsReadOnly(),
+                leafGroups.Count
+            );
+        }
     }
 
     private static async Task<ProductionActivityData?>
@@ -576,6 +802,70 @@ public sealed class BackupAggregatorModule
         );
     }
 
+    private static async Task<O365RuntimeContext?>
+        CreateO365ContextAsync(
+            string tenantName,
+            OperationalLogger logger)
+    {
+        var acronisOptions =
+            AcronisOptions.FromEnvironment();
+
+        var innerHandler =
+            new HttpClientHandler
+            {
+                AllowAutoRedirect =
+                    false
+            };
+
+        var readOnlyHandler =
+            new AcronisReadOnlyHandler(
+                acronisOptions.DatacenterUrl,
+                innerHandler
+            );
+
+        var httpClient =
+            new HttpClient(
+                readOnlyHandler
+            )
+            {
+                Timeout =
+                    TimeSpan.FromSeconds(30)
+            };
+
+        var apiClient =
+            new AcronisApiClient(
+                httpClient,
+                acronisOptions,
+                logger:
+                    logger
+            );
+
+        var tenantProvider =
+            new HttpAcronisProvider(
+                apiClient,
+                logger
+            );
+
+        var tenant =
+            await FindTenantAsync(
+                tenantProvider,
+                tenantName
+            );
+
+        if (tenant is null)
+        {
+            httpClient.Dispose();
+
+            return null;
+        }
+
+        return new O365RuntimeContext(
+            tenant,
+            apiClient,
+            httpClient
+        );
+    }
+
     private static async Task<TenantDto?>
         FindTenantAsync(
             HttpAcronisProvider tenantProvider,
@@ -679,7 +969,18 @@ public sealed class BackupAggregatorModule
         Console.WriteLine();
 
         Console.WriteLine(
-            "Production review:"
+            "Current inventory review:"
+        );
+
+        Console.WriteLine(
+            "  SupportToolkit backup-aggregator " +
+            "inventory-review <tenant-name>"
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Production activity review:"
         );
 
         Console.WriteLine(
@@ -701,7 +1002,7 @@ public sealed class BackupAggregatorModule
         Console.WriteLine();
 
         Console.WriteLine(
-            "Production resource-status diagnostic:"
+            "Production generic resource diagnostic:"
         );
 
         Console.WriteLine(
@@ -718,6 +1019,17 @@ public sealed class BackupAggregatorModule
         Console.WriteLine(
             "  SupportToolkit backup-aggregator " +
             "o365-discovery-probe <tenant-name>"
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Production O365 resource diagnostic:"
+        );
+
+        Console.WriteLine(
+            "  SupportToolkit backup-aggregator " +
+            "o365-resource-probe <tenant-name>"
         );
 
         Console.WriteLine();
@@ -746,4 +1058,16 @@ public sealed class BackupAggregatorModule
         string TenantName,
         IReadOnlyList<ResourceStatusDto> Resources
     );
+
+    private sealed record O365RuntimeContext(
+        TenantDto Tenant,
+        AcronisApiClient ApiClient,
+        HttpClient HttpClient
+    ) : IDisposable
+    {
+        public void Dispose()
+        {
+            HttpClient.Dispose();
+        }
+    }
 }

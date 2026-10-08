@@ -155,8 +155,7 @@ public sealed class ConsoleBackupAggregatorReporter
 
         Console.WriteLine();
 
-        foreach (var tenant
-                 in tenants)
+        foreach (var tenant in tenants)
         {
             Console.WriteLine(
                 tenant.TenantName
@@ -176,8 +175,7 @@ public sealed class ConsoleBackupAggregatorReporter
 
             WriteAttentionHeader();
 
-            foreach (var entry
-                     in tenant.Findings)
+            foreach (var entry in tenant.Findings)
             {
                 WriteAttentionRow(
                     entry
@@ -246,14 +244,13 @@ public sealed class ConsoleBackupAggregatorReporter
         );
 
         Console.WriteLine(
-            "These activities were received but could not be " +
+            "These resources were received but could not be " +
             "classified safely."
         );
 
         Console.WriteLine();
 
-        foreach (var tenant
-                 in tenants)
+        foreach (var tenant in tenants)
         {
             Console.WriteLine(
                 tenant.TenantName
@@ -273,8 +270,7 @@ public sealed class ConsoleBackupAggregatorReporter
 
             WriteUnclassifiedHeader();
 
-            foreach (var entry
-                     in tenant.UnknownRows)
+            foreach (var entry in tenant.UnknownRows)
             {
                 WriteUnclassifiedRow(
                     entry
@@ -397,6 +393,33 @@ public sealed class ConsoleBackupAggregatorReporter
 
         if (string.Equals(
                 state,
+                "notProtected",
+                StringComparison.OrdinalIgnoreCase
+            ))
+        {
+            return "Not protected";
+        }
+
+        if (string.Equals(
+                state,
+                "idle",
+                StringComparison.OrdinalIgnoreCase
+            ))
+        {
+            if (string.Equals(
+                    result,
+                    "ok",
+                    StringComparison.OrdinalIgnoreCase
+                ))
+            {
+                return "Healthy";
+            }
+
+            return "Idle";
+        }
+
+        if (string.Equals(
+                state,
                 "completed",
                 StringComparison.OrdinalIgnoreCase
             ))
@@ -461,20 +484,25 @@ public sealed class ConsoleBackupAggregatorReporter
                 entry.DeviceName,
                 "<unknown resource>",
                 StringComparison.OrdinalIgnoreCase
+            )
+            || string.Equals(
+                entry.DeviceName,
+                "<unknown O365 resource>",
+                StringComparison.OrdinalIgnoreCase
+            )
+            || string.Equals(
+                entry.DeviceName,
+                "<unknown EPM resource>",
+                StringComparison.OrdinalIgnoreCase
             ))
         {
             return "Resource identity missing";
         }
 
-        if (entry.LastBackupRun is null)
-        {
-            return "Activity timestamp missing";
-        }
-
         if (string.IsNullOrWhiteSpace(
                 entry.DeviceState))
         {
-            return "Activity state missing";
+            return "Resource state missing";
         }
 
         if (string.Equals(
@@ -488,7 +516,7 @@ public sealed class ConsoleBackupAggregatorReporter
             return "Result code missing";
         }
 
-        return "Activity data not recognized";
+        return "Resource data not recognized";
     }
 
     private static bool IsMissing(

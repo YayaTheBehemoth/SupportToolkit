@@ -5,16 +5,23 @@ using SupportToolkit.Providers.Acronis.Transport;
 
 namespace SupportToolkit.Providers.Acronis.O365;
 
+/// <summary>
+/// Provides read-only access to the Microsoft 365 workload inventory
+/// exposed by the Acronis Resource Manager web API.
+/// </summary>
 public sealed class AcronisO365ResourceProvider
 {
+    /*
+     * Mirrors the page size observed in the production Acronis web client.
+     */
     private const int PageSize =
-        100;
+        30;
 
     private const int MaxPages =
-        100;
+        500;
 
     private const int MaxResources =
-        10_000;
+        25_000;
 
     private readonly AcronisApiClient _apiClient;
     private readonly OperationalLogger? _logger;
@@ -79,7 +86,8 @@ public sealed class AcronisO365ResourceProvider
             if (pageNumber > MaxPages)
             {
                 throw new InvalidOperationException(
-                    $"O365 resource pagination exceeded {MaxPages} pages."
+                    $"O365 resource pagination exceeded " +
+                    $"{MaxPages} pages."
                 );
             }
 
@@ -114,7 +122,8 @@ public sealed class AcronisO365ResourceProvider
             if (resources.Count > MaxResources)
             {
                 throw new InvalidOperationException(
-                    $"O365 resource fetch exceeded {MaxResources} resources."
+                    $"O365 resource fetch exceeded " +
+                    $"{MaxResources} resources."
                 );
             }
 
@@ -131,17 +140,33 @@ public sealed class AcronisO365ResourceProvider
             {
                 requestPath =
                     null;
-            }
-            else
-            {
-                requestPath =
-                    BuildNextPath(
-                        groupId,
-                        after
-                    );
 
-                pageNumber++;
+                continue;
             }
+
+            /*
+             * Important:
+             *
+             * The Acronis web client does NOT repeat the original
+             * limit/order query when following a cursor.
+             *
+             * Initial request:
+             *
+             *   ?limit=30&order=asc(last_task_status)
+             *
+             * Subsequent request:
+             *
+             *   ?after=<cursor>
+             *
+             * The cursor therefore carries the continuation state.
+             */
+            requestPath =
+                BuildNextPath(
+                    groupId,
+                    after
+                );
+
+            pageNumber++;
         }
 
         _logger?.Info(
@@ -156,7 +181,7 @@ public sealed class AcronisO365ResourceProvider
         string groupId)
     {
         return
-            "/api/resource_manager/v1/o365/" +
+            "/bc/api/resource_manager/v1/o365/" +
             $"groups/{Uri.EscapeDataString(groupId)}/resources" +
             $"?limit={PageSize}" +
             "&order=asc(last_task_status)";
@@ -167,10 +192,8 @@ public sealed class AcronisO365ResourceProvider
         string after)
     {
         return
-            "/api/resource_manager/v1/o365/" +
+            "/bc/api/resource_manager/v1/o365/" +
             $"groups/{Uri.EscapeDataString(groupId)}/resources" +
-            $"?limit={PageSize}" +
-            "&order=asc(last_task_status)" +
-            $"&after={Uri.EscapeDataString(after)}";
+            $"?after={Uri.EscapeDataString(after)}";
     }
 }
