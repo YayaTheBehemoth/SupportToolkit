@@ -7,7 +7,9 @@ using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Providers.Acronis;
 using SupportToolkit.Providers.Acronis.Activities;
 using SupportToolkit.Providers.Acronis.Activities.Dtos;
+using SupportToolkit.Providers.Acronis.O365;
 using SupportToolkit.Providers.Acronis.ResourceManagement.Dtos;
+using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 using SupportToolkit.Providers.Acronis.Transport;
 
 namespace SupportToolkit.Modules.BackupAggregator;
@@ -45,9 +47,33 @@ public sealed class BackupAggregatorModule
             args[0];
 
         /*
-         * Resource Management represents current workload state rather than
-         * an activity interval, so this diagnostic intentionally takes only
-         * a tenant name.
+         * O365 discovery is current-state based and does not require
+         * an activity interval.
+         */
+        if (string.Equals(
+                command,
+                "o365-discovery-probe",
+                StringComparison.OrdinalIgnoreCase
+            ))
+        {
+            if (args.Length != 2)
+            {
+                PrintUsage();
+
+                return 1;
+            }
+
+            var logger =
+                new OperationalLogger();
+
+            return await RunO365DiscoveryProbeAsync(
+                args[1],
+                logger
+            );
+        }
+
+        /*
+         * Generic resource-status inspection is also current-state based.
          */
         if (string.Equals(
                 command,
@@ -72,8 +98,7 @@ public sealed class BackupAggregatorModule
         }
 
         /*
-         * Activity-based commands operate against an explicit bounded
-         * interval.
+         * Activity-based commands require an explicit bounded interval.
          */
         if (args.Length != 4)
         {
@@ -319,6 +344,84 @@ public sealed class BackupAggregatorModule
         );
     }
 
+    private static async Task<int> RunO365DiscoveryProbeAsync(
+        string tenantName,
+        OperationalLogger logger)
+    {
+        logger.Info(
+            "Starting customer-scoped O365 discovery probe."
+        );
+
+        var acronisOptions =
+            AcronisOptions.FromEnvironment();
+
+        using var innerHandler =
+            new HttpClientHandler
+            {
+                AllowAutoRedirect =
+                    false
+            };
+
+        using var readOnlyHandler =
+            new AcronisReadOnlyHandler(
+                acronisOptions.DatacenterUrl,
+                innerHandler
+            );
+
+        using var httpClient =
+            new HttpClient(
+                readOnlyHandler
+            )
+            {
+                Timeout =
+                    TimeSpan.FromSeconds(30)
+            };
+
+        var apiClient =
+            new AcronisApiClient(
+                httpClient,
+                acronisOptions,
+                logger:
+                    logger
+            );
+
+        var tenantProvider =
+            new HttpAcronisProvider(
+                apiClient,
+                logger
+            );
+
+        var tenant =
+            await FindTenantAsync(
+                tenantProvider,
+                tenantName
+            );
+
+        if (tenant is null)
+        {
+            return 1;
+        }
+
+        var discoveryProvider =
+            new AcronisO365DiscoveryProvider(
+                apiClient,
+                logger
+            );
+
+        var discovery =
+            await discoveryProvider
+                .DiscoverAsync(
+                    tenant.Id
+                );
+
+        var probe =
+            new BackupAggregatorO365DiscoveryProbeService();
+
+        return probe.Probe(
+            discovery
+        );
+    }
+
     private static async Task<ProductionActivityData?>
         FetchProductionActivitiesAsync(
             string tenantName,
@@ -473,8 +576,7 @@ public sealed class BackupAggregatorModule
         );
     }
 
-    private static async Task<
-        SupportToolkit.Providers.Acronis.Tenants.Dtos.TenantDto?>
+    private static async Task<TenantDto?>
         FindTenantAsync(
             HttpAcronisProvider tenantProvider,
             string tenantName)
@@ -610,11 +712,28 @@ public sealed class BackupAggregatorModule
         Console.WriteLine();
 
         Console.WriteLine(
+            "Production O365 discovery diagnostic:"
+        );
+
+        Console.WriteLine(
+            "  SupportToolkit backup-aggregator " +
+            "o365-discovery-probe <tenant-name>"
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
             "Activity intervals are half-open:"
         );
 
         Console.WriteLine(
             "  from <= startedAt < to"
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Use RFC3339 timestamps with an explicit UTC offset."
         );
     }
 
