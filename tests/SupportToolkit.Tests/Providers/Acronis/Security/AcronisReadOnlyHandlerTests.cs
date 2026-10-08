@@ -14,6 +14,9 @@ public class AcronisReadOnlyHandlerTests
     [InlineData("/api/2/tenants?limit=100")]
     [InlineData("/api/resource_management/v4/resource_statuses?limit=100")]
     [InlineData("/api/alert_manager/v1/alerts?show_deleted=false")]
+    [InlineData("/bc/api/resource_manager/v1/o365/groups")]
+    [InlineData("/bc/api/resource_manager/v1/o365/groups/11111111-1111-1111-1111-111111111111/resources?limit=30")]
+    [InlineData("/bc/api/resource_manager/v1/epm/resources?parentId=f656db8d-3b82-40ba-b06a-bffc9b0b825a")]
     public async Task AllowedReadEndpoints_AreSent(
         string path)
     {

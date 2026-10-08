@@ -1,19 +1,33 @@
 namespace SupportToolkit.Core.Logging;
 
 /// <summary>
-/// Provides lightweight operational logging for SupportToolkit console runs.
-///
-/// Logging intentionally avoids payload contents, credentials, bearer tokens,
-/// tenant identifiers, cursors, and customer-specific data.
+/// Lightweight console logging for SupportToolkit operations.
+/// INFO is reserved for operator-relevant milestones. Detailed transport and
+/// pagination diagnostics should be emitted only when debug logging is enabled.
 /// </summary>
 public sealed class OperationalLogger
 {
-    private readonly bool _debugEnabled;
+    public bool DebugEnabled { get; }
 
     public OperationalLogger(
         bool debugEnabled = false)
     {
-        _debugEnabled = debugEnabled;
+        DebugEnabled = debugEnabled;
+    }
+
+    public static OperationalLogger FromEnvironment(
+        Func<string, string?>? environmentReader = null)
+    {
+        environmentReader ??=
+            Environment.GetEnvironmentVariable;
+
+        return new OperationalLogger(
+            string.Equals(
+                environmentReader("SUPPORTTOOLKIT_DEBUG"),
+                "true",
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
     }
 
     public void Info(
@@ -28,7 +42,7 @@ public sealed class OperationalLogger
     public void Debug(
         string message)
     {
-        if (!_debugEnabled)
+        if (!DebugEnabled)
         {
             return;
         }

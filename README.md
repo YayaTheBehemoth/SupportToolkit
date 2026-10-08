@@ -2,370 +2,149 @@
 
 SupportToolkit is a modular internal-support automation toolkit.
 
-The current module, **BackupHealth**, is a prototype for exception-based Acronis backup reporting across multiple tenants.
+The project currently contains two Acronis-focused modules:
 
-Instead of manually reviewing healthy backup states, the goal is to aggregate Acronis data, suppress healthy resources, and surface only resources that require human attention.
+- BackupHealth — exception-based health checks over the broader Acronis resource and alert surfaces.
+- BackupAggregator — current backup-inventory review across Microsoft 365 and device workloads.
 
-## Current status
+The goal is to replace repetitive portal and PDF review with conservative, read-only automation that still preserves human review of anything uncertain or unhealthy.
 
-The BackupHealth vertical slice is implemented and runs end-to-end against synthetic, production-shaped Acronis fixtures.
+## BackupAggregator
 
-Currently implemented:
+BackupAggregator reviews the two Acronis inventory domains that together represent the current backup workload inventory:
 
-- Acronis client-credentials authentication
-- Bearer token handling and caching
-- Tenant discovery
-- Resource-status retrieval
-- Alert retrieval
-- Cursor-based pagination
-- Fixture and HTTP provider implementations
-- Tenant/resource/alert correlation
-- BackupHealth domain normalization
-- Exception evaluation
-- Time-based stale-backup detection
-- Console exception reporting
-- Fixture and production runtime modes
-- Graceful application error handling
-- Automated tests
+    Acronis tenant
+    ├── Microsoft 365 inventory
+    │   └── /bc/api/resource_manager/v1/o365/...
+    └── Device inventory
+        └── /bc/api/resource_manager/v1/epm/resources
+            using Acronis' built-in AllMachines group
 
-The HTTP integration has **not yet been validated against the organization's production Acronis environment**, because API credentials are not currently available.
+Healthy resources are counted but suppressed from detailed output. Resources that require attention and resources that cannot be classified safely remain visible.
 
-## Architecture
+The accounting invariant is deliberate:
 
-```text
-                         IAcronisProvider
-                                |
-                  +-------------+-------------+
-                  |                           |
-       FixtureAcronisProvider       HttpAcronisProvider
-                  |                           |
-          Synthetic JSON                Acronis API
-                  |                           |
-                  +-------------+-------------+
-                                |
-                       BackupHealthService
-                                |
-                    Normalized domain models
-                                |
-                     BackupExceptionEngine
-                                |
-                   ConsoleBackupHealthReporter
-```
+    checked = healthy + requires attention + unclassified
 
-### Provider boundary
+If that invariant is ever broken, detailed reporting stops rather than presenting an incomplete result as trustworthy.
 
-`IAcronisProvider` isolates the rest of SupportToolkit from Acronis-specific transport concerns such as:
+### BackupAggregator architecture
 
-- HTTP
-- Authentication
-- Endpoint paths
-- Pagination
-- Response deserialization
+    BackupAggregatorModule
+            |
+            v
+    BackupAggregatorProductionSession
+            |
+            +--> AcronisTenantResolver
+            |
+            +--> AcronisMicrosoft365InventoryProvider
+            |
+            +--> AcronisDeviceInventoryProvider
+            |
+            v
+    BackupInventoryReviewService
+            |
+            v
+    BackupInventoryNormalizer
+            |
+            +--> Microsoft365BackupResourceNormalizer
+            +--> DeviceBackupResourceNormalizer
+            |
+            v
+    TenantBackupReport / AggregatedBackupReport
+            |
+            v
+    ConsoleBackupAggregatorReporter
 
-This allows the same BackupHealth logic to run against either synthetic fixture data or the real Acronis API.
+Provider names intentionally describe the operational inventory they expose rather than Acronis-internal abbreviations.
 
-### BackupHealth
+## BackupHealth
 
-`BackupHealthService` correlates:
+BackupHealth remains the broader exception-evaluation module. It correlates tenant, resource-status, and alert data through the shared Acronis provider infrastructure.
 
-- Tenants
-- Resource protection status
-- Active alerts
+## Read-only Acronis boundary
 
-It maps external Acronis DTOs into SupportToolkit domain models.
+All production Acronis traffic passes through AcronisReadOnlyHandler.
 
-`BackupExceptionEngine` evaluates those normalized resources and suppresses resources without actionable conditions.
+The handler permits only explicitly approved GET endpoints plus the OAuth token POST required for authentication. Unexpected hosts, protocols, methods, request bodies, and endpoints are rejected before transmission.
 
-## Project structure
+Credentials are supplied only at runtime:
 
-```text
-src/
-└── SupportToolkit/
-    ├── Core/
-    │   ├── Configuration/
-    │   └── ErrorHandling/
-    ├── Modules/
-    │   └── BackupHealth/
-    │       └── Models/
-    ├── Providers/
-    │   └── Acronis/
-    │       └── Dtos/
-    ├── Reporting/
-    └── Program.cs
+    ACRONIS_DATACENTER_URL
+    ACRONIS_CLIENT_ID
+    ACRONIS_CLIENT_SECRET
 
-tests/
-└── SupportToolkit.Tests/
-    ├── Core/
-    ├── Modules/
-    │   └── BackupHealth/
-    └── Providers/
-        └── Acronis/
-
-Fixtures/
-└── Acronis/
-```
+Never commit credentials or production payloads.
 
 ## Running locally
 
-### Requirements
+Requirements:
 
 - .NET 10 SDK
 
 Run all tests:
 
-```cmd
-dotnet test
-```
+    dotnet test
 
-Run SupportToolkit:
+Run the application:
 
-```cmd
-dotnet run --project src\SupportToolkit
-```
-
-Fixture mode is the default and does not contact external systems.
-
-Example output:
-
-```text
-SupportToolkit
-Mode: Fixture
-
-SupportToolkit - Backup Health
-==============================
-
-Resources scanned:    4
-Healthy suppressed:   1
-Exceptions:           3
-  Critical:           1
-  Warning:            2
-```
-
-## Runtime modes
-
-SupportToolkit currently supports two runtime modes.
-
-### Fixture mode
-
-Fixture mode is the default.
-
-It uses deterministic synthetic Acronis data from the `Fixtures/Acronis` directory and a fixed clock so development, testing, and demonstrations remain repeatable.
-
-No external API calls are made.
-
-Run normally:
-
-```cmd
-dotnet run --project src\SupportToolkit
-```
+    dotnet run --project src\SupportToolkit
 
 ### Production mode
 
-Production mode must be explicitly enabled:
+    set SUPPORTTOOLKIT_MODE=production
 
-```cmd
-set SUPPORTTOOLKIT_MODE=production
-```
+Review one tenant:
 
-The following environment variables are required:
+    dotnet run --project src\SupportToolkit -- backup-aggregator inventory-review "TENANT NAME"
 
-```text
-ACRONIS_DATACENTER_URL
-ACRONIS_CLIENT_ID
-ACRONIS_CLIENT_SECRET
-```
+### Fixture mode
 
-Credentials are intentionally supplied at runtime and must not be committed to source control.
+Fixture mode does not contact Acronis.
 
-If production mode is enabled without the required configuration, SupportToolkit fails immediately with an operator-friendly error.
+    set SUPPORTTOOLKIT_MODE=fixture
+    dotnet run --project src\SupportToolkit -- backup-aggregator
 
-Example:
+## Logging
 
-```text
-SupportToolkit
-Mode: Production
+Normal BackupAggregator runs keep INFO logging intentionally small:
 
-ERROR: Required environment variable 'ACRONIS_DATACENTER_URL' is not configured.
-```
+    Starting backup inventory review.
+    Tenant resolved.
+    Microsoft 365 resources: ...
+    Device resources: ...
+    Backup inventory review complete: ...
 
-The current production integration performs read-only API operations.
+Transport, authentication, pagination, and provider diagnostics are only wired into BackupAggregator when debug mode is enabled:
 
-## Debugging
+    set SUPPORTTOOLKIT_DEBUG=true
 
-Normal application failures are displayed as concise operator-facing messages.
+Disable it again with:
 
-To include full exception details and stack traces:
-
-```cmd
-set SUPPORTTOOLKIT_DEBUG=true
-```
-
-Disable debug mode again with:
-
-```cmd
-set SUPPORTTOOLKIT_DEBUG=
-```
-
-## Acronis integration
-
-The production provider is implemented against Acronis's documented APIs.
-
-The current flow is:
-
-```text
-API client ID + secret
-        |
-        v
-Client-credentials authentication
-        |
-        v
-Bearer token
-        |
-        v
-Root tenant discovery
-        |
-        v
-Tenant / resource / alert retrieval
-        |
-        v
-Cursor pagination
-        |
-        v
-Normalized BackupHealth domain data
-```
-
-Transport and authentication concerns are isolated from BackupHealth through `IAcronisProvider`.
-
-This means BackupHealth does not need to know whether its data came from:
-
-```text
-FixtureAcronisProvider
-```
-
-or:
-
-```text
-HttpAcronisProvider
-```
-
-## Exception-based reporting
-
-The purpose of BackupHealth is to reduce routine manual review.
-
-Instead of reporting every protected resource, SupportToolkit evaluates normalized backup state and surfaces only exceptions.
-
-Current signals include:
-
-- Acronis resource status
-- Active warning or critical alerts
-- Absence of protection policies
-- Age of the last successful backup
-
-Every surfaced exception includes the reasons it was reported.
-
-Example:
-
-```text
-Customer Beta
--------------
-
-[CRITICAL] FILES-01
-  Last successful backup: 2026-09-27 03:00:00Z
-  - Acronis reports the resource status as error.
-  - Critical Acronis alert: BackupFailed.
-  - Last successful backup is 4.4 days old.
-```
-
-Resources without actionable conditions are suppressed from the report.
+    set SUPPORTTOOLKIT_DEBUG=
 
 ## Testing
 
-The project currently includes automated coverage for:
+BackupAggregator tests cover:
 
-- Acronis DTO contract deserialization
-- Fixture provider behavior
-- Acronis authentication flow
-- Bearer-token handling
-- HTTP request construction
-- Cursor pagination
-- Runtime configuration
-- Tenant/resource/alert correlation
-- BackupHealth domain normalization
-- Exception evaluation
-- Time-based rules
-- Graceful error formatting
+- Microsoft 365 healthy, unhealthy, and unknown classification
+- device idle, notProtected, scheduled, and unknown-state handling
+- duplicate-resource accounting
+- preservation of identity-less resources
+- exact tenant resolution and ambiguity handling
+- aggregation accounting invariants
+- combined Microsoft 365 plus device inventory regression behavior
+- console suppression of healthy detail rows
+- Microsoft 365 leaf-group discovery and pagination
+- canonical Acronis AllMachines device inventory routing and pagination
+- read-only transport allowlisting
 
-Run the full suite with:
+Run:
 
-```cmd
-dotnet test
-```
-
-## Current limitations
-
-The production Acronis integration has not yet been validated against the organization's real Acronis environment.
-
-The current HTTP implementation is based on:
-
-- Acronis API documentation
-- Documented response contracts
-- Synthetic production-shaped fixtures
-- Mocked HTTP responses
-
-Some assumptions may need adjustment once real API responses are available.
-
-Production validation should specifically confirm:
-
-- Tenant hierarchy behavior
-- Resource types present in the real environment
-- Identifier relationships across Acronis APIs
-- Alert payload shapes
-- Pagination behavior at real scale
-- Backup schedule semantics
-- Appropriate stale-backup thresholds
-
-The current fixed stale-backup threshold is intentionally temporary and should eventually be replaced with plan-aware scheduling logic.
+    dotnet test
 
 ## Next milestone
 
-The next major milestone is validation against read-only production Acronis API access.
+The next BackupAggregator milestone is an all-tenants review built on the single-tenant inventory-review service.
 
-Once real responses are available, the intended workflow is:
-
-```text
-Real API response
-        |
-        v
-Inspect and validate assumptions
-        |
-        v
-Sanitize customer-specific information
-        |
-        v
-Add regression fixture
-        |
-        v
-Update DTO/provider/normalization behavior if required
-        |
-        v
-Retain automated regression coverage
-```
-
-This allows discoveries made during production validation to improve the synthetic development environment rather than becoming undocumented one-off fixes.
-
-## Future modules
-
-BackupHealth is intended to be the first SupportToolkit module rather than a standalone Acronis application.
-
-Potential future modules may include:
-
-```text
-Modules/
-├── BackupHealth/
-├── Compliance/
-├── StaleDevices/
-└── DeviceHealth/
-```
-
-Shared provider infrastructure can then support multiple modules without duplicating integration logic.
-
+The single-tenant path should remain the behavioral baseline: each tenant is independently resolved, both inventory domains are fetched, every normalized resource is accounted for, and only exceptions are expanded in detailed output.

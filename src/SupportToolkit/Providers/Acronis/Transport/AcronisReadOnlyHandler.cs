@@ -182,14 +182,6 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
 
         if (string.Equals(
                 path,
-                "/bc/api/resource_manager/v1/epm/groups",
-                StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        if (string.Equals(
-                path,
                 "/bc/api/resource_manager/v1/epm/resources",
                 StringComparison.Ordinal))
         {
