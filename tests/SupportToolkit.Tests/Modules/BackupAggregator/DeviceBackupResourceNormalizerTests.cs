@@ -55,20 +55,43 @@ public class DeviceBackupResourceNormalizerTests
         );
     }
 
-    [Fact]
-    public void Normalize_Running_RemainsVisibleForNow()
+    [Theory]
+    [InlineData("running")]
+    [InlineData("backup")]
+    public void Normalize_BackupInProgressWithPreviousSuccess_IsHealthy(
+        string state)
     {
         var entry =
             NormalizeOne(
-                state: "running",
-                lastBackup:
-                    DateTimeOffset.Parse(
-                        "2026-10-08T12:00:00Z"
-                    ),
+                state,
+                DateTimeOffset.Parse(
+                    "2026-10-08T12:00:00Z"
+                ),
+                DateTimeOffset.Parse(
+                    "2026-10-07T12:00:00Z"
+                )
+            );
+
+        Assert.Equal(
+            BackupReportEntryClassification.Healthy,
+            entry.Classification
+        );
+    }
+
+    [Theory]
+    [InlineData("running")]
+    [InlineData("backup")]
+    public void Normalize_BackupInProgressWithoutPreviousSuccess_RequiresReview(
+        string state)
+    {
+        var entry =
+            NormalizeOne(
+                state,
+                DateTimeOffset.Parse(
+                    "2026-10-08T12:00:00Z"
+                ),
                 lastSuccess:
-                    DateTimeOffset.Parse(
-                        "2026-10-08T12:00:00Z"
-                    )
+                    null
             );
 
         Assert.Equal(
@@ -85,12 +108,14 @@ public class DeviceBackupResourceNormalizerTests
             {
                 Id = "device-1",
                 Name = "SERVER-01",
+
                 Status =
                     new AcronisDeviceResourceStatusDto
                     {
                         State = "idle",
                         LastBackup = null,
                         LastSuccessBackup = null,
+
                         NextBackup =
                             DateTimeOffset.Parse(
                                 "2026-10-09T12:00:00Z"
@@ -100,7 +125,9 @@ public class DeviceBackupResourceNormalizerTests
 
         var entry =
             Assert.Single(
-                _normalizer.Normalize([resource])
+                _normalizer.Normalize(
+                    [resource]
+                )
             );
 
         Assert.Equal(
@@ -119,7 +146,8 @@ public class DeviceBackupResourceNormalizerTests
                     DateTimeOffset.Parse(
                         "2026-10-08T12:00:00Z"
                     ),
-                lastSuccess: null
+                lastSuccess:
+                    null
             );
 
         Assert.Equal(
@@ -134,8 +162,10 @@ public class DeviceBackupResourceNormalizerTests
         var entry =
             NormalizeOne(
                 state: "future_vendor_state",
-                lastBackup: null,
-                lastSuccess: null
+                lastBackup:
+                    null,
+                lastSuccess:
+                    null
             );
 
         Assert.Equal(
@@ -156,6 +186,7 @@ public class DeviceBackupResourceNormalizerTests
                     {
                         Id = "device-1",
                         Name = "SERVER-01",
+
                         Status =
                             new AcronisDeviceResourceStatusDto
                             {

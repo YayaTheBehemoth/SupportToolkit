@@ -52,14 +52,71 @@ public sealed class AcronisTenantResolver
         var tenant =
             matches[0];
 
-        if (!Guid.TryParse(tenant.Id, out _))
+        ValidateTenantId(
+            tenant
+        );
+
+        return tenant;
+    }
+
+    /// <summary>
+    /// Returns the Account Management tenants explicitly identified by
+    /// Acronis as customer tenants.
+    ///
+    /// No assumptions are currently made about other tenant kinds.
+    /// </summary>
+    public async Task<IReadOnlyList<TenantDto>>
+        GetCustomerTenantsAsync(
+            CancellationToken cancellationToken = default)
+    {
+        var tenants =
+            await _tenantProvider.GetTenantsAsync(
+                cancellationToken
+            );
+
+        var customers =
+            tenants
+                .Where(
+                    tenant =>
+                        string.Equals(
+                            tenant.Kind,
+                            "customer",
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                )
+                .OrderBy(
+                    tenant =>
+                        tenant.Name,
+                    StringComparer.OrdinalIgnoreCase
+                )
+                .ThenBy(
+                    tenant =>
+                        tenant.Id,
+                    StringComparer.OrdinalIgnoreCase
+                )
+                .ToList();
+
+        foreach (var tenant in customers)
         {
-            throw new InvalidOperationException(
-                "The matched tenant does not contain the UUID required " +
-                "for customer-scoped authentication."
+            ValidateTenantId(
+                tenant
             );
         }
 
-        return tenant;
+        return customers.AsReadOnly();
+    }
+
+    private static void ValidateTenantId(
+        TenantDto tenant)
+    {
+        if (!Guid.TryParse(
+                tenant.Id,
+                out _))
+        {
+            throw new InvalidOperationException(
+                "An Acronis customer tenant does not contain the UUID " +
+                "required for customer-scoped authentication."
+            );
+        }
     }
 }

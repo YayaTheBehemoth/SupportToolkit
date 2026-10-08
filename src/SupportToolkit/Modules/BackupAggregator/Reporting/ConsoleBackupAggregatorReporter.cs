@@ -18,24 +18,46 @@ public sealed class ConsoleBackupAggregatorReporter
 
         if (!report.IsFullyAccountedFor)
         {
-            WriteAccountingFailure(report);
+            WriteAccountingFailure(
+                report
+            );
+
+            WriteIncompleteTenantsSection(
+                report
+            );
+
             return;
         }
 
-        WriteAttentionSection(report);
-        WriteUnclassifiedSection(report);
-        WriteFooter(report);
+        WriteAttentionSection(
+            report
+        );
+
+        WriteUnclassifiedSection(
+            report
+        );
+
+        WriteIncompleteTenantsSection(
+            report
+        );
+
+        WriteFooter(
+            report
+        );
     }
 
     private static void WriteTitle()
     {
         Console.WriteLine();
+
         Console.WriteLine(
             "SUPPORTTOOLKIT // BACKUP REVIEW"
         );
+
         Console.WriteLine(
             "==============================="
         );
+
         Console.WriteLine();
     }
 
@@ -45,39 +67,61 @@ public sealed class ConsoleBackupAggregatorReporter
         Console.WriteLine(
             "SUMMARY"
         );
+
         Console.WriteLine(
             "-------"
         );
 
         WriteSummaryRow(
-            "Tenants checked",
+            "Tenants attempted",
+            report.TenantsAttempted
+        );
+
+        WriteSummaryRow(
+            "Tenants reviewed",
             report.TenantCount
         );
+
+        WriteSummaryRow(
+            "Tenants failed",
+            report.FailedTenantCount
+        );
+
         WriteSummaryRow(
             "Tenants requiring attention",
             report.TenantsRequiringReview
         );
+
         WriteSummaryRow(
             "Backup resources checked",
             report.RowsChecked
         );
+
         WriteSummaryRow(
             "Healthy",
             report.HealthyRowsSuppressed
         );
+
         WriteSummaryRow(
             "Require attention",
             report.FindingsCount
         );
+
         WriteSummaryRow(
             "Unclassified",
             report.UnknownRowsCount
         );
 
         Console.WriteLine(
-            $"{"Coverage",-30}" +
+            $"{"Resource coverage",-30}" +
             $"{report.AccountedRows}/{report.RowsChecked}"
         );
+
+        Console.WriteLine(
+            $"{"Tenant coverage",-30}" +
+            $"{report.TenantCount}/{report.TenantsAttempted}"
+        );
+
         Console.WriteLine();
     }
 
@@ -114,9 +158,11 @@ public sealed class ConsoleBackupAggregatorReporter
         Console.WriteLine(
             "ATTENTION REQUIRED"
         );
+
         Console.WriteLine(
             "------------------"
         );
+
         Console.WriteLine();
 
         foreach (var tenant in tenants)
@@ -124,11 +170,14 @@ public sealed class ConsoleBackupAggregatorReporter
             WriteTenantHeading(
                 tenant.TenantName
             );
+
             WriteAttentionHeader();
 
             foreach (var entry in tenant.Findings)
             {
-                WriteAttentionRow(entry);
+                WriteAttentionRow(
+                    entry
+                );
             }
 
             Console.WriteLine();
@@ -159,12 +208,15 @@ public sealed class ConsoleBackupAggregatorReporter
         Console.WriteLine(
             "UNCLASSIFIED DATA"
         );
+
         Console.WriteLine(
             "-----------------"
         );
+
         Console.WriteLine(
             "These resources were received but could not be classified safely."
         );
+
         Console.WriteLine();
 
         foreach (var tenant in tenants)
@@ -172,12 +224,56 @@ public sealed class ConsoleBackupAggregatorReporter
             WriteTenantHeading(
                 tenant.TenantName
             );
+
             WriteUnclassifiedHeader();
 
             foreach (var entry in tenant.UnknownRows)
             {
-                WriteUnclassifiedRow(entry);
+                WriteUnclassifiedRow(
+                    entry
+                );
             }
+
+            Console.WriteLine();
+        }
+    }
+
+    private static void WriteIncompleteTenantsSection(
+        AggregatedBackupReport report)
+    {
+        if (report.Failures.Count == 0)
+        {
+            return;
+        }
+
+        Console.WriteLine(
+            "INCOMPLETE TENANTS"
+        );
+
+        Console.WriteLine(
+            "------------------"
+        );
+
+        Console.WriteLine();
+
+        foreach (var failure in report.Failures
+                     .OrderBy(
+                         failure =>
+                             failure.TenantName,
+                         StringComparer.OrdinalIgnoreCase
+                     ))
+        {
+            Console.WriteLine(
+                failure.TenantName
+            );
+
+            Console.WriteLine(
+                $"  Stage:  {failure.Stage}"
+            );
+
+            Console.WriteLine(
+                $"  Reason: {failure.Reason}"
+            );
 
             Console.WriteLine();
         }
@@ -189,6 +285,7 @@ public sealed class ConsoleBackupAggregatorReporter
         Console.WriteLine(
             tenantName
         );
+
         Console.WriteLine(
             new string(
                 '-',
@@ -198,6 +295,7 @@ public sealed class ConsoleBackupAggregatorReporter
                 )
             )
         );
+
         Console.WriteLine();
     }
 
@@ -268,35 +366,66 @@ public sealed class ConsoleBackupAggregatorReporter
         Console.WriteLine(
             "ACCOUNTING ERROR"
         );
+
         Console.WriteLine(
             "----------------"
         );
+
         Console.WriteLine();
+
         Console.WriteLine(
             "The aggregation pipeline did not account for every normalized resource."
         );
+
         Console.WriteLine(
             $"Expected:  {report.RowsChecked}"
         );
+
         Console.WriteLine(
             $"Accounted: {report.AccountedRows}"
         );
+
         Console.WriteLine();
+
         Console.WriteLine(
-            "Detailed output has been stopped because the result cannot be trusted."
+            "Detailed resource output has been stopped because the result cannot be trusted."
         );
+
         Console.WriteLine();
     }
 
     private static void WriteFooter(
         AggregatedBackupReport report)
     {
+        if (!report.IsTenantReviewComplete)
+        {
+            var tenantWord =
+                report.FailedTenantCount == 1
+                    ? "tenant"
+                    : "tenants";
+
+            Console.WriteLine(
+                $"WARNING: {report.FailedTenantCount} {tenantWord} " +
+                "could not be reviewed completely."
+            );
+
+            Console.WriteLine(
+                "This is a partial backup review."
+            );
+
+            Console.WriteLine();
+        }
+
         if (report.RowsChecked == 0)
         {
             Console.WriteLine(
-                "No backup resources were available for review."
+                report.FailedTenantCount > 0
+                    ? "No backup resources were successfully reviewed."
+                    : "No backup resources were available for review."
             );
+
             Console.WriteLine();
+
             return;
         }
 
@@ -304,8 +433,9 @@ public sealed class ConsoleBackupAggregatorReporter
             && report.UnknownRowsCount == 0)
         {
             Console.WriteLine(
-                "No backup resources require attention."
+                "No successfully reviewed backup resources require attention."
             );
+
             Console.WriteLine();
         }
 
@@ -318,6 +448,7 @@ public sealed class ConsoleBackupAggregatorReporter
             $"{report.HealthyRowsSuppressed} healthy backup {resourceWord} " +
             "were checked and intentionally suppressed from details."
         );
+
         Console.WriteLine();
     }
 }

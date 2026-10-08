@@ -2,13 +2,26 @@ namespace SupportToolkit.Modules.BackupAggregator.Models;
 
 /// <summary>
 /// Consolidated result for one complete backup-report aggregation run.
+///
+/// Successfully reviewed tenants and failed tenant reviews are represented
+/// separately so partial execution remains visible.
 /// </summary>
 public sealed class AggregatedBackupReport
 {
     public required IReadOnlyList<TenantBackupReport> Tenants { get; init; }
 
+    public IReadOnlyList<TenantBackupReviewFailure> Failures { get; init; } =
+        [];
+
     public int TenantCount =>
         Tenants.Count;
+
+    public int FailedTenantCount =>
+        Failures.Count;
+
+    public int TenantsAttempted =>
+        TenantCount
+        + FailedTenantCount;
 
     public int TenantsRequiringReview =>
         Tenants.Count(
@@ -48,4 +61,7 @@ public sealed class AggregatedBackupReport
     public bool IsFullyAccountedFor =>
         RowsChecked
         == AccountedRows;
+
+    public bool IsTenantReviewComplete =>
+        FailedTenantCount == 0;
 }

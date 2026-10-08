@@ -7,6 +7,10 @@ namespace SupportToolkit.Providers.Acronis.Microsoft365;
 
 /// <summary>
 /// Reads the Microsoft 365 backup inventory exposed by Acronis Resource Manager.
+///
+/// A tenant that does not have Microsoft 365 configured is represented as a
+/// valid empty Microsoft 365 inventory rather than as a failed tenant review.
+///
 /// The provider discovers queryable leaf groups, follows resource pagination,
 /// and removes duplicate resource identities caused by overlapping groups.
 /// </summary>
@@ -33,7 +37,9 @@ public sealed class AcronisMicrosoft365InventoryProvider
             string tenantId,
             CancellationToken cancellationToken = default)
     {
-        if (!Guid.TryParse(tenantId, out _))
+        if (!Guid.TryParse(
+                tenantId,
+                out _))
         {
             throw new ArgumentException(
                 "A tenant UUID is required for customer-scoped authentication.",
@@ -53,20 +59,54 @@ public sealed class AcronisMicrosoft365InventoryProvider
                 cancellationToken
             );
 
+        /*
+         * A successful empty group collection is a valid state.
+         *
+         * In production this occurs for customer tenants where the Microsoft
+         * 365 workload is not configured at all. Their device inventory must
+         * still be reviewed normally.
+         */
+        if (groups.Count == 0)
+        {
+            _logger?.Debug(
+                "Microsoft 365 inventory is not configured or contains no groups."
+            );
+
+            return [];
+        }
+
         var leafGroupIds =
             groups
                 .Where(
                     group =>
                         group.Leaf == true
-                        && Guid.TryParse(group.Id, out _)
+                        && Guid.TryParse(
+                            group.Id,
+                            out _
+                        )
                 )
-                .Select(group => group.Id!)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(
+                    group =>
+                        group.Id!
+                )
+                .Distinct(
+                    StringComparer.OrdinalIgnoreCase
+                )
                 .ToList();
 
         _logger?.Debug(
             $"Microsoft 365 queryable leaf groups: {leafGroupIds.Count}."
         );
+
+        if (leafGroupIds.Count == 0)
+        {
+            /*
+             * The endpoint responded successfully but exposed no queryable
+             * Microsoft 365 resource groups. This is still a valid empty
+             * inventory rather than a transport failure.
+             */
+            return [];
+        }
 
         var rawResources =
             new List<AcronisMicrosoft365ResourceDto>();
@@ -80,11 +120,15 @@ public sealed class AcronisMicrosoft365InventoryProvider
                     cancellationToken
                 );
 
-            rawResources.AddRange(groupResources);
+            rawResources.AddRange(
+                groupResources
+            );
         }
 
         var uniqueResources =
-            Deduplicate(rawResources);
+            Deduplicate(
+                rawResources
+            );
 
         _logger?.Debug(
             $"Microsoft 365 inventory rows: {rawResources.Count} raw, " +
@@ -109,6 +153,12 @@ public sealed class AcronisMicrosoft365InventoryProvider
                 cancellationToken
             );
 
+        /*
+         * HTTP failures remain failures.
+         *
+         * Only a successful response containing no Microsoft 365 groups is
+         * normalized to an empty inventory.
+         */
         response.EnsureSuccessStatusCode();
 
         var payload =
@@ -134,7 +184,9 @@ public sealed class AcronisMicrosoft365InventoryProvider
             new List<AcronisMicrosoft365ResourceDto>();
 
         string? requestPath =
-            BuildInitialResourcePath(groupId);
+            BuildInitialResourcePath(
+                groupId
+            );
 
         var pageNumber = 1;
 
@@ -166,7 +218,27 @@ public sealed class AcronisMicrosoft365InventoryProvider
                     "Acronis returned an empty Microsoft 365 resource response."
                 );
 
-            resources.AddRange(page.Items);
+            /*
+             * Explicit JSON null for an items collection represents an empty
+             * page. Null elements themselves are ignored because there is no
+             * resource object to classify.
+             */
+            var pageItems =
+                page.Items?
+                    .Where(
+                        item =>
+                            item is not null
+                    )
+                    .Select(
+                        item =>
+                            item!
+                    )
+                    .ToList()
+                ?? [];
+
+            resources.AddRange(
+                pageItems
+            );
 
             if (resources.Count > MaxResources)
             {
@@ -177,14 +249,18 @@ public sealed class AcronisMicrosoft365InventoryProvider
 
             _logger?.Debug(
                 $"Microsoft 365 resource page {pageNumber}: " +
-                $"{page.Items.Count} item(s)."
+                $"{pageItems.Count} item(s)."
             );
 
             var after =
-                page.Paging.Cursors.After;
+                page.Paging?
+                    .Cursors?
+                    .After;
 
             requestPath =
-                string.IsNullOrWhiteSpace(after)
+                string.IsNullOrWhiteSpace(
+                    after
+                )
                     ? null
                     : BuildNextResourcePath(
                         groupId,
@@ -212,21 +288,31 @@ public sealed class AcronisMicrosoft365InventoryProvider
         foreach (var resource in resources)
         {
             var identity =
-                string.IsNullOrWhiteSpace(resource.Id)
+                string.IsNullOrWhiteSpace(
+                    resource.Id
+                )
                     ? resource.InternalId
                     : resource.Id;
 
-            if (string.IsNullOrWhiteSpace(identity))
+            if (string.IsNullOrWhiteSpace(
+                    identity
+                ))
             {
-                withoutIdentity.Add(resource);
+                withoutIdentity.Add(
+                    resource
+                );
+
                 continue;
             }
 
-            unique[identity] = resource;
+            unique[identity] =
+                resource;
         }
 
         return unique.Values
-            .Concat(withoutIdentity)
+            .Concat(
+                withoutIdentity
+            )
             .ToList()
             .AsReadOnly();
     }

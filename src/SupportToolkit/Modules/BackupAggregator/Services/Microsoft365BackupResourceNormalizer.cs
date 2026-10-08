@@ -9,7 +9,9 @@ public sealed class Microsoft365BackupResourceNormalizer
         IReadOnlyList<AcronisMicrosoft365ResourceDto> resources)
     {
         return resources
-            .Select(ToReportEntry)
+            .Select(
+                ToReportEntry
+            )
             .ToList()
             .AsReadOnly();
     }
@@ -20,7 +22,9 @@ public sealed class Microsoft365BackupResourceNormalizer
         return new BackupReportEntry
         {
             ResourceName =
-                string.IsNullOrWhiteSpace(resource.Name)
+                string.IsNullOrWhiteSpace(
+                    resource.Name
+                )
                     ? "<unknown Microsoft 365 resource>"
                     : resource.Name,
 
@@ -29,7 +33,9 @@ public sealed class Microsoft365BackupResourceNormalizer
                 ?? "<missing>",
 
             Classification =
-                Classify(resource),
+                Classify(
+                    resource
+                ),
 
             LastBackupRun =
                 resource.LastFinishTime
@@ -49,7 +55,9 @@ public sealed class Microsoft365BackupResourceNormalizer
     private static BackupReportEntryClassification Classify(
         AcronisMicrosoft365ResourceDto resource)
     {
-        if (string.IsNullOrWhiteSpace(resource.Name))
+        if (string.IsNullOrWhiteSpace(
+                resource.Name
+            ))
         {
             return BackupReportEntryClassification.Unknown;
         }
@@ -60,17 +68,38 @@ public sealed class Microsoft365BackupResourceNormalizer
                 resource.HasProtections
             };
 
-        protectionSignals.AddRange(
-            resource.BasicKinds.Select(
-                basicKind =>
-                    basicKind.HasProtections
-            )
-        );
+        /*
+         * Acronis can explicitly return null for basicKinds when the
+         * Microsoft 365 payload does not contain per-kind protection data.
+         *
+         * Individual null elements are also ignored because they contain no
+         * usable protection signal.
+         */
+        if (resource.BasicKinds is not null)
+        {
+            protectionSignals.AddRange(
+                resource.BasicKinds
+                    .Where(
+                        basicKind =>
+                            basicKind is not null
+                    )
+                    .Select(
+                        basicKind =>
+                            basicKind!.HasProtections
+                    )
+            );
+        }
 
         var knownProtectionSignals =
             protectionSignals
-                .Where(value => value.HasValue)
-                .Select(value => value!.Value)
+                .Where(
+                    value =>
+                        value.HasValue
+                )
+                .Select(
+                    value =>
+                        value!.Value
+                )
                 .Distinct()
                 .ToList();
 
@@ -81,6 +110,7 @@ public sealed class Microsoft365BackupResourceNormalizer
 
         /*
          * Contradictory Acronis protection signals must never be suppressed.
+         *
          * They indicate that SupportToolkit cannot safely infer one canonical
          * protection state from the payload.
          */
@@ -94,8 +124,12 @@ public sealed class Microsoft365BackupResourceNormalizer
             return BackupReportEntryClassification.NeedsReview;
         }
 
-        if (string.IsNullOrWhiteSpace(resource.LastTaskStatus)
-            || string.IsNullOrWhiteSpace(resource.LastTaskState))
+        if (string.IsNullOrWhiteSpace(
+                resource.LastTaskStatus
+            )
+            || string.IsNullOrWhiteSpace(
+                resource.LastTaskState
+            ))
         {
             return BackupReportEntryClassification.Unknown;
         }

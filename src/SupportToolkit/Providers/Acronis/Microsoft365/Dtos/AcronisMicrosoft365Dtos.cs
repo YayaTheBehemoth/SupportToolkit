@@ -5,17 +5,48 @@ namespace SupportToolkit.Providers.Acronis.Microsoft365.Dtos;
 
 public sealed class AcronisMicrosoft365GroupsDto
 {
+    /*
+     * Acronis can explicitly return null for these collections when a tenant
+     * has no Microsoft 365 workload configured.
+     *
+     * They are therefore nullable at the transport boundary even though the
+     * provider exposes an empty inventory to the rest of SupportToolkit.
+     */
     [JsonPropertyName("data")]
-    public IReadOnlyList<AcronisMicrosoft365GroupDto> Data { get; init; } = [];
+    public IReadOnlyList<AcronisMicrosoft365GroupDto?>? Data { get; init; }
 
     [JsonPropertyName("items")]
-    public IReadOnlyList<AcronisMicrosoft365GroupDto> Items { get; init; } = [];
+    public IReadOnlyList<AcronisMicrosoft365GroupDto?>? Items { get; init; }
 
     [JsonIgnore]
-    public IReadOnlyList<AcronisMicrosoft365GroupDto> Groups =>
-        Data.Count > 0
-            ? Data
-            : Items;
+    public IReadOnlyList<AcronisMicrosoft365GroupDto> Groups
+    {
+        get
+        {
+            var source =
+                Data is { Count: > 0 }
+                    ? Data
+                    : Items;
+
+            if (source is null
+                || source.Count == 0)
+            {
+                return [];
+            }
+
+            return source
+                .Where(
+                    group =>
+                        group is not null
+                )
+                .Select(
+                    group =>
+                        group!
+                )
+                .ToList()
+                .AsReadOnly();
+        }
+    }
 }
 
 public sealed class AcronisMicrosoft365GroupDto
@@ -48,19 +79,27 @@ public sealed class AcronisMicrosoft365GroupDto
     public bool? Custom { get; init; }
 
     [JsonPropertyName("resource_types")]
-    public IReadOnlyList<string> ResourceTypes { get; init; } = [];
+    public IReadOnlyList<string>? ResourceTypes { get; init; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalProperties { get; init; } = [];
+    public Dictionary<string, JsonElement>? AdditionalProperties
+    {
+        get;
+        init;
+    }
 }
 
 public sealed class AcronisMicrosoft365ResourcePageDto
 {
+    /*
+     * Empty Microsoft 365 resource collections may also be represented by an
+     * explicit JSON null. The provider normalizes that to an empty page.
+     */
     [JsonPropertyName("items")]
-    public IReadOnlyList<AcronisMicrosoft365ResourceDto> Items { get; init; } = [];
+    public IReadOnlyList<AcronisMicrosoft365ResourceDto?>? Items { get; init; }
 
     [JsonPropertyName("paging")]
-    public AcronisMicrosoft365PagingDto Paging { get; init; } = new();
+    public AcronisMicrosoft365PagingDto? Paging { get; init; }
 
     [JsonPropertyName("timeStamp")]
     public long? TimeStamp { get; init; }
@@ -69,7 +108,7 @@ public sealed class AcronisMicrosoft365ResourcePageDto
 public sealed class AcronisMicrosoft365PagingDto
 {
     [JsonPropertyName("cursors")]
-    public AcronisMicrosoft365CursorDto Cursors { get; init; } = new();
+    public AcronisMicrosoft365CursorDto? Cursors { get; init; }
 }
 
 public sealed class AcronisMicrosoft365CursorDto
@@ -99,7 +138,11 @@ public sealed class AcronisMicrosoft365ResourceDto
     public string? ResourceType { get; init; }
 
     [JsonPropertyName("basicKinds")]
-    public IReadOnlyList<AcronisMicrosoft365BasicKindDto> BasicKinds { get; init; } = [];
+    public IReadOnlyList<AcronisMicrosoft365BasicKindDto?>? BasicKinds
+    {
+        get;
+        init;
+    }
 
     [JsonPropertyName("hasProtections")]
     public bool? HasProtections { get; init; }
@@ -138,10 +181,14 @@ public sealed class AcronisMicrosoft365ResourceDto
     public string? RecipientType { get; init; }
 
     [JsonPropertyName("applications")]
-    public IReadOnlyList<JsonElement> Applications { get; init; } = [];
+    public IReadOnlyList<JsonElement>? Applications { get; init; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalProperties { get; init; } = [];
+    public Dictionary<string, JsonElement>? AdditionalProperties
+    {
+        get;
+        init;
+    }
 }
 
 public sealed class AcronisMicrosoft365BasicKindDto
