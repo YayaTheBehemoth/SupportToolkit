@@ -43,7 +43,30 @@ internal static class BackupReportEntryPresentation
                 return "Healthy";
             }
 
-            return "Idle";
+            /*
+             * Device resources commonly use "idle" as both their state and
+             * result. Keep the existing human-readable Idle presentation for
+             * those resources.
+             *
+             * Microsoft 365 findings can also be idle while SupportToolkit
+             * has derived a more useful review reason such as
+             * protection_conflict, not_protected, or no_successful_backup.
+             * In those cases the derived result is more informative than the
+             * transport state and should be shown instead.
+             */
+            if (IsMissing(result)
+                || string.Equals(
+                    result,
+                    "idle",
+                    StringComparison.OrdinalIgnoreCase
+                ))
+            {
+                return "Idle";
+            }
+
+            return ToDisplayText(
+                result
+            );
         }
 
         if (string.Equals(
@@ -81,6 +104,11 @@ internal static class BackupReportEntryPresentation
         if (string.Equals(
                 state,
                 "running",
+                StringComparison.OrdinalIgnoreCase
+            )
+            || string.Equals(
+                state,
+                "backup",
                 StringComparison.OrdinalIgnoreCase
             ))
         {

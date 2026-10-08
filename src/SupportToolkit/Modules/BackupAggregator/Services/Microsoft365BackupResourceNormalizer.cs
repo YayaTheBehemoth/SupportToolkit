@@ -19,6 +19,17 @@ public sealed class Microsoft365BackupResourceNormalizer
     private static BackupReportEntry ToReportEntry(
         AcronisMicrosoft365ResourceDto resource)
     {
+        var protectionState =
+            GetProtectionState(
+                resource
+            );
+
+        var classification =
+            Classify(
+                resource,
+                protectionState
+            );
+
         return new BackupReportEntry
         {
             ResourceName =
@@ -29,13 +40,14 @@ public sealed class Microsoft365BackupResourceNormalizer
                     : resource.Name,
 
             LastResult =
-                resource.LastTaskStatus
-                ?? "<missing>",
+                GetDisplayedResult(
+                    resource,
+                    classification,
+                    protectionState
+                ),
 
             Classification =
-                Classify(
-                    resource
-                ),
+                classification,
 
             LastBackupRun =
                 resource.LastFinishTime
@@ -53,7 +65,8 @@ public sealed class Microsoft365BackupResourceNormalizer
     }
 
     private static BackupReportEntryClassification Classify(
-        AcronisMicrosoft365ResourceDto resource)
+        AcronisMicrosoft365ResourceDto resource,
+        ProtectionState protectionState)
     {
         if (string.IsNullOrWhiteSpace(
                 resource.Name
@@ -62,6 +75,61 @@ public sealed class Microsoft365BackupResourceNormalizer
             return BackupReportEntryClassification.Unknown;
         }
 
+        if (protectionState
+            == ProtectionState.Unknown)
+        {
+            return BackupReportEntryClassification.Unknown;
+        }
+
+        /*
+         * Contradictory Acronis protection signals must never be suppressed.
+         *
+         * They indicate that SupportToolkit cannot safely infer one canonical
+         * protection state from the payload.
+         */
+        if (protectionState
+            == ProtectionState.Conflicting)
+        {
+            return BackupReportEntryClassification.NeedsReview;
+        }
+
+        if (protectionState
+            == ProtectionState.Unprotected)
+        {
+            return BackupReportEntryClassification.NeedsReview;
+        }
+
+        if (string.IsNullOrWhiteSpace(
+                resource.LastTaskStatus
+            )
+            || string.IsNullOrWhiteSpace(
+                resource.LastTaskState
+            ))
+        {
+            return BackupReportEntryClassification.Unknown;
+        }
+
+        if (string.Equals(
+                resource.LastTaskStatus,
+                "ok",
+                StringComparison.OrdinalIgnoreCase
+            )
+            && string.Equals(
+                resource.LastTaskState,
+                "idle",
+                StringComparison.OrdinalIgnoreCase
+            )
+            && resource.LastSuccessTime is not null)
+        {
+            return BackupReportEntryClassification.Healthy;
+        }
+
+        return BackupReportEntryClassification.NeedsReview;
+    }
+
+    private static ProtectionState GetProtectionState(
+        AcronisMicrosoft365ResourceDto resource)
+    {
         var protectionSignals =
             new List<bool?>
             {
@@ -105,50 +173,97 @@ public sealed class Microsoft365BackupResourceNormalizer
 
         if (knownProtectionSignals.Count == 0)
         {
-            return BackupReportEntryClassification.Unknown;
+            return ProtectionState.Unknown;
         }
 
-        /*
-         * Contradictory Acronis protection signals must never be suppressed.
-         *
-         * They indicate that SupportToolkit cannot safely infer one canonical
-         * protection state from the payload.
-         */
         if (knownProtectionSignals.Count > 1)
         {
-            return BackupReportEntryClassification.NeedsReview;
+            return ProtectionState.Conflicting;
         }
 
-        if (!knownProtectionSignals[0])
+        return knownProtectionSignals[0]
+            ? ProtectionState.Protected
+            : ProtectionState.Unprotected;
+    }
+
+    private static string GetDisplayedResult(
+        AcronisMicrosoft365ResourceDto resource,
+        BackupReportEntryClassification classification,
+        ProtectionState protectionState)
+    {
+        /*
+         * For Microsoft 365 resources, the task result alone does not always
+         * explain why SupportToolkit surfaced the resource.
+         *
+         * For example, Acronis can report the most recent task as "ok" while
+         * the resource itself has conflicting or absent protection.
+         *
+         * Prefer the actual review reason in those cases so the exception
+         * report never describes a finding as healthy.
+         */
+        if (protectionState
+            == ProtectionState.Conflicting)
         {
-            return BackupReportEntryClassification.NeedsReview;
+            return "protection_conflict";
         }
 
-        if (string.IsNullOrWhiteSpace(
-                resource.LastTaskStatus
-            )
-            || string.IsNullOrWhiteSpace(
-                resource.LastTaskState
-            ))
+        if (protectionState
+            == ProtectionState.Unprotected)
         {
-            return BackupReportEntryClassification.Unknown;
+            return "not_protected";
         }
 
-        if (string.Equals(
-                resource.LastTaskStatus,
-                "ok",
-                StringComparison.OrdinalIgnoreCase
-            )
-            && string.Equals(
-                resource.LastTaskState,
-                "idle",
-                StringComparison.OrdinalIgnoreCase
-            )
-            && resource.LastSuccessTime is not null)
+        if (classification
+            == BackupReportEntryClassification.NeedsReview)
         {
-            return BackupReportEntryClassification.Healthy;
+            /*
+             * Preserve an explicit vendor task failure before falling back to
+             * derived SupportToolkit review reasons.
+             */
+            if (!string.IsNullOrWhiteSpace(
+                    resource.LastTaskStatus
+                )
+                && !string.Equals(
+                    resource.LastTaskStatus,
+                    "ok",
+                    StringComparison.OrdinalIgnoreCase
+                ))
+            {
+                return resource.LastTaskStatus;
+            }
+
+            /*
+             * Likewise, retain a non-idle task state when the status itself
+             * does not explain why the resource is visible.
+             */
+            if (!string.IsNullOrWhiteSpace(
+                    resource.LastTaskState
+                )
+                && !string.Equals(
+                    resource.LastTaskState,
+                    "idle",
+                    StringComparison.OrdinalIgnoreCase
+                ))
+            {
+                return resource.LastTaskState;
+            }
+
+            if (resource.LastSuccessTime is null)
+            {
+                return "no_successful_backup";
+            }
         }
 
-        return BackupReportEntryClassification.NeedsReview;
+        return resource.LastTaskStatus
+            ?? resource.LastTaskState
+            ?? "<missing>";
+    }
+
+    private enum ProtectionState
+    {
+        Unknown,
+        Protected,
+        Unprotected,
+        Conflicting
     }
 }

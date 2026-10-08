@@ -29,6 +29,11 @@ public class Microsoft365BackupResourceNormalizerTests
             BackupReportEntryClassification.Healthy,
             entry.Classification
         );
+
+        Assert.Equal(
+            "ok",
+            entry.LastResult
+        );
     }
 
     [Fact]
@@ -50,6 +55,11 @@ public class Microsoft365BackupResourceNormalizerTests
         Assert.Equal(
             BackupReportEntryClassification.NeedsReview,
             entry.Classification
+        );
+
+        Assert.Equal(
+            "not_protected",
+            entry.LastResult
         );
     }
 
@@ -73,6 +83,7 @@ public class Microsoft365BackupResourceNormalizerTests
                 Id = resource.Id,
                 Name = resource.Name,
                 HasProtections = true,
+
                 BasicKinds =
                 [
                     new AcronisMicrosoft365BasicKindDto
@@ -81,9 +92,15 @@ public class Microsoft365BackupResourceNormalizerTests
                         HasProtections = false
                     }
                 ],
-                LastTaskStatus = resource.LastTaskStatus,
-                LastTaskState = resource.LastTaskState,
-                LastSuccessTime = resource.LastSuccessTime
+
+                LastTaskStatus =
+                    resource.LastTaskStatus,
+
+                LastTaskState =
+                    resource.LastTaskState,
+
+                LastSuccessTime =
+                    resource.LastSuccessTime
             };
 
         var entry =
@@ -94,6 +111,90 @@ public class Microsoft365BackupResourceNormalizerTests
         Assert.Equal(
             BackupReportEntryClassification.NeedsReview,
             entry.Classification
+        );
+
+        Assert.Equal(
+            "protection_conflict",
+            entry.LastResult
+        );
+    }
+
+    [Fact]
+    public void Normalize_ProtectedWithoutSuccessfulBackup_RequiresReview()
+    {
+        var entry =
+            NormalizeOne(
+                CreateResource(
+                    protectedResource: true,
+                    status: "ok",
+                    state: "idle",
+                    lastSuccess:
+                        null
+                )
+            );
+
+        Assert.Equal(
+            BackupReportEntryClassification.NeedsReview,
+            entry.Classification
+        );
+
+        Assert.Equal(
+            "no_successful_backup",
+            entry.LastResult
+        );
+    }
+
+    [Fact]
+    public void Normalize_TaskFailure_PreservesVendorStatus()
+    {
+        var entry =
+            NormalizeOne(
+                CreateResource(
+                    protectedResource: true,
+                    status: "warning",
+                    state: "idle",
+                    lastSuccess:
+                        DateTimeOffset.Parse(
+                            "2026-10-08T12:00:00Z"
+                        )
+                )
+            );
+
+        Assert.Equal(
+            BackupReportEntryClassification.NeedsReview,
+            entry.Classification
+        );
+
+        Assert.Equal(
+            "warning",
+            entry.LastResult
+        );
+    }
+
+    [Fact]
+    public void Normalize_NonIdleTaskState_PreservesVendorState()
+    {
+        var entry =
+            NormalizeOne(
+                CreateResource(
+                    protectedResource: true,
+                    status: "ok",
+                    state: "running",
+                    lastSuccess:
+                        DateTimeOffset.Parse(
+                            "2026-10-08T12:00:00Z"
+                        )
+                )
+            );
+
+        Assert.Equal(
+            BackupReportEntryClassification.NeedsReview,
+            entry.Classification
+        );
+
+        Assert.Equal(
+            "running",
+            entry.LastResult
         );
     }
 
@@ -131,7 +232,8 @@ public class Microsoft365BackupResourceNormalizerTests
                     DateTimeOffset.Parse(
                         "2026-10-08T12:00:00Z"
                     ),
-                name: null
+                name:
+                    null
             );
 
         var entry =
@@ -143,6 +245,7 @@ public class Microsoft365BackupResourceNormalizerTests
             BackupReportEntryClassification.Unknown,
             entry.Classification
         );
+
         Assert.Equal(
             "<unknown Microsoft 365 resource>",
             entry.ResourceName
