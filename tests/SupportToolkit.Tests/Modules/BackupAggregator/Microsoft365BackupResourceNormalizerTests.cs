@@ -10,24 +10,19 @@ public class Microsoft365BackupResourceNormalizerTests
         new();
 
     [Fact]
-    public void Normalize_HealthyResource_IsSuppressedAsHealthy()
+    public void Normalize_HealthyResource_IsHealthy()
     {
-        var resource =
-            CreateResource(
-                id: "resource-1",
-                name: "Mailbox",
-                protectedResource: true,
-                status: "ok",
-                state: "idle",
-                lastSuccess:
-                    DateTimeOffset.Parse(
-                        "2026-10-08T12:00:00Z"
-                    )
-            );
-
         var entry =
-            Assert.Single(
-                _normalizer.Normalize([resource])
+            NormalizeOne(
+                CreateResource(
+                    protectedResource: true,
+                    status: "ok",
+                    state: "idle",
+                    lastSuccess:
+                        DateTimeOffset.Parse(
+                            "2026-10-08T12:00:00Z"
+                        )
+                )
             );
 
         Assert.Equal(
@@ -39,11 +34,31 @@ public class Microsoft365BackupResourceNormalizerTests
     [Fact]
     public void Normalize_UnprotectedResource_RequiresReview()
     {
+        var entry =
+            NormalizeOne(
+                CreateResource(
+                    protectedResource: false,
+                    status: "ok",
+                    state: "idle",
+                    lastSuccess:
+                        DateTimeOffset.Parse(
+                            "2026-10-08T12:00:00Z"
+                        )
+                )
+            );
+
+        Assert.Equal(
+            BackupReportEntryClassification.NeedsReview,
+            entry.Classification
+        );
+    }
+
+    [Fact]
+    public void Normalize_ConflictingProtectionSignals_RequiresReview()
+    {
         var resource =
             CreateResource(
-                id: "resource-1",
-                name: "Mailbox",
-                protectedResource: false,
+                protectedResource: true,
                 status: "ok",
                 state: "idle",
                 lastSuccess:
@@ -52,9 +67,28 @@ public class Microsoft365BackupResourceNormalizerTests
                     )
             );
 
+        resource =
+            new AcronisMicrosoft365ResourceDto
+            {
+                Id = resource.Id,
+                Name = resource.Name,
+                HasProtections = true,
+                BasicKinds =
+                [
+                    new AcronisMicrosoft365BasicKindDto
+                    {
+                        Kind = "mailbox",
+                        HasProtections = false
+                    }
+                ],
+                LastTaskStatus = resource.LastTaskStatus,
+                LastTaskState = resource.LastTaskState,
+                LastSuccessTime = resource.LastSuccessTime
+            };
+
         var entry =
-            Assert.Single(
-                _normalizer.Normalize([resource])
+            NormalizeOne(
+                resource
             );
 
         Assert.Equal(
@@ -66,22 +100,17 @@ public class Microsoft365BackupResourceNormalizerTests
     [Fact]
     public void Normalize_MissingState_IsUnknown()
     {
-        var resource =
-            CreateResource(
-                id: "resource-1",
-                name: "Mailbox",
-                protectedResource: true,
-                status: "ok",
-                state: null,
-                lastSuccess:
-                    DateTimeOffset.Parse(
-                        "2026-10-08T12:00:00Z"
-                    )
-            );
-
         var entry =
-            Assert.Single(
-                _normalizer.Normalize([resource])
+            NormalizeOne(
+                CreateResource(
+                    protectedResource: true,
+                    status: "ok",
+                    state: null,
+                    lastSuccess:
+                        DateTimeOffset.Parse(
+                            "2026-10-08T12:00:00Z"
+                        )
+                )
             );
 
         Assert.Equal(
@@ -91,75 +120,55 @@ public class Microsoft365BackupResourceNormalizerTests
     }
 
     [Fact]
-    public void Normalize_DuplicateResourceIdentity_IsCountedOnce()
-    {
-        var first =
-            CreateResource(
-                "resource-1",
-                "Mailbox",
-                true,
-                "ok",
-                "idle",
-                DateTimeOffset.Parse(
-                    "2026-10-08T12:00:00Z"
-                )
-            );
-
-        var duplicate =
-            CreateResource(
-                "resource-1",
-                "Mailbox",
-                true,
-                "ok",
-                "idle",
-                DateTimeOffset.Parse(
-                    "2026-10-08T12:00:00Z"
-                )
-            );
-
-        var entries =
-            _normalizer.Normalize(
-                [first, duplicate]
-            );
-
-        Assert.Single(entries);
-    }
-
-    [Fact]
-    public void Normalize_ResourceWithoutIdentity_IsNotDiscarded()
+    public void Normalize_MissingName_IsUnknownAndPreserved()
     {
         var resource =
             CreateResource(
-                id: null,
-                name: "Mailbox",
                 protectedResource: true,
                 status: "ok",
                 state: "idle",
                 lastSuccess:
                     DateTimeOffset.Parse(
                         "2026-10-08T12:00:00Z"
-                    )
+                    ),
+                name: null
             );
 
-        var entries =
+        var entry =
+            NormalizeOne(
+                resource
+            );
+
+        Assert.Equal(
+            BackupReportEntryClassification.Unknown,
+            entry.Classification
+        );
+        Assert.Equal(
+            "<unknown Microsoft 365 resource>",
+            entry.ResourceName
+        );
+    }
+
+    private BackupReportEntry NormalizeOne(
+        AcronisMicrosoft365ResourceDto resource)
+    {
+        return Assert.Single(
             _normalizer.Normalize(
                 [resource]
-            );
-
-        Assert.Single(entries);
+            )
+        );
     }
 
     private static AcronisMicrosoft365ResourceDto CreateResource(
-        string? id,
-        string? name,
         bool? protectedResource,
         string? status,
         string? state,
-        DateTimeOffset? lastSuccess)
+        DateTimeOffset? lastSuccess,
+        string? name = "Mailbox")
     {
         return new AcronisMicrosoft365ResourceDto
         {
-            Id = id,
+            Id = "resource-1",
             Name = name,
             HasProtections = protectedResource,
             LastTaskStatus = status,

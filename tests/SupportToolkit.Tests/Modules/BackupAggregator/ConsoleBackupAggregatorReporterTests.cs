@@ -20,17 +20,17 @@ public class ConsoleBackupAggregatorReporterTests
                         [
                             new BackupReportEntry
                             {
-                                DeviceName = "HEALTHY-SRV",
+                                ResourceName = "HEALTHY-SRV",
                                 LastResult = "idle",
-                                DeviceState = "idle",
+                                ResourceState = "idle",
                                 Classification =
                                     BackupReportEntryClassification.Healthy
                             },
                             new BackupReportEntry
                             {
-                                DeviceName = "SQL-SRV",
+                                ResourceName = "SQL-SRV",
                                 LastResult = "notProtected",
-                                DeviceState = "notProtected",
+                                ResourceState = "notProtected",
                                 PlanName =
                                     "SQL Database Backup (Disabled)",
                                 Classification =

@@ -56,6 +56,28 @@ public class DeviceBackupResourceNormalizerTests
     }
 
     [Fact]
+    public void Normalize_Running_RemainsVisibleForNow()
+    {
+        var entry =
+            NormalizeOne(
+                state: "running",
+                lastBackup:
+                    DateTimeOffset.Parse(
+                        "2026-10-08T12:00:00Z"
+                    ),
+                lastSuccess:
+                    DateTimeOffset.Parse(
+                        "2026-10-08T12:00:00Z"
+                    )
+            );
+
+        Assert.Equal(
+            BackupReportEntryClassification.NeedsReview,
+            entry.Classification
+        );
+    }
+
+    [Fact]
     public void Normalize_ScheduledWithoutPreviousBackup_RequiresReview()
     {
         var resource =
@@ -122,40 +144,6 @@ public class DeviceBackupResourceNormalizerTests
         );
     }
 
-    [Fact]
-    public void Normalize_DuplicateDeviceIdentity_IsCountedOnce()
-    {
-        var first =
-            CreateResource(
-                "device-1",
-                "idle",
-                DateTimeOffset.Parse(
-                    "2026-10-08T12:00:00Z"
-                ),
-                DateTimeOffset.Parse(
-                    "2026-10-08T12:00:00Z"
-                )
-            );
-
-        var second =
-            CreateResource(
-                "device-1",
-                "idle",
-                DateTimeOffset.Parse(
-                    "2026-10-08T12:00:00Z"
-                ),
-                DateTimeOffset.Parse(
-                    "2026-10-08T12:00:00Z"
-                )
-            );
-
-        Assert.Single(
-            _normalizer.Normalize(
-                [first, second]
-            )
-        );
-    }
-
     private BackupReportEntry NormalizeOne(
         string state,
         DateTimeOffset? lastBackup,
@@ -164,34 +152,20 @@ public class DeviceBackupResourceNormalizerTests
         return Assert.Single(
             _normalizer.Normalize(
                 [
-                    CreateResource(
-                        "device-1",
-                        state,
-                        lastBackup,
-                        lastSuccess
-                    )
+                    new AcronisDeviceResourceDto
+                    {
+                        Id = "device-1",
+                        Name = "SERVER-01",
+                        Status =
+                            new AcronisDeviceResourceStatusDto
+                            {
+                                State = state,
+                                LastBackup = lastBackup,
+                                LastSuccessBackup = lastSuccess
+                            }
+                    }
                 ]
             )
         );
-    }
-
-    private static AcronisDeviceResourceDto CreateResource(
-        string id,
-        string state,
-        DateTimeOffset? lastBackup,
-        DateTimeOffset? lastSuccess)
-    {
-        return new AcronisDeviceResourceDto
-        {
-            Id = id,
-            Name = "SERVER-01",
-            Status =
-                new AcronisDeviceResourceStatusDto
-                {
-                    State = state,
-                    LastBackup = lastBackup,
-                    LastSuccessBackup = lastSuccess
-                }
-        };
     }
 }

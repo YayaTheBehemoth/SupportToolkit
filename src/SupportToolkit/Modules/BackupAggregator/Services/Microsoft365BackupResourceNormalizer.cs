@@ -8,7 +8,7 @@ public sealed class Microsoft365BackupResourceNormalizer
     public IReadOnlyList<BackupReportEntry> Normalize(
         IReadOnlyList<AcronisMicrosoft365ResourceDto> resources)
     {
-        return Deduplicate(resources)
+        return resources
             .Select(ToReportEntry)
             .ToList()
             .AsReadOnly();
@@ -19,7 +19,7 @@ public sealed class Microsoft365BackupResourceNormalizer
     {
         return new BackupReportEntry
         {
-            DeviceName =
+            ResourceName =
                 string.IsNullOrWhiteSpace(resource.Name)
                     ? "<unknown Microsoft 365 resource>"
                     : resource.Name,
@@ -41,7 +41,7 @@ public sealed class Microsoft365BackupResourceNormalizer
             PlanName =
                 null,
 
-            DeviceState =
+            ResourceState =
                 resource.LastTaskState
         };
     }
@@ -71,6 +71,7 @@ public sealed class Microsoft365BackupResourceNormalizer
             protectionSignals
                 .Where(value => value.HasValue)
                 .Select(value => value!.Value)
+                .Distinct()
                 .ToList();
 
         if (knownProtectionSignals.Count == 0)
@@ -78,7 +79,17 @@ public sealed class Microsoft365BackupResourceNormalizer
             return BackupReportEntryClassification.Unknown;
         }
 
-        if (!knownProtectionSignals.Any(value => value))
+        /*
+         * Contradictory Acronis protection signals must never be suppressed.
+         * They indicate that SupportToolkit cannot safely infer one canonical
+         * protection state from the payload.
+         */
+        if (knownProtectionSignals.Count > 1)
+        {
+            return BackupReportEntryClassification.NeedsReview;
+        }
+
+        if (!knownProtectionSignals[0])
         {
             return BackupReportEntryClassification.NeedsReview;
         }
@@ -105,39 +116,5 @@ public sealed class Microsoft365BackupResourceNormalizer
         }
 
         return BackupReportEntryClassification.NeedsReview;
-    }
-
-    private static IReadOnlyList<AcronisMicrosoft365ResourceDto>
-        Deduplicate(
-            IReadOnlyList<AcronisMicrosoft365ResourceDto> resources)
-    {
-        var unique =
-            new Dictionary<string, AcronisMicrosoft365ResourceDto>(
-                StringComparer.OrdinalIgnoreCase
-            );
-
-        var withoutIdentity =
-            new List<AcronisMicrosoft365ResourceDto>();
-
-        foreach (var resource in resources)
-        {
-            var identity =
-                string.IsNullOrWhiteSpace(resource.Id)
-                    ? resource.InternalId
-                    : resource.Id;
-
-            if (string.IsNullOrWhiteSpace(identity))
-            {
-                withoutIdentity.Add(resource);
-                continue;
-            }
-
-            unique[identity] = resource;
-        }
-
-        return unique.Values
-            .Concat(withoutIdentity)
-            .ToList()
-            .AsReadOnly();
     }
 }

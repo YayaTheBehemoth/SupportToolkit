@@ -9,7 +9,7 @@ internal static class BackupReportEntryPresentation
         BackupReportEntry entry)
     {
         var state =
-            entry.DeviceState;
+            entry.ResourceState;
 
         var result =
             entry.LastResult;
@@ -104,8 +104,8 @@ internal static class BackupReportEntryPresentation
     public static string GetUnclassifiedReason(
         BackupReportEntry entry)
     {
-        if (string.IsNullOrWhiteSpace(entry.DeviceName)
-            || entry.DeviceName.StartsWith(
+        if (string.IsNullOrWhiteSpace(entry.ResourceName)
+            || entry.ResourceName.StartsWith(
                 "<unknown ",
                 StringComparison.OrdinalIgnoreCase
             ))
@@ -113,13 +113,13 @@ internal static class BackupReportEntryPresentation
             return "Resource identity missing";
         }
 
-        if (string.IsNullOrWhiteSpace(entry.DeviceState))
+        if (string.IsNullOrWhiteSpace(entry.ResourceState))
         {
             return "Resource state missing";
         }
 
         if (string.Equals(
-                entry.DeviceState,
+                entry.ResourceState,
                 "completed",
                 StringComparison.OrdinalIgnoreCase
             )

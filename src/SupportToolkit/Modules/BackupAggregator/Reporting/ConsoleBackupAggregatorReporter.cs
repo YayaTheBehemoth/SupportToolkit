@@ -244,7 +244,7 @@ public sealed class ConsoleBackupAggregatorReporter
         BackupReportEntry entry)
     {
         Console.WriteLine(
-            $"{BackupReportEntryPresentation.Fit(entry.DeviceName, ResourceWidth).PadRight(ResourceWidth)}  " +
+            $"{BackupReportEntryPresentation.Fit(entry.ResourceName, ResourceWidth).PadRight(ResourceWidth)}  " +
             $"{BackupReportEntryPresentation.Fit(BackupReportEntryPresentation.GetDisplayStatus(entry), StatusWidth).PadRight(StatusWidth)}  " +
             $"{BackupReportEntryPresentation.Fit(entry.PlanName, PlanWidth).PadRight(PlanWidth)}  " +
             $"{BackupReportEntryPresentation.Fit(BackupReportEntryPresentation.FormatTimestamp(entry.LastBackupRun), TimeWidth)}"
@@ -255,7 +255,7 @@ public sealed class ConsoleBackupAggregatorReporter
         BackupReportEntry entry)
     {
         Console.WriteLine(
-            $"{BackupReportEntryPresentation.Fit(entry.DeviceName, ResourceWidth).PadRight(ResourceWidth)}  " +
+            $"{BackupReportEntryPresentation.Fit(entry.ResourceName, ResourceWidth).PadRight(ResourceWidth)}  " +
             $"{BackupReportEntryPresentation.Fit(BackupReportEntryPresentation.GetUnclassifiedReason(entry), ReasonWidth).PadRight(ReasonWidth)}  " +
             $"{BackupReportEntryPresentation.Fit(entry.PlanName, PlanWidth).PadRight(PlanWidth)}  " +
             $"{BackupReportEntryPresentation.Fit(BackupReportEntryPresentation.FormatTimestamp(entry.LastBackupRun), TimeWidth)}"

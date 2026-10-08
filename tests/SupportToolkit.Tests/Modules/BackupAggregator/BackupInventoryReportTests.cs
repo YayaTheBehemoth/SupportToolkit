@@ -61,7 +61,7 @@ public class BackupInventoryReportTests
     {
         return new BackupReportEntry
         {
-            DeviceName = "Resource",
+            ResourceName = "Resource",
             LastResult = "fixture",
             Classification = classification
         };

@@ -1,14 +1,11 @@
 namespace SupportToolkit.Modules.BackupAggregator.Models;
 
 /// <summary>
-/// Represents one workload row from the backup-reporting datasource.
-///
-/// The model intentionally reflects only operationally useful information.
-/// It does not depend on a particular Acronis API or report transport.
+/// Represents one normalized backup resource from any inventory domain.
 /// </summary>
 public sealed class BackupReportEntry
 {
-    public required string DeviceName { get; init; }
+    public required string ResourceName { get; init; }
 
     public required string LastResult { get; init; }
 
@@ -24,5 +21,5 @@ public sealed class BackupReportEntry
 
     public string? PlanName { get; init; }
 
-    public string? DeviceState { get; init; }
+    public string? ResourceState { get; init; }
 }

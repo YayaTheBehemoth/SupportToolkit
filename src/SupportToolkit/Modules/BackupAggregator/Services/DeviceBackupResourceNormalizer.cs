@@ -8,7 +8,7 @@ public sealed class DeviceBackupResourceNormalizer
     public IReadOnlyList<BackupReportEntry> Normalize(
         IReadOnlyList<AcronisDeviceResourceDto> resources)
     {
-        return Deduplicate(resources)
+        return resources
             .Select(ToReportEntry)
             .ToList()
             .AsReadOnly();
@@ -22,7 +22,7 @@ public sealed class DeviceBackupResourceNormalizer
 
         return new BackupReportEntry
         {
-            DeviceName =
+            ResourceName =
                 resource.Name
                 ?? resource.DisplayName
                 ?? "<unknown device resource>",
@@ -47,7 +47,7 @@ public sealed class DeviceBackupResourceNormalizer
                     status?.AppliedPolicyNames
                 ),
 
-            DeviceState =
+            ResourceState =
                 status?.State
         };
     }
@@ -87,10 +87,6 @@ public sealed class DeviceBackupResourceNormalizer
                 StringComparison.OrdinalIgnoreCase
             ))
         {
-            /*
-             * Acronis renders an idle machine with no previous backup and a
-             * future nextBackup as "backup scheduled", not green OK.
-             */
             if (status.LastBackup is null
                 && status.NextBackup is not null)
             {
@@ -103,8 +99,7 @@ public sealed class DeviceBackupResourceNormalizer
         }
 
         /*
-         * Unknown vendor states stay visible. We never silently suppress a
-         * state that SupportToolkit does not understand.
+         * Unknown vendor states remain visible.
          */
         return BackupReportEntryClassification.NeedsReview;
     }
@@ -142,38 +137,15 @@ public sealed class DeviceBackupResourceNormalizer
             "paused" => true,
             "canceled" => true,
             "cancelled" => true,
+
+            /*
+             * Keep running visible until we define an explicit operational
+             * policy for in-progress backups.
+             */
             "running" => true,
+
             _ => false
         };
-    }
-
-    private static IReadOnlyList<AcronisDeviceResourceDto>
-        Deduplicate(
-            IReadOnlyList<AcronisDeviceResourceDto> resources)
-    {
-        var unique =
-            new Dictionary<string, AcronisDeviceResourceDto>(
-                StringComparer.OrdinalIgnoreCase
-            );
-
-        var withoutIdentity =
-            new List<AcronisDeviceResourceDto>();
-
-        foreach (var resource in resources)
-        {
-            if (string.IsNullOrWhiteSpace(resource.Id))
-            {
-                withoutIdentity.Add(resource);
-                continue;
-            }
-
-            unique[resource.Id] = resource;
-        }
-
-        return unique.Values
-            .Concat(withoutIdentity)
-            .ToList()
-            .AsReadOnly();
     }
 
     private static string? FirstNonEmpty(

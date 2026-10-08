@@ -1,5 +1,4 @@
 using SupportToolkit.Core.Logging;
-using SupportToolkit.Providers.Acronis;
 using SupportToolkit.Providers.Acronis.Devices;
 using SupportToolkit.Providers.Acronis.Microsoft365;
 using SupportToolkit.Providers.Acronis.Tenants;
@@ -52,10 +51,6 @@ public sealed class BackupAggregatorProductionSession
                 Timeout = TimeSpan.FromSeconds(30)
             };
 
-        /*
-         * Transport chatter is useful during diagnostics but should not drown
-         * the normal backup-review output.
-         */
         var diagnosticLogger =
             logger.DebugEnabled
                 ? logger
@@ -69,15 +64,10 @@ public sealed class BackupAggregatorProductionSession
                     diagnosticLogger
             );
 
-        var legacyProvider =
-            new HttpAcronisProvider(
+        var tenantProvider =
+            new AcronisTenantProvider(
                 apiClient,
                 diagnosticLogger
-            );
-
-        var tenantProvider =
-            new AcronisTenantProviderAdapter(
-                legacyProvider
             );
 
         var microsoft365Inventory =
