@@ -1,6 +1,7 @@
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Core.Modules;
+using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Modules.BackupAggregator.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Services;
 
@@ -31,29 +32,13 @@ public sealed class BackupAggregatorModule
 
         if (runtimeOptions.Mode == SupportToolkitMode.Fixture)
         {
-            if (args.Length > 0)
-            {
-                Console.Error.WriteLine(
-                    "ERROR: inventory-review commands require " +
-                    "SUPPORTTOOLKIT_MODE=production."
-                );
-
-                Console.Error.WriteLine();
-
-                PrintUsage();
-
-                return 1;
-            }
-
-            return RunFixture();
+            return RunFixture(
+                args
+            );
         }
 
-        if (args.Length != 2
-            || !string.Equals(
-                args[0],
-                "inventory-review",
-                StringComparison.OrdinalIgnoreCase
-            ))
+        if (!IsInventoryReviewCommand(
+                args))
         {
             PrintUsage();
 
@@ -98,16 +83,99 @@ public sealed class BackupAggregatorModule
             : 0;
     }
 
-    private static int RunFixture()
+    private static int RunFixture(
+        string[] args)
     {
-        var report =
+        /*
+         * Bare fixture execution remains available as a quick development
+         * shortcut, while the normal inventory-review command surface mirrors
+         * production behavior.
+         */
+        if (args.Length != 0
+            && !IsInventoryReviewCommand(
+                args))
+        {
+            PrintUsage();
+
+            return 1;
+        }
+
+        var completeReport =
             new BackupAggregatorFixtureReviewService()
                 .BuildReport();
+
+        AggregatedBackupReport report;
+
+        if (args.Length == 0
+            || string.Equals(
+                args[1],
+                "--all",
+                StringComparison.OrdinalIgnoreCase
+            ))
+        {
+            report =
+                completeReport;
+        }
+        else
+        {
+            var matches =
+                completeReport.Tenants
+                    .Where(
+                        tenant =>
+                            string.Equals(
+                                tenant.TenantName,
+                                args[1],
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                    )
+                    .ToList();
+
+            if (matches.Count == 0)
+            {
+                Console.Error.WriteLine(
+                    $"ERROR: fixture tenant '{args[1]}' was not found."
+                );
+
+                return 1;
+            }
+
+            if (matches.Count > 1)
+            {
+                Console.Error.WriteLine(
+                    $"ERROR: more than one fixture tenant named " +
+                    $"'{args[1]}' was found."
+                );
+
+                return 1;
+            }
+
+            report =
+                new AggregatedBackupReport
+                {
+                    Tenants =
+                    [
+                        matches[0]
+                    ]
+                };
+        }
 
         new ConsoleBackupAggregatorReporter()
             .Write(report);
 
-        return 0;
+        return report.FailedTenantCount > 0
+            ? 2
+            : 0;
+    }
+
+    private static bool IsInventoryReviewCommand(
+        string[] args)
+    {
+        return args.Length == 2
+            && string.Equals(
+                args[0],
+                "inventory-review",
+                StringComparison.OrdinalIgnoreCase
+            );
     }
 
     private static void PrintUsage()
@@ -119,7 +187,7 @@ public sealed class BackupAggregatorModule
         Console.WriteLine();
 
         Console.WriteLine(
-            "Production:"
+            "Production or fixture mode:"
         );
 
         Console.WriteLine(

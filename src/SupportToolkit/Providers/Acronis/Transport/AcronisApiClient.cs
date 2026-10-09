@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Text;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Providers.Acronis.Transport.Dtos;
+
 namespace SupportToolkit.Providers.Acronis.Transport;
 
 /// <summary>
@@ -26,8 +27,23 @@ public sealed class AcronisApiClient
                 StringComparer.OrdinalIgnoreCase
             );
 
-    private string? _accessToken;
-    private DateTimeOffset _accessTokenExpiresAt;
+    private readonly SemaphoreSlim
+        _baseAccessTokenRefreshGate =
+            new(
+                1,
+                1
+            );
+
+    private readonly SemaphoreSlim
+        _rootTenantResolutionGate =
+            new(
+                1,
+                1
+            );
+
+    private CachedAccessToken?
+        _baseAccessToken;
+
     private string? _rootTenantId;
 
     public AcronisApiClient(
@@ -256,46 +272,72 @@ public sealed class AcronisApiClient
     public async Task<string> GetRootTenantIdAsync(
         CancellationToken cancellationToken = default)
     {
-        if (_rootTenantId is not null)
+        var cachedRootTenantId =
+            _rootTenantId;
+
+        if (cachedRootTenantId is not null)
         {
             _logger?.Debug(
                 "Using cached Acronis root tenant ID."
             );
 
-            return _rootTenantId;
+            return cachedRootTenantId;
         }
 
-        _logger?.Info(
-            "Resolving Acronis root tenant."
+        await _rootTenantResolutionGate.WaitAsync(
+            cancellationToken
         );
 
-        using var response =
-            await GetAsync(
-                $"/api/2/clients/" +
-                $"{Uri.EscapeDataString(_options.ClientId)}",
-                cancellationToken
+        try
+        {
+            cachedRootTenantId =
+                _rootTenantId;
+
+            if (cachedRootTenantId is not null)
+            {
+                _logger?.Debug(
+                    "Using cached Acronis root tenant ID."
+                );
+
+                return cachedRootTenantId;
+            }
+
+            _logger?.Info(
+                "Resolving Acronis root tenant."
             );
 
-        response.EnsureSuccessStatusCode();
+            using var response =
+                await GetAsync(
+                    $"/api/2/clients/" +
+                    $"{Uri.EscapeDataString(_options.ClientId)}",
+                    cancellationToken
+                );
 
-        var client =
-            await response.Content
-                .ReadFromJsonAsync<AcronisClientDto>(
-                    cancellationToken:
-                        cancellationToken
-                )
-            ?? throw new InvalidOperationException(
-                "Acronis returned an empty API client response."
+            response.EnsureSuccessStatusCode();
+
+            var client =
+                await response.Content
+                    .ReadFromJsonAsync<AcronisClientDto>(
+                        cancellationToken:
+                            cancellationToken
+                    )
+                ?? throw new InvalidOperationException(
+                    "Acronis returned an empty API client response."
+                );
+
+            _rootTenantId =
+                client.TenantId;
+
+            _logger?.Info(
+                "Acronis root tenant resolved."
             );
 
-        _rootTenantId =
-            client.TenantId;
-
-        _logger?.Info(
-            "Acronis root tenant resolved."
-        );
-
-        return _rootTenantId;
+            return _rootTenantId;
+        }
+        finally
+        {
+            _rootTenantResolutionGate.Release();
+        }
     }
 
     private async Task<string> GetAccessTokenAsync(
@@ -304,94 +346,128 @@ public sealed class AcronisApiClient
         var now =
             _timeProvider.GetUtcNow();
 
-        if (_accessToken is not null
+        var cachedToken =
+            _baseAccessToken;
+
+        if (cachedToken is not null
             && now
-            < _accessTokenExpiresAt.AddMinutes(-1))
+            < cachedToken.ExpiresAt.AddMinutes(-1))
         {
             _logger?.Debug(
                 "Using cached Acronis access token."
             );
 
-            return _accessToken;
+            return cachedToken.AccessToken;
         }
 
-        _logger?.Info(
-            "Authenticating with Acronis."
+        await _baseAccessTokenRefreshGate.WaitAsync(
+            cancellationToken
         );
 
-        using var request =
-            new HttpRequestMessage(
-                HttpMethod.Post,
-                BuildUri(
-                    "/api/2/idp/token"
-                )
+        try
+        {
+            now =
+                _timeProvider.GetUtcNow();
+
+            cachedToken =
+                _baseAccessToken;
+
+            if (cachedToken is not null
+                && now
+                < cachedToken.ExpiresAt.AddMinutes(-1))
+            {
+                _logger?.Debug(
+                    "Using cached Acronis access token."
+                );
+
+                return cachedToken.AccessToken;
+            }
+
+            _logger?.Info(
+                "Authenticating with Acronis."
             );
 
-        var credentials =
-            Convert.ToBase64String(
-                Encoding.ASCII.GetBytes(
-                    $"{_options.ClientId}:" +
-                    $"{_options.ClientSecret}"
-                )
+            using var request =
+                new HttpRequestMessage(
+                    HttpMethod.Post,
+                    BuildUri(
+                        "/api/2/idp/token"
+                    )
+                );
+
+            var credentials =
+                Convert.ToBase64String(
+                    Encoding.ASCII.GetBytes(
+                        $"{_options.ClientId}:" +
+                        $"{_options.ClientSecret}"
+                    )
+                );
+
+            request.Headers.Authorization =
+                new AuthenticationHeaderValue(
+                    "Basic",
+                    credentials
+                );
+
+            request.Content =
+                new FormUrlEncodedContent(
+                    new Dictionary<string, string>
+                    {
+                        ["grant_type"] =
+                            "client_credentials"
+                    }
+                );
+
+            var stopwatch =
+                Stopwatch.StartNew();
+
+            using var response =
+                await _httpClient.SendAsync(
+                    request,
+                    cancellationToken
+                );
+
+            stopwatch.Stop();
+
+            _logger?.Info(
+                $"POST /api/2/idp/token -> " +
+                $"{(int)response.StatusCode} " +
+                $"({stopwatch.ElapsedMilliseconds} ms)"
             );
 
-        request.Headers.Authorization =
-            new AuthenticationHeaderValue(
-                "Basic",
-                credentials
+            response.EnsureSuccessStatusCode();
+
+            var token =
+                await response.Content
+                    .ReadFromJsonAsync<AcronisTokenDto>(
+                        cancellationToken:
+                            cancellationToken
+                    )
+                ?? throw new InvalidOperationException(
+                    "Acronis returned an empty token response."
+                );
+
+            cachedToken =
+                new CachedAccessToken(
+                    token.AccessToken,
+                    DateTimeOffset.FromUnixTimeSeconds(
+                        token.ExpiresOn
+                    )
+                );
+
+            _baseAccessToken =
+                cachedToken;
+
+            _logger?.Info(
+                "Acronis authentication succeeded."
             );
 
-        request.Content =
-            new FormUrlEncodedContent(
-                new Dictionary<string, string>
-                {
-                    ["grant_type"] =
-                        "client_credentials"
-                }
-            );
-
-        var stopwatch =
-            Stopwatch.StartNew();
-
-        using var response =
-            await _httpClient.SendAsync(
-                request,
-                cancellationToken
-            );
-
-        stopwatch.Stop();
-
-        _logger?.Info(
-            $"POST /api/2/idp/token -> " +
-            $"{(int)response.StatusCode} " +
-            $"({stopwatch.ElapsedMilliseconds} ms)"
-        );
-
-        response.EnsureSuccessStatusCode();
-
-        var token =
-            await response.Content
-                .ReadFromJsonAsync<AcronisTokenDto>(
-                    cancellationToken:
-                        cancellationToken
-                )
-            ?? throw new InvalidOperationException(
-                "Acronis returned an empty token response."
-            );
-
-        _accessToken =
-            token.AccessToken;
-
-        _accessTokenExpiresAt =
-            DateTimeOffset.FromUnixTimeSeconds(
-                token.ExpiresOn
-            );
-
-        _logger?.Info(
-            "Acronis authentication succeeded."
-        );
-
-        return _accessToken;
+            return cachedToken.AccessToken;
+        }
+        finally
+        {
+            _baseAccessTokenRefreshGate.Release();
+        }
     }
 
     private Uri BuildUri(

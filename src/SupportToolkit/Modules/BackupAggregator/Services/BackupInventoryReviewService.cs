@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Modules.BackupAggregator.Models;
@@ -11,6 +12,8 @@ namespace SupportToolkit.Modules.BackupAggregator.Services;
 
 public sealed class BackupInventoryReviewService
 {
+    private const int DefaultMaxConcurrentTenants = 3;
+
     private readonly AcronisTenantResolver _tenantResolver;
 
     private readonly IAcronisMicrosoft365InventoryProvider
@@ -23,18 +26,30 @@ public sealed class BackupInventoryReviewService
 
     private readonly OperationalLogger? _logger;
 
+    private readonly int _maxConcurrentTenants;
+
     public BackupInventoryReviewService(
         AcronisTenantResolver tenantResolver,
         IAcronisMicrosoft365InventoryProvider microsoft365Inventory,
         IAcronisDeviceInventoryProvider deviceInventory,
         BackupInventoryNormalizer normalizer,
-        OperationalLogger? logger = null)
+        OperationalLogger? logger = null,
+        int maxConcurrentTenants = DefaultMaxConcurrentTenants)
     {
+        if (maxConcurrentTenants < 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maxConcurrentTenants),
+                "Tenant concurrency must be at least 1."
+            );
+        }
+
         _tenantResolver = tenantResolver;
         _microsoft365Inventory = microsoft365Inventory;
         _deviceInventory = deviceInventory;
         _normalizer = normalizer;
         _logger = logger;
+        _maxConcurrentTenants = maxConcurrentTenants;
     }
 
     public async Task<AggregatedBackupReport> ReviewTenantAsync(
@@ -93,6 +108,9 @@ public sealed class BackupInventoryReviewService
     public async Task<AggregatedBackupReport> ReviewAllTenantsAsync(
         CancellationToken cancellationToken = default)
     {
+        var stopwatch =
+            Stopwatch.StartNew();
+
         _logger?.Info(
             "Starting all-tenant backup inventory review."
         );
@@ -106,95 +124,90 @@ public sealed class BackupInventoryReviewService
             $"Customer tenants selected: {tenants.Count}."
         );
 
+        _logger?.Info(
+            $"Tenant review concurrency limit: " +
+            $"{_maxConcurrentTenants}."
+        );
+
+        /*
+         * Each tenant remains internally sequential.
+         *
+         * Only independent tenant reviews are allowed to overlap. This keeps
+         * pagination and provider behavior unchanged while removing the
+         * all-tenant scan's strictly sequential scaling ceiling.
+         *
+         * Outcomes are stored by original tenant index so final reporting
+         * remains deterministic even though tenant completion order is not.
+         */
+        var outcomes =
+            new TenantReviewOutcome?[tenants.Count];
+
+        await Parallel.ForEachAsync(
+            Enumerable.Range(
+                0,
+                tenants.Count
+            ),
+            new ParallelOptions
+            {
+                MaxDegreeOfParallelism =
+                    _maxConcurrentTenants,
+
+                CancellationToken =
+                    cancellationToken
+            },
+            async (
+                index,
+                iterationCancellationToken) =>
+            {
+                var tenant =
+                    tenants[index];
+
+                _logger?.Info(
+                    $"Starting tenant review " +
+                    $"{index + 1}/{tenants.Count}."
+                );
+
+                outcomes[index] =
+                    await ReviewTenantSafelyAsync(
+                        tenant,
+                        index + 1,
+                        tenants.Count,
+                        iterationCancellationToken
+                    );
+
+                _logger?.Info(
+                    $"Completed tenant review " +
+                    $"{index + 1}/{tenants.Count}."
+                );
+            }
+        );
+
         var reports =
             new List<TenantBackupReport>();
 
         var failures =
             new List<TenantBackupReviewFailure>();
 
-        /*
-         * Deliberately sequential for the first production validation.
-         *
-         * Once we know how heterogeneous tenants behave against the two
-         * inventory providers, this can be changed to bounded concurrency
-         * without changing the reporting contract.
-         */
-        for (var index = 0; index < tenants.Count; index++)
+        foreach (var outcome in outcomes)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var tenant =
-                tenants[index];
-
-            _logger?.Info(
-                $"Reviewing tenant {index + 1}/{tenants.Count}."
-            );
-
-            try
+            if (outcome is null)
             {
-                var result =
-                    await ReviewResolvedTenantAsync(
-                        tenant,
-                        cancellationToken
-                    );
+                throw new InvalidOperationException(
+                    "A tenant review completed without producing an outcome."
+                );
+            }
 
+            if (outcome.Report is not null)
+            {
                 reports.Add(
-                    result.Report
+                    outcome.Report
                 );
             }
-            catch (OperationCanceledException)
-                when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (TenantReviewStageException exception)
+
+            if (outcome.Failure is not null)
             {
                 failures.Add(
-                    new TenantBackupReviewFailure
-                    {
-                        TenantName =
-                            tenant.Name,
-
-                        Stage =
-                            exception.Stage,
-
-                        Reason =
-                            GetSafeFailureReason(
-                                exception.InnerException
-                                ?? exception
-                            )
-                    }
-                );
-
-                _logger?.Debug(
-                    $"Tenant review failed during " +
-                    $"{exception.Stage}: " +
-                    $"{exception.InnerException?.GetType().Name ?? exception.GetType().Name}: " +
-                    $"{exception.InnerException?.Message ?? exception.Message}"
-                );
-            }
-            catch (Exception exception)
-            {
-                failures.Add(
-                    new TenantBackupReviewFailure
-                    {
-                        TenantName =
-                            tenant.Name,
-
-                        Stage =
-                            "Unexpected error",
-
-                        Reason =
-                            GetSafeFailureReason(
-                                exception
-                            )
-                    }
-                );
-
-                _logger?.Debug(
-                    $"Tenant review failed unexpectedly: " +
-                    $"{exception.GetType().Name}: " +
-                    $"{exception.Message}"
+                    outcome.Failure
                 );
             }
         }
@@ -209,15 +222,98 @@ public sealed class BackupInventoryReviewService
                     failures.AsReadOnly()
             };
 
+        stopwatch.Stop();
+
         _logger?.Info(
             $"All-tenant backup review complete: " +
             $"{report.TenantsAttempted} attempted, " +
             $"{report.TenantCount} reviewed, " +
             $"{report.FailedTenantCount} failed, " +
-            $"{report.RowsChecked} resources checked."
+            $"{report.RowsChecked} resources checked, " +
+            $"{stopwatch.Elapsed.TotalSeconds:F1}s elapsed."
         );
 
         return report;
+    }
+
+    private async Task<TenantReviewOutcome>
+        ReviewTenantSafelyAsync(
+            TenantDto tenant,
+            int tenantNumber,
+            int tenantCount,
+            CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result =
+                await ReviewResolvedTenantAsync(
+                    tenant,
+                    cancellationToken
+                );
+
+            return new TenantReviewOutcome(
+                result.Report,
+                null
+            );
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (TenantReviewStageException exception)
+        {
+            _logger?.Debug(
+                $"Tenant review {tenantNumber}/{tenantCount} " +
+                $"failed during {exception.Stage}: " +
+                $"{exception.InnerException?.GetType().Name ?? exception.GetType().Name}: " +
+                $"{exception.InnerException?.Message ?? exception.Message}"
+            );
+
+            return new TenantReviewOutcome(
+                null,
+                new TenantBackupReviewFailure
+                {
+                    TenantName =
+                        tenant.Name,
+
+                    Stage =
+                        exception.Stage,
+
+                    Reason =
+                        GetSafeFailureReason(
+                            exception.InnerException
+                            ?? exception
+                        )
+                }
+            );
+        }
+        catch (Exception exception)
+        {
+            _logger?.Debug(
+                $"Tenant review {tenantNumber}/{tenantCount} " +
+                $"failed unexpectedly: " +
+                $"{exception.GetType().Name}: " +
+                $"{exception.Message}"
+            );
+
+            return new TenantReviewOutcome(
+                null,
+                new TenantBackupReviewFailure
+                {
+                    TenantName =
+                        tenant.Name,
+
+                    Stage =
+                        "Unexpected error",
+
+                    Reason =
+                        GetSafeFailureReason(
+                            exception
+                        )
+                }
+            );
+        }
     }
 
     private async Task<TenantReviewResult>
@@ -315,6 +411,11 @@ public sealed class BackupInventoryReviewService
         TenantBackupReport Report,
         int Microsoft365ResourceCount,
         int DeviceResourceCount
+    );
+
+    private sealed record TenantReviewOutcome(
+        TenantBackupReport? Report,
+        TenantBackupReviewFailure? Failure
     );
 
     private sealed class TenantReviewStageException
