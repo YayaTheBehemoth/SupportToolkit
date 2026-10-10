@@ -1,35 +1,82 @@
+﻿﻿using SupportToolkit.Cli.Commands;
+using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.ErrorHandling;
 using SupportToolkit.Core.Modules;
+using SupportToolkit.Core.Secrets;
 using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.Ticketing;
 using SupportToolkit.Modules.BackupHealth;
 using SupportToolkit.Modules.Ticketing;
 using SupportToolkit.Modules.Ticketing.Sources;
 
+var configurationStore =
+    JsonSupportToolkitConfigurationStore
+        .CreateDefault();
+
+ISecretStore secretStore =
+    new WindowsCredentialStore();
+
+var configurationResolver =
+    new SupportToolkitConfigurationResolver(
+        configurationStore,
+        secretStore
+    );
+
+var configureCommand =
+    new ConfigureCommand(
+        configurationStore,
+        secretStore
+    );
+
 ITicketDraftSource[] ticketDraftSources =
 [
-    new BackupReviewTicketDraftSource()
+    new BackupReviewTicketDraftSource(
+        configurationResolver
+    )
 ];
 
 ISupportToolkitModule[] modules =
 [
-    new BackupHealthModule(),
-    new BackupAggregatorModule(),
+    new BackupHealthModule(
+        configurationResolver
+    ),
+
+    new BackupAggregatorModule(
+        configurationResolver
+    ),
+
     new TicketingModule(
-        ticketDraftSources
+        ticketDraftSources,
+        configurationResolver
     )
 ];
 
 try
 {
-    if (args.Length == 0 ||
-        args[0] is "--help" or "-h")
+    if (args.Length == 0
+        || args[0] is "--help" or "-h")
     {
         PrintUsage(
             modules
         );
 
         return 0;
+    }
+
+    /*
+     * Host-level commands are handled before operational module dispatch.
+     *
+     * Configuration is application infrastructure rather than an
+     * ISupportToolkitModule.
+     */
+    if (string.Equals(
+            args[0],
+            "configure",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        return await configureCommand.RunAsync(
+            args[1..]
+        );
     }
 
     var command =
@@ -48,7 +95,7 @@ try
     if (module is null)
     {
         Console.Error.WriteLine(
-            $"Unknown module: {command}"
+            $"Unknown command or module: {command}"
         );
 
         Console.Error.WriteLine();
@@ -96,7 +143,21 @@ static void PrintUsage(
     );
 
     Console.WriteLine(
+        "  SupportToolkit <command> [options]"
+    );
+
+    Console.WriteLine(
         "  SupportToolkit <module> [options]"
+    );
+
+    Console.WriteLine();
+
+    Console.WriteLine(
+        "Application commands:"
+    );
+
+    Console.WriteLine(
+        "  configure            Configure persistent settings and credentials."
     );
 
     Console.WriteLine();

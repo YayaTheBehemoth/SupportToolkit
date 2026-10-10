@@ -2,7 +2,9 @@ namespace SupportToolkit.Providers.Zendesk.Transport;
 
 /// <summary>
 /// Runtime configuration required to authenticate against a Zendesk instance.
-/// Secrets must be supplied at runtime and never committed to source control.
+///
+/// Resolution of configuration is handled outside the provider. This class
+/// owns validation of the final Zendesk-specific values.
 /// </summary>
 public sealed class ZendeskOptions
 {
@@ -18,16 +20,27 @@ public sealed class ZendeskOptions
             UriKind.Absolute
         );
 
-    public static ZendeskOptions FromEnvironment(
-        Func<string, string?>? environmentReader = null)
+    public static ZendeskOptions Create(
+        string subdomain,
+        string clientId,
+        string clientSecret)
     {
-        environmentReader ??=
-            Environment.GetEnvironmentVariable;
+        subdomain =
+            RequireValue(
+                subdomain,
+                "Zendesk subdomain"
+            );
 
-        var subdomain =
-            Require(
-                environmentReader,
-                "ZENDESK_SUBDOMAIN"
+        clientId =
+            RequireValue(
+                clientId,
+                "Zendesk client ID"
+            );
+
+        clientSecret =
+            RequireValue(
+                clientSecret,
+                "Zendesk client secret"
             );
 
         ValidateSubdomain(
@@ -40,20 +53,36 @@ public sealed class ZendeskOptions
                 subdomain,
 
             ClientId =
-                Require(
-                    environmentReader,
-                    "ZENDESK_CLIENT_ID"
-                ),
+                clientId,
 
             ClientSecret =
-                Require(
-                    environmentReader,
-                    "ZENDESK_CLIENT_SECRET"
-                )
+                clientSecret
         };
     }
 
-    private static string Require(
+    public static ZendeskOptions FromEnvironment(
+        Func<string, string?>? environmentReader = null)
+    {
+        environmentReader ??=
+            Environment.GetEnvironmentVariable;
+
+        return Create(
+            RequireEnvironmentVariable(
+                environmentReader,
+                "ZENDESK_SUBDOMAIN"
+            ),
+            RequireEnvironmentVariable(
+                environmentReader,
+                "ZENDESK_CLIENT_ID"
+            ),
+            RequireEnvironmentVariable(
+                environmentReader,
+                "ZENDESK_CLIENT_SECRET"
+            )
+        );
+    }
+
+    private static string RequireEnvironmentVariable(
         Func<string, string?> environmentReader,
         string variableName)
     {
@@ -68,6 +97,21 @@ public sealed class ZendeskOptions
             throw new InvalidOperationException(
                 $"Required environment variable " +
                 $"'{variableName}' is not configured."
+            );
+        }
+
+        return value.Trim();
+    }
+
+    private static string RequireValue(
+        string value,
+        string description)
+    {
+        if (string.IsNullOrWhiteSpace(
+                value))
+        {
+            throw new InvalidOperationException(
+                $"{description} is not configured."
             );
         }
 
@@ -89,8 +133,8 @@ public sealed class ZendeskOptions
             ))
         {
             throw new InvalidOperationException(
-                "ZENDESK_SUBDOMAIN must contain only " +
-                "letters, numbers, and hyphens."
+                "Zendesk subdomain must contain only letters, " +
+                "numbers, and hyphens."
             );
         }
     }

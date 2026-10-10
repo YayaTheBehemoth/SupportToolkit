@@ -2,8 +2,10 @@ namespace SupportToolkit.Providers.Acronis.Transport;
 
 /// <summary>
 /// Runtime configuration required to authenticate against an Acronis
-/// data center. Secrets must be supplied at runtime and never committed
-/// to source control.
+/// data center.
+///
+/// Resolution of configuration is handled outside the provider. This class
+/// owns validation of the final Acronis-specific values.
 /// </summary>
 public sealed class AcronisOptions
 {
@@ -13,41 +15,79 @@ public sealed class AcronisOptions
 
     public required string ClientSecret { get; init; }
 
-    public static AcronisOptions FromEnvironment(
-        Func<string, string?>? environmentReader = null)
+    public static AcronisOptions Create(
+        string datacenterUrl,
+        string clientId,
+        string clientSecret)
     {
-        environmentReader ??= Environment.GetEnvironmentVariable;
+        datacenterUrl =
+            RequireValue(
+                datacenterUrl,
+                "Acronis datacenter URL"
+            );
 
-        var datacenterUrl = Require(
-            environmentReader,
-            "ACRONIS_DATACENTER_URL"
+        clientId =
+            RequireValue(
+                clientId,
+                "Acronis client ID"
+            );
+
+        clientSecret =
+            RequireValue(
+                clientSecret,
+                "Acronis client secret"
+            );
+
+        ValidateDatacenterUrl(
+            datacenterUrl
         );
-
-        ValidateDatacenterUrl(datacenterUrl);
 
         return new AcronisOptions
         {
-            DatacenterUrl = datacenterUrl,
+            DatacenterUrl =
+                datacenterUrl,
 
-            ClientId = Require(
-                environmentReader,
-                "ACRONIS_CLIENT_ID"
-            ),
+            ClientId =
+                clientId,
 
-            ClientSecret = Require(
-                environmentReader,
-                "ACRONIS_CLIENT_SECRET"
-            )
+            ClientSecret =
+                clientSecret
         };
     }
 
-    private static string Require(
+    public static AcronisOptions FromEnvironment(
+        Func<string, string?>? environmentReader = null)
+    {
+        environmentReader ??=
+            Environment.GetEnvironmentVariable;
+
+        return Create(
+            RequireEnvironmentVariable(
+                environmentReader,
+                "ACRONIS_DATACENTER_URL"
+            ),
+            RequireEnvironmentVariable(
+                environmentReader,
+                "ACRONIS_CLIENT_ID"
+            ),
+            RequireEnvironmentVariable(
+                environmentReader,
+                "ACRONIS_CLIENT_SECRET"
+            )
+        );
+    }
+
+    private static string RequireEnvironmentVariable(
         Func<string, string?> environmentReader,
         string variableName)
     {
-        var value = environmentReader(variableName);
+        var value =
+            environmentReader(
+                variableName
+            );
 
-        if (string.IsNullOrWhiteSpace(value))
+        if (string.IsNullOrWhiteSpace(
+                value))
         {
             throw new InvalidOperationException(
                 $"Required environment variable " +
@@ -55,7 +95,22 @@ public sealed class AcronisOptions
             );
         }
 
-        return value;
+        return value.Trim();
+    }
+
+    private static string RequireValue(
+        string value,
+        string description)
+    {
+        if (string.IsNullOrWhiteSpace(
+                value))
+        {
+            throw new InvalidOperationException(
+                $"{description} is not configured."
+            );
+        }
+
+        return value.Trim();
     }
 
     private static void ValidateDatacenterUrl(
@@ -68,7 +123,7 @@ public sealed class AcronisOptions
             || uri.Scheme != Uri.UriSchemeHttps)
         {
             throw new InvalidOperationException(
-                "ACRONIS_DATACENTER_URL must be a valid absolute HTTPS URL."
+                "Acronis datacenter URL must be a valid absolute HTTPS URL."
             );
         }
     }

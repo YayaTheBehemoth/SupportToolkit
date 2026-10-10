@@ -3,6 +3,8 @@
 ##
 ## Get latest from `dotnet new gitignore`
 
+# Local SupportToolkit environment configuration
+local.config.json
 # dotenv files
 .env
 
