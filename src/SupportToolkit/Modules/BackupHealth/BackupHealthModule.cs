@@ -1,8 +1,8 @@
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Core.Modules;
-using SupportToolkit.Providers.Acronis;
 using SupportToolkit.Modules.BackupHealth.Reporting;
+using SupportToolkit.Providers.Acronis;
 using SupportToolkit.Providers.Acronis.Transport;
 
 namespace SupportToolkit.Modules.BackupHealth;
@@ -10,8 +10,13 @@ namespace SupportToolkit.Modules.BackupHealth;
 public sealed class BackupHealthModule
     : ISupportToolkitModule
 {
+    public const string ModuleCommand =
+        "backup-health";
+
     private static readonly TimeSpan StaleAfter =
-        TimeSpan.FromHours(48);
+        TimeSpan.FromHours(
+            48
+        );
 
     private static readonly DateTimeOffset FixtureNow =
         new(
@@ -25,7 +30,7 @@ public sealed class BackupHealthModule
         );
 
     public string Command =>
-        "backup-health";
+        ModuleCommand;
 
     public string Description =>
         "Evaluate backup health across Acronis tenants.";
@@ -41,7 +46,9 @@ public sealed class BackupHealthModule
         }
 
         var runtimeOptions =
-            SupportToolkitRuntimeOptions.FromEnvironment();
+            SupportToolkitRuntimeOptions.FromEnvironment(
+                ModuleCommand
+            );
 
         var logger =
             new OperationalLogger();
@@ -123,7 +130,9 @@ public sealed class BackupHealthModule
             )
             {
                 Timeout =
-                    TimeSpan.FromSeconds(30)
+                    TimeSpan.FromSeconds(
+                        30
+                    )
             };
 
         var apiClient =

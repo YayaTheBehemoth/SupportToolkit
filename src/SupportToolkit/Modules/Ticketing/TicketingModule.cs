@@ -11,11 +11,14 @@ namespace SupportToolkit.Modules.Ticketing;
 public sealed class TicketingModule
     : ISupportToolkitModule
 {
+    public const string ModuleCommand =
+        "ticketing";
+
     private readonly IReadOnlyList<ITicketDraftSource>
         _draftSources;
 
     public string Command =>
-        "ticketing";
+        ModuleCommand;
 
     public string Description =>
         "Preview and create tickets through configured ticketing workflows.";
@@ -54,6 +57,14 @@ public sealed class TicketingModule
             );
         }
 
+        if (IsSubmitCommand(
+                args))
+        {
+            return await RunSubmitAsync(
+                args[1]
+            );
+        }
+
         if (IsCreateTestTicketCommand(
                 args))
         {
@@ -69,28 +80,25 @@ public sealed class TicketingModule
         string sourceCommand)
     {
         var source =
-            _draftSources.FirstOrDefault(
-                candidate =>
-                    string.Equals(
-                        candidate.Command,
-                        sourceCommand,
-                        StringComparison.OrdinalIgnoreCase
-                    )
+            FindDraftSource(
+                sourceCommand
             );
 
         if (source is null)
         {
-            Console.Error.WriteLine(
-                $"ERROR: unknown ticket draft source '{sourceCommand}'."
+            WriteUnknownSourceError(
+                sourceCommand
             );
-
-            Console.Error.WriteLine();
-
-            PrintUsage();
 
             return 1;
         }
 
+        /*
+         * Preview never constructs an external ticket provider.
+         *
+         * The selected source independently decides where its input data comes
+         * from according to the source module's own runtime configuration.
+         */
         var draft =
             await source.CreateDraftAsync();
 
@@ -102,20 +110,82 @@ public sealed class TicketingModule
         return 0;
     }
 
+    private async Task<int> RunSubmitAsync(
+        string sourceCommand)
+    {
+        var source =
+            FindDraftSource(
+                sourceCommand
+            );
+
+        if (source is null)
+        {
+            WriteUnknownSourceError(
+                sourceCommand
+            );
+
+            return 1;
+        }
+
+        if (!WritesAreEnabled())
+        {
+            return 1;
+        }
+
+        if (!TicketingProductionModeIsEnabled())
+        {
+            return 1;
+        }
+
+        /*
+         * Draft generation remains independent from the ticket provider.
+         *
+         * For example, BackupAggregator may be in fixture mode while
+         * Ticketing is configured to submit that synthetic draft to the real
+         * Zendesk sandbox.
+         */
+        var draft =
+            await source.CreateDraftAsync();
+
+        var idempotencyKey =
+            TicketIdempotencyKeyFactory.Create(
+                source.Command,
+                draft
+            );
+
+        var logger =
+            OperationalLogger.FromEnvironment();
+
+        using var session =
+            TicketingProductionSession.Create(
+                logger
+            );
+
+        var ticket =
+            await session.TicketProvider
+                .CreateTicketAsync(
+                    draft,
+                    idempotencyKey
+                );
+
+        WriteCreatedTicket(
+            ticket,
+            source.Command
+        );
+
+        return 0;
+    }
+
     private static async Task<int>
         RunCreateTestTicketAsync()
     {
-        var runtimeOptions =
-            SupportToolkitRuntimeOptions.FromEnvironment();
-
-        if (runtimeOptions.Mode
-            != SupportToolkitMode.Production)
+        if (!WritesAreEnabled())
         {
-            Console.Error.WriteLine(
-                "ERROR: create-test-ticket requires " +
-                "SUPPORTTOOLKIT_MODE=production."
-            );
+            return 1;
+        }
 
+        if (!TicketingProductionModeIsEnabled())
+        {
             return 1;
         }
 
@@ -147,10 +217,83 @@ public sealed class TicketingModule
                     idempotencyKey
                 );
 
+        WriteCreatedTicket(
+            ticket,
+            "provider-smoke-test"
+        );
+
+        return 0;
+    }
+
+    private ITicketDraftSource? FindDraftSource(
+        string sourceCommand)
+    {
+        return _draftSources.FirstOrDefault(
+            candidate =>
+                string.Equals(
+                    candidate.Command,
+                    sourceCommand,
+                    StringComparison.OrdinalIgnoreCase
+                )
+        );
+    }
+
+    private static bool WritesAreEnabled()
+    {
+        var writeOptions =
+            SupportToolkitWriteOptions
+                .FromEnvironment();
+
+        if (writeOptions.AllowWrites)
+        {
+            return true;
+        }
+
+        Console.Error.WriteLine(
+            "ERROR: external writes are disabled."
+        );
+
+        Console.Error.WriteLine(
+            "Set SUPPORTTOOLKIT_ALLOW_WRITES=true " +
+            "to explicitly enable write operations."
+        );
+
+        return false;
+    }
+
+    private static bool TicketingProductionModeIsEnabled()
+    {
+        var runtimeOptions =
+            SupportToolkitRuntimeOptions.FromEnvironment(
+                ModuleCommand
+            );
+
+        if (runtimeOptions.Mode
+            == SupportToolkitMode.Production)
+        {
+            return true;
+        }
+
+        Console.Error.WriteLine(
+            "ERROR: ticket submission requires " +
+            "SUPPORTTOOLKIT_TICKETING_MODE=production."
+        );
+
+        return false;
+    }
+
+    private static void WriteCreatedTicket(
+        CreatedTicket ticket,
+        string sourceCommand)
+    {
         Console.WriteLine();
 
         Console.WriteLine(
-            "Ticket created successfully."
+            "Ticket submitted successfully."
+        );
+
+        Console.WriteLine(
+            $"Source:    {sourceCommand}"
         );
 
         Console.WriteLine(
@@ -165,7 +308,19 @@ public sealed class TicketingModule
             );
         }
 
-        return 0;
+        Console.WriteLine();
+    }
+
+    private void WriteUnknownSourceError(
+        string sourceCommand)
+    {
+        Console.Error.WriteLine(
+            $"ERROR: unknown ticket draft source '{sourceCommand}'."
+        );
+
+        Console.Error.WriteLine();
+
+        PrintUsage();
     }
 
     private static bool IsPreviewCommand(
@@ -175,6 +330,17 @@ public sealed class TicketingModule
             && string.Equals(
                 args[0],
                 "preview",
+                StringComparison.OrdinalIgnoreCase
+            );
+    }
+
+    private static bool IsSubmitCommand(
+        string[] args)
+    {
+        return args.Length == 2
+            && string.Equals(
+                args[0],
+                "submit",
                 StringComparison.OrdinalIgnoreCase
             );
     }
@@ -206,6 +372,16 @@ public sealed class TicketingModule
             "  SupportToolkit ticketing preview <source>"
         );
 
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Submit:"
+        );
+
+        Console.WriteLine(
+            "  SupportToolkit ticketing submit <source>"
+        );
+
         if (_draftSources.Count > 0)
         {
             Console.WriteLine();
@@ -235,6 +411,37 @@ public sealed class TicketingModule
 
         Console.WriteLine(
             "  SupportToolkit ticketing create-test-ticket"
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Ticketing provider runtime:"
+        );
+
+        Console.WriteLine(
+            "  set SUPPORTTOOLKIT_TICKETING_MODE=fixture"
+        );
+
+        Console.WriteLine(
+            "  set SUPPORTTOOLKIT_TICKETING_MODE=production"
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Write permission:"
+        );
+
+        Console.WriteLine(
+            "  set SUPPORTTOOLKIT_ALLOW_WRITES=true"
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Preview never requires write permission or an external " +
+            "ticketing provider."
         );
     }
 

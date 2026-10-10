@@ -25,8 +25,18 @@ public sealed class BackupReviewTicketDraftSource
     public async Task<TicketDraft> CreateDraftAsync(
         CancellationToken cancellationToken = default)
     {
+        /*
+         * This source belongs to BackupAggregator, so its input mode is
+         * controlled by BackupAggregator's runtime configuration rather than
+         * Ticketing's.
+         *
+         * This allows fixture BackupAggregator data to be passed to a real
+         * external ticketing provider later without coupling the two modes.
+         */
         var runtimeOptions =
-            SupportToolkitRuntimeOptions.FromEnvironment();
+            SupportToolkitRuntimeOptions.FromEnvironment(
+                BackupAggregatorModule.ModuleCommand
+            );
 
         AggregatedBackupReport report;
 
