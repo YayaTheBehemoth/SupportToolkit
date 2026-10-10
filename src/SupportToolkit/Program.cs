@@ -4,7 +4,9 @@ using SupportToolkit.Core.ErrorHandling;
 using SupportToolkit.Core.Modules;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Modules.BackupAggregator;
+using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Modules.BackupHealth;
+using SupportToolkit.Ui.Interactive;
 
 var configurationStore =
     JsonSupportToolkitConfigurationStore
@@ -25,6 +27,11 @@ var configureCommand =
         secretStore
     );
 
+var backupAggregatorWorkflow =
+    new BackupAggregatorWorkflow(
+        configurationResolver
+    );
+
 ISupportToolkitModule[] modules =
 [
     new BackupHealthModule(
@@ -32,14 +39,27 @@ ISupportToolkitModule[] modules =
     ),
 
     new BackupAggregatorModule(
+        backupAggregatorWorkflow,
         configurationResolver
     )
 ];
 
+var interactiveShell =
+    new SupportToolkitInteractiveShell(
+        configurationStore,
+        configurationResolver,
+        backupAggregatorWorkflow
+    );
+
 try
 {
-    if (args.Length == 0
-        || args[0] is "--help" or "-h")
+    if (args.Length == 0)
+    {
+        return await interactiveShell
+            .RunAsync();
+    }
+
+    if (args[0] is "--help" or "-h")
     {
         PrintUsage(
             modules
@@ -124,7 +144,17 @@ static void PrintUsage(
     Console.WriteLine();
 
     Console.WriteLine(
-        "Usage:"
+        "Interactive:"
+    );
+
+    Console.WriteLine(
+        "  SupportToolkit"
+    );
+
+    Console.WriteLine();
+
+    Console.WriteLine(
+        "Raw CLI:"
     );
 
     Console.WriteLine(
