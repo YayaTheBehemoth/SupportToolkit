@@ -1,4 +1,4 @@
-﻿﻿using SupportToolkit.Cli.Commands;
+﻿using SupportToolkit.Cli.Commands;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.ErrorHandling;
 using SupportToolkit.Core.Modules;
@@ -6,6 +6,7 @@ using SupportToolkit.Core.Secrets;
 using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Modules.BackupHealth;
+using SupportToolkit.Modules.BackupHealth.Services;
 using SupportToolkit.Ui.Interactive;
 
 var configurationStore =
@@ -32,23 +33,27 @@ var backupAggregatorWorkflow =
         configurationResolver
     );
 
+var backupHealthWorkflow =
+    new BackupHealthWorkflow(
+        configurationResolver
+    );
+
 ISupportToolkitModule[] modules =
 [
     new BackupHealthModule(
-        configurationResolver
+        backupHealthWorkflow
     ),
 
     new BackupAggregatorModule(
-        backupAggregatorWorkflow,
-        configurationResolver
+        backupAggregatorWorkflow
     )
 ];
 
 var interactiveShell =
     new SupportToolkitInteractiveShell(
         configurationStore,
-        configurationResolver,
-        backupAggregatorWorkflow
+        backupAggregatorWorkflow,
+        backupHealthWorkflow
     );
 
 try

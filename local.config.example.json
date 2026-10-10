@@ -16,6 +16,7 @@
   },
   "profiles": {
     "local-dev": {
+      "allowWrites": false,
       "modules": {
         "backup-aggregator": "fixture",
         "backup-health": "fixture"
@@ -23,6 +24,7 @@
     },
     "zendesk-sandbox": {
       "zendeskConnection": "example-sandbox",
+      "allowWrites": true,
       "modules": {
         "backup-aggregator": "fixture",
         "backup-health": "fixture"
@@ -30,6 +32,7 @@
     },
     "readonly-validation": {
       "acronisConnection": "example-production",
+      "allowWrites": false,
       "modules": {
         "backup-aggregator": "production",
         "backup-health": "fixture"

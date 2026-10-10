@@ -12,6 +12,11 @@ namespace SupportToolkit.Core.Configuration;
 /// 2. Active profile
 /// 3. Fixture default
 ///
+/// External writes:
+/// 1. SUPPORTTOOLKIT_ALLOW_WRITES environment override
+/// 2. Active profile
+/// 3. Disabled
+///
 /// Provider configuration:
 /// 1. Environment override for each configured value
 /// 2. Active profile's named connection
@@ -109,6 +114,47 @@ public sealed class SupportToolkitConfigurationResolver
                 configuredMode.Key)
             ? SupportToolkitMode.Fixture
             : configuredMode.Value;
+    }
+
+    public async Task<bool> GetAllowWritesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var environmentValue =
+            ReadEnvironmentValue(
+                "SUPPORTTOOLKIT_ALLOW_WRITES"
+            );
+
+        if (environmentValue is not null)
+        {
+            if (bool.TryParse(
+                    environmentValue,
+                    out var allowWrites))
+            {
+                return allowWrites;
+            }
+
+            throw new InvalidOperationException(
+                "SUPPORTTOOLKIT_ALLOW_WRITES must be either " +
+                "'true' or 'false'."
+            );
+        }
+
+        var configuration =
+            await _configurationStore.LoadAsync(
+                cancellationToken
+            );
+
+        if (configuration.Profiles.Count == 0)
+        {
+            return false;
+        }
+
+        var active =
+            GetRequiredActiveProfile(
+                configuration
+            );
+
+        return active.Profile.AllowWrites;
     }
 
     public async Task<ResolvedAcronisConnection>

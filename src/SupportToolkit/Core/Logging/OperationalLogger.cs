@@ -1,9 +1,14 @@
 namespace SupportToolkit.Core.Logging;
 
 /// <summary>
-/// Lightweight console logging for SupportToolkit operations.
-/// INFO is reserved for operator-relevant milestones. Detailed transport and
-/// pagination diagnostics should be emitted only when debug logging is enabled.
+/// Lightweight diagnostic logging for SupportToolkit operations.
+///
+/// INFO and DEBUG output are intended for development and troubleshooting
+/// and are emitted only when SUPPORTTOOLKIT_DEBUG=true.
+///
+/// Warnings represent operator-relevant conditions and are always emitted.
+///
+/// Human-facing progress messages belong to the UI rather than this logger.
 /// </summary>
 public sealed class OperationalLogger
 {
@@ -23,7 +28,9 @@ public sealed class OperationalLogger
 
         return new OperationalLogger(
             string.Equals(
-                environmentReader("SUPPORTTOOLKIT_DEBUG"),
+                environmentReader(
+                    "SUPPORTTOOLKIT_DEBUG"
+                ),
                 "true",
                 StringComparison.OrdinalIgnoreCase
             )
@@ -33,6 +40,11 @@ public sealed class OperationalLogger
     public void Info(
         string message)
     {
+        if (!DebugEnabled)
+        {
+            return;
+        }
+
         Write(
             "INFO",
             message

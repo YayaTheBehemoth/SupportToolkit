@@ -76,6 +76,23 @@ public sealed class ConfigureCommand
             );
         }
 
+        if (args.Length == 3
+            && string.Equals(
+                args[0],
+                "profile",
+                StringComparison.OrdinalIgnoreCase
+            )
+            && string.Equals(
+                args[1],
+                "delete",
+                StringComparison.OrdinalIgnoreCase
+            ))
+        {
+            return await DeleteProfileAsync(
+                args[2]
+            );
+        }
+
         if (args.Length == 2
             && string.Equals(
                 args[0],
@@ -178,6 +195,24 @@ public sealed class ConfigureCommand
                 )
             );
 
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "External writes"
+        );
+
+        Console.WriteLine(
+            "---------------"
+        );
+
+        profile.AllowWrites =
+            ReadConfirmation(
+                profile.AllowWrites
+                    ? "Allow external writes for this profile? [Y/n]: "
+                    : "Allow external writes for this profile? [y/N]: ",
+                profile.AllowWrites
+            );
+
         if (RequiresAcronisConnection(
                 profile))
         {
@@ -219,6 +254,18 @@ public sealed class ConfigureCommand
                     pendingSecret
                 );
             }
+        }
+
+        if (profile.AllowWrites
+            && string.IsNullOrWhiteSpace(
+                profile.ZendeskConnection))
+        {
+            Console.WriteLine();
+
+            Console.WriteLine(
+                "WARNING: external writes are enabled, but this profile " +
+                "does not reference a Zendesk connection."
+            );
         }
 
         UpsertProfile(
@@ -272,6 +319,99 @@ public sealed class ConfigureCommand
 
         Console.WriteLine(
             $"Active profile: {profileName}"
+        );
+
+        return 0;
+    }
+
+    private async Task<int> DeleteProfileAsync(
+        string requestedProfileName)
+    {
+        EnsureInteractiveConsole();
+
+        var configuration =
+            await _configurationStore.LoadAsync();
+
+        var profileName =
+            SupportToolkitConfigurationNames
+                .NormalizeProfileName(
+                    requestedProfileName
+                );
+
+        var existingKey =
+            FindProfileKey(
+                configuration,
+                profileName
+            );
+
+        if (existingKey is null)
+        {
+            Console.Error.WriteLine(
+                $"ERROR: profile '{profileName}' does not exist."
+            );
+
+            return 1;
+        }
+
+        if (string.Equals(
+                existingKey,
+                configuration.ActiveProfile,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine(
+                $"ERROR: profile '{profileName}' is currently active."
+            );
+
+            Console.Error.WriteLine(
+                "Select another profile before deleting it."
+            );
+
+            return 1;
+        }
+
+        Console.WriteLine(
+            $"Delete profile '{profileName}'?"
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "The profile will be removed."
+        );
+
+        Console.WriteLine(
+            "Referenced connections and stored credentials will not be deleted."
+        );
+
+        Console.WriteLine();
+
+        if (!ReadConfirmation(
+                "Continue? [y/N]: ",
+                defaultValue:
+                    false
+            ))
+        {
+            Console.WriteLine();
+
+            Console.WriteLine(
+                "Profile deletion cancelled."
+            );
+
+            return 0;
+        }
+
+        configuration.Profiles.Remove(
+            existingKey
+        );
+
+        await _configurationStore.SaveAsync(
+            configuration
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            $"Profile '{profileName}' deleted."
         );
 
         return 0;
@@ -637,6 +777,11 @@ public sealed class ConfigureCommand
                 );
 
                 Console.WriteLine(
+                    $"    External writes:    " +
+                    $"{FormatBoolean(profile.AllowWrites)}"
+                );
+
+                Console.WriteLine(
                     $"    Acronis connection: " +
                     $"{DisplayOptionalValue(profile.AcronisConnection)}"
                 );
@@ -655,7 +800,6 @@ public sealed class ConfigureCommand
                     $"    Backup Health:      " +
                     $"{FormatMode(GetConfiguredMode(profile, BackupHealthCommand))}"
                 );
-
             }
         }
 
@@ -811,6 +955,21 @@ public sealed class ConfigureCommand
                    BackupHealthCommand
                )
                == SupportToolkitMode.Production;
+    }
+
+    private static string? FindProfileKey(
+        SupportToolkitConfiguration configuration,
+        string profileName)
+    {
+        return configuration.Profiles.Keys
+            .FirstOrDefault(
+                key =>
+                    string.Equals(
+                        key,
+                        profileName,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+            );
     }
 
     private static void ConfigureAcronisMetadata(
@@ -972,10 +1131,10 @@ public sealed class ConfigureCommand
                     candidate =>
                         string.Equals(
                             candidate,
-                            key,
-                            StringComparison.OrdinalIgnoreCase
-                        )
-                );
+                        key,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+            );
 
         if (existingKey is not null)
         {
@@ -1184,6 +1343,14 @@ public sealed class ConfigureCommand
             : "missing";
     }
 
+    private static string FormatBoolean(
+        bool value)
+    {
+        return value
+            ? "enabled"
+            : "disabled";
+    }
+
     private static string FormatMode(
         SupportToolkitMode mode)
     {
@@ -1219,6 +1386,10 @@ public sealed class ConfigureCommand
         );
 
         Console.WriteLine(
+            "  SupportToolkit configure profile delete <name>"
+        );
+
+        Console.WriteLine(
             "  SupportToolkit configure use <name>"
         );
 
@@ -1229,8 +1400,13 @@ public sealed class ConfigureCommand
         Console.WriteLine();
 
         Console.WriteLine(
-            "Profiles define runtime behavior and reference reusable " +
-            "external connections."
+            "Profiles define runtime behavior, external write permission, " +
+            "and reusable provider connections."
+        );
+
+        Console.WriteLine(
+            "Deleting a profile does not delete shared provider " +
+            "connections or stored credentials."
         );
 
         Console.WriteLine(

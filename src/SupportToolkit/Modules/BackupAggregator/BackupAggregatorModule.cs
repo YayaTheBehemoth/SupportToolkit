@@ -1,14 +1,10 @@
 using SupportToolkit.Core.Configuration;
-using SupportToolkit.Core.Logging;
 using SupportToolkit.Core.Modules;
 using SupportToolkit.Core.Ticketing.Models;
 using SupportToolkit.Core.Ticketing.Reporting;
-using SupportToolkit.Core.Ticketing.Services;
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Modules.BackupAggregator.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Services;
-using SupportToolkit.Modules.BackupAggregator.Ticketing;
-using SupportToolkit.Providers.Zendesk.Transport;
 
 namespace SupportToolkit.Modules.BackupAggregator;
 
@@ -21,9 +17,6 @@ public sealed class BackupAggregatorModule
     private readonly BackupAggregatorWorkflow
         _workflow;
 
-    private readonly SupportToolkitConfigurationResolver
-        _configurationResolver;
-
     public string Command =>
         ModuleCommand;
 
@@ -31,19 +24,12 @@ public sealed class BackupAggregatorModule
         "Review Acronis backup inventory and surface only exceptions.";
 
     public BackupAggregatorModule(
-        BackupAggregatorWorkflow workflow,
-        SupportToolkitConfigurationResolver configurationResolver)
+        BackupAggregatorWorkflow workflow)
     {
         _workflow =
             workflow
             ?? throw new ArgumentNullException(
                 nameof(workflow)
-            );
-
-        _configurationResolver =
-            configurationResolver
-            ?? throw new ArgumentNullException(
-                nameof(configurationResolver)
             );
     }
 
@@ -142,73 +128,22 @@ public sealed class BackupAggregatorModule
 
     private async Task<int> RunTicketPreviewAsync()
     {
-        var report =
-            await _workflow
-                .ReviewAllTenantsAsync();
-
         var draft =
-            new BackupReviewTicketDraftFactory()
-                .Create(
-                    report
-                );
+            await _workflow
+                .CreateTicketDraftAsync();
 
-        new ConsoleTicketDraftPreviewer()
-            .Write(
-                draft
-            );
+        WriteTicketPreview(
+            draft
+        );
 
         return 0;
     }
 
     private async Task<int> RunTicketSubmitAsync()
     {
-        if (!WritesAreEnabled())
-        {
-            return 1;
-        }
-
-        var report =
-            await _workflow
-                .ReviewAllTenantsAsync();
-
-        var draft =
-            new BackupReviewTicketDraftFactory()
-                .Create(
-                    report
-                );
-
-        var resolvedConnection =
-            await _configurationResolver
-                .GetZendeskConnectionAsync();
-
-        var zendeskOptions =
-            ZendeskOptions.Create(
-                resolvedConnection.Subdomain,
-                resolvedConnection.ClientId,
-                resolvedConnection.ClientSecret
-            );
-
-        var logger =
-            OperationalLogger.FromEnvironment();
-
-        using var session =
-            TicketingProductionSession.Create(
-                zendeskOptions,
-                logger
-            );
-
-        var idempotencyKey =
-            TicketIdempotencyKeyFactory.Create(
-                "backup-review",
-                draft
-            );
-
         var ticket =
-            await session.TicketProvider
-                .CreateTicketAsync(
-                    draft,
-                    idempotencyKey
-                );
+            await _workflow
+                .SubmitTicketAsync();
 
         WriteCreatedTicket(
             ticket
@@ -226,41 +161,13 @@ public sealed class BackupAggregatorModule
             );
     }
 
-    private static int GetExitCode(
-        AggregatedBackupReport report)
+    private static void WriteTicketPreview(
+        TicketDraft draft)
     {
-        /*
-         * Findings are legitimate report output.
-         *
-         * Failed tenant reviews indicate incomplete execution and therefore
-         * retain the existing non-zero exit behavior.
-         */
-        return report.FailedTenantCount > 0
-            ? 2
-            : 0;
-    }
-
-    private static bool WritesAreEnabled()
-    {
-        var writeOptions =
-            SupportToolkitWriteOptions
-                .FromEnvironment();
-
-        if (writeOptions.AllowWrites)
-        {
-            return true;
-        }
-
-        Console.Error.WriteLine(
-            "ERROR: external writes are disabled."
-        );
-
-        Console.Error.WriteLine(
-            "Set SUPPORTTOOLKIT_ALLOW_WRITES=true " +
-            "to explicitly enable write operations."
-        );
-
-        return false;
+        new ConsoleTicketDraftPreviewer()
+            .Write(
+                draft
+            );
     }
 
     private static void WriteCreatedTicket(
@@ -285,6 +192,20 @@ public sealed class BackupAggregatorModule
         }
 
         Console.WriteLine();
+    }
+
+    private static int GetExitCode(
+        AggregatedBackupReport report)
+    {
+        /*
+         * Findings are legitimate report output.
+         *
+         * Failed tenant reviews indicate incomplete execution and therefore
+         * retain the existing non-zero exit behavior.
+         */
+        return report.FailedTenantCount > 0
+            ? 2
+            : 0;
     }
 
     private static bool IsInventoryReviewCommand(

@@ -1,16 +1,20 @@
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.ErrorHandling;
-using SupportToolkit.Modules.BackupAggregator;
+using SupportToolkit.Core.Ticketing.Models;
+using SupportToolkit.Core.Ticketing.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Modules.BackupAggregator.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Services;
+using SupportToolkit.Modules.BackupHealth.Models;
+using SupportToolkit.Modules.BackupHealth.Reporting;
+using SupportToolkit.Modules.BackupHealth.Services;
 
 namespace SupportToolkit.Ui.Interactive;
 
 /// <summary>
 /// Human-oriented interactive console interface for SupportToolkit.
 ///
-/// This class owns navigation, prompts, and presentation decisions only.
+/// This class owns navigation, prompts, progress messages, and presentation.
 /// Operational behavior remains in module workflows.
 ///
 /// The raw CLI remains available independently for development, scripting,
@@ -21,30 +25,30 @@ public sealed class SupportToolkitInteractiveShell
     private readonly ISupportToolkitConfigurationStore
         _configurationStore;
 
-    private readonly SupportToolkitConfigurationResolver
-        _configurationResolver;
-
     private readonly BackupAggregatorWorkflow
         _backupAggregatorWorkflow;
+
+    private readonly BackupHealthWorkflow
+        _backupHealthWorkflow;
 
     private readonly ConsoleBackupAggregatorReporter
         _backupAggregatorReporter;
 
+    private readonly ConsoleBackupHealthReporter
+        _backupHealthReporter;
+
+    private readonly ConsoleTicketDraftPreviewer
+        _ticketDraftPreviewer;
+
     public SupportToolkitInteractiveShell(
         ISupportToolkitConfigurationStore configurationStore,
-        SupportToolkitConfigurationResolver configurationResolver,
-        BackupAggregatorWorkflow backupAggregatorWorkflow)
+        BackupAggregatorWorkflow backupAggregatorWorkflow,
+        BackupHealthWorkflow backupHealthWorkflow)
     {
         _configurationStore =
             configurationStore
             ?? throw new ArgumentNullException(
                 nameof(configurationStore)
-            );
-
-        _configurationResolver =
-            configurationResolver
-            ?? throw new ArgumentNullException(
-                nameof(configurationResolver)
             );
 
         _backupAggregatorWorkflow =
@@ -53,8 +57,20 @@ public sealed class SupportToolkitInteractiveShell
                 nameof(backupAggregatorWorkflow)
             );
 
+        _backupHealthWorkflow =
+            backupHealthWorkflow
+            ?? throw new ArgumentNullException(
+                nameof(backupHealthWorkflow)
+            );
+
         _backupAggregatorReporter =
             new ConsoleBackupAggregatorReporter();
+
+        _backupHealthReporter =
+            new ConsoleBackupHealthReporter();
+
+        _ticketDraftPreviewer =
+            new ConsoleTicketDraftPreviewer();
     }
 
     public async Task<int> RunAsync(
@@ -80,7 +96,7 @@ public sealed class SupportToolkitInteractiveShell
                     minimum:
                         1,
                     maximum:
-                        3
+                        4
                 );
 
             Console.WriteLine();
@@ -95,13 +111,20 @@ public sealed class SupportToolkitInteractiveShell
                     break;
 
                 case 2:
-                    await ChangeProfileAsync(
+                    await RunBackupHealthMenuAsync(
                         cancellationToken
                     );
 
                     break;
 
                 case 3:
+                    await ChangeProfileAsync(
+                        cancellationToken
+                    );
+
+                    break;
+
+                case 4:
                     Console.WriteLine(
                         "Goodbye."
                     );
@@ -119,9 +142,8 @@ public sealed class SupportToolkitInteractiveShell
             cancellationToken.ThrowIfCancellationRequested();
 
             var mode =
-                await _configurationResolver
-                    .GetModuleModeAsync(
-                        BackupAggregatorModule.ModuleCommand,
+                await _backupAggregatorWorkflow
+                    .GetModeAsync(
                         cancellationToken
                     );
 
@@ -150,7 +172,15 @@ public sealed class SupportToolkitInteractiveShell
             );
 
             Console.WriteLine(
-                "3. Back"
+                "3. Preview ticket"
+            );
+
+            Console.WriteLine(
+                "4. Submit ticket"
+            );
+
+            Console.WriteLine(
+                "5. Back"
             );
 
             Console.WriteLine();
@@ -160,7 +190,7 @@ public sealed class SupportToolkitInteractiveShell
                     minimum:
                         1,
                     maximum:
-                        3
+                        5
                 );
 
             Console.WriteLine();
@@ -168,6 +198,10 @@ public sealed class SupportToolkitInteractiveShell
             switch (choice)
             {
                 case 1:
+                    WriteProgress(
+                        "Loading backup data..."
+                    );
+
                     await ExecuteBackupReviewAsync(
                         () =>
                             _backupAggregatorWorkflow
@@ -186,6 +220,84 @@ public sealed class SupportToolkitInteractiveShell
                     break;
 
                 case 3:
+                    await PreviewTicketAsync(
+                        cancellationToken
+                    );
+
+                    break;
+
+                case 4:
+                    await SubmitTicketAsync(
+                        cancellationToken
+                    );
+
+                    break;
+
+                case 5:
+                    return;
+            }
+        }
+    }
+
+    private async Task RunBackupHealthMenuAsync(
+        CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var mode =
+                await _backupHealthWorkflow
+                    .GetModeAsync(
+                        cancellationToken
+                    );
+
+            Console.WriteLine(
+                "Backup Health"
+            );
+
+            Console.WriteLine(
+                "============="
+            );
+
+            Console.WriteLine();
+
+            Console.WriteLine(
+                $"Mode: {FormatMode(mode)}"
+            );
+
+            Console.WriteLine();
+
+            Console.WriteLine(
+                "1. Run health evaluation"
+            );
+
+            Console.WriteLine(
+                "2. Back"
+            );
+
+            Console.WriteLine();
+
+            var choice =
+                ReadMenuChoice(
+                    minimum:
+                        1,
+                    maximum:
+                        2
+                );
+
+            Console.WriteLine();
+
+            switch (choice)
+            {
+                case 1:
+                    await ExecuteBackupHealthAsync(
+                        cancellationToken
+                    );
+
+                    break;
+
+                case 2:
                     return;
             }
         }
@@ -217,6 +329,10 @@ public sealed class SupportToolkitInteractiveShell
 
         Console.WriteLine();
 
+        WriteProgress(
+            "Loading backup data..."
+        );
+
         await ExecuteBackupReviewAsync(
             () =>
                 _backupAggregatorWorkflow
@@ -227,6 +343,104 @@ public sealed class SupportToolkitInteractiveShell
         );
     }
 
+    private async Task PreviewTicketAsync(
+        CancellationToken cancellationToken)
+    {
+        WriteProgress(
+            "Generating ticket preview..."
+        );
+
+        try
+        {
+            var draft =
+                await _backupAggregatorWorkflow
+                    .CreateTicketDraftAsync(
+                        cancellationToken
+                    );
+
+            Console.WriteLine();
+
+            _ticketDraftPreviewer
+                .Write(
+                    draft
+                );
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            WriteError(
+                exception
+            );
+        }
+
+        Pause();
+    }
+
+    private async Task SubmitTicketAsync(
+        CancellationToken cancellationToken)
+    {
+        Console.WriteLine(
+            "This will create a ticket in the configured ticketing system."
+        );
+
+        Console.WriteLine();
+
+        if (!ReadConfirmation(
+                "Submit ticket? [y/N]: ",
+                defaultValue:
+                    false
+            ))
+        {
+            Console.WriteLine();
+
+            Console.WriteLine(
+                "Ticket submission cancelled."
+            );
+
+            Console.WriteLine();
+
+            Pause();
+
+            return;
+        }
+
+        Console.WriteLine();
+
+        WriteProgress(
+            "Submitting ticket..."
+        );
+
+        try
+        {
+            var ticket =
+                await _backupAggregatorWorkflow
+                    .SubmitTicketAsync(
+                        cancellationToken
+                    );
+
+            Console.WriteLine();
+
+            WriteCreatedTicket(
+                ticket
+            );
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            WriteError(
+                exception
+            );
+        }
+
+        Pause();
+    }
+
     private async Task ExecuteBackupReviewAsync(
         Func<Task<AggregatedBackupReport>> review)
     {
@@ -234,6 +448,8 @@ public sealed class SupportToolkitInteractiveShell
         {
             var report =
                 await review();
+
+            Console.WriteLine();
 
             _backupAggregatorReporter
                 .Write(
@@ -246,14 +462,58 @@ public sealed class SupportToolkitInteractiveShell
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine(
-                $"ERROR: {ConsoleErrorFormatter.Format(exception)}"
+            WriteError(
+                exception
             );
-
-            Console.Error.WriteLine();
         }
 
         Pause();
+    }
+
+    private async Task ExecuteBackupHealthAsync(
+        CancellationToken cancellationToken)
+    {
+        WriteProgress(
+            "Evaluating backup health..."
+        );
+
+        try
+        {
+            var result =
+                await _backupHealthWorkflow
+                    .EvaluateAsync(
+                        cancellationToken
+                    );
+
+            Console.WriteLine();
+
+            WriteBackupHealthResult(
+                result
+            );
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            WriteError(
+                exception
+            );
+        }
+
+        Pause();
+    }
+
+    private void WriteBackupHealthResult(
+        BackupHealthResult result)
+    {
+        _backupHealthReporter
+            .Write(
+                result.Snapshot.Resources,
+                result.Exceptions,
+                result.Snapshot.Diagnostics
+            );
     }
 
     private async Task ChangeProfileAsync(
@@ -386,6 +646,50 @@ public sealed class SupportToolkitInteractiveShell
         return configuration.ActiveProfile;
     }
 
+    private static void WriteCreatedTicket(
+        CreatedTicket ticket)
+    {
+        Console.WriteLine(
+            "Ticket submitted successfully."
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            $"Ticket ID: {ticket.Id}"
+        );
+
+        if (!string.IsNullOrWhiteSpace(
+                ticket.Url))
+        {
+            Console.WriteLine(
+                $"API URL:   {ticket.Url}"
+            );
+        }
+
+        Console.WriteLine();
+    }
+
+    private static void WriteProgress(
+        string message)
+    {
+        Console.WriteLine(
+            message
+        );
+    }
+
+    private static void WriteError(
+        Exception exception)
+    {
+        Console.Error.WriteLine();
+
+        Console.Error.WriteLine(
+            $"ERROR: {ConsoleErrorFormatter.Format(exception)}"
+        );
+
+        Console.Error.WriteLine();
+    }
+
     private static void WriteMainMenu(
         string activeProfile)
     {
@@ -412,11 +716,15 @@ public sealed class SupportToolkitInteractiveShell
         );
 
         Console.WriteLine(
-            "2. Change profile"
+            "2. Backup Health"
         );
 
         Console.WriteLine(
-            "3. Exit"
+            "3. Change profile"
+        );
+
+        Console.WriteLine(
+            "4. Exit"
         );
 
         Console.WriteLine();
@@ -446,6 +754,51 @@ public sealed class SupportToolkitInteractiveShell
 
             Console.WriteLine(
                 $"Enter a number from {minimum} to {maximum}."
+            );
+        }
+    }
+
+    private static bool ReadConfirmation(
+        string prompt,
+        bool defaultValue)
+    {
+        while (true)
+        {
+            Console.Write(
+                prompt
+            );
+
+            var value =
+                Console.ReadLine();
+
+            if (string.IsNullOrWhiteSpace(
+                    value))
+            {
+                return defaultValue;
+            }
+
+            if (value.Equals(
+                    "y",
+                    StringComparison.OrdinalIgnoreCase)
+                || value.Equals(
+                    "yes",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (value.Equals(
+                    "n",
+                    StringComparison.OrdinalIgnoreCase)
+                || value.Equals(
+                    "no",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            Console.WriteLine(
+                "Expected 'y' or 'n'."
             );
         }
     }

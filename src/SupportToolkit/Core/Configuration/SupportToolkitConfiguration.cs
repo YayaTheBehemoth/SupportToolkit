@@ -44,17 +44,24 @@ public sealed class SupportToolkitConnections
 /// <summary>
 /// Defines one runtime profile.
 ///
-/// Connection references are optional because fixture-only profiles do not
-/// require external systems.
+/// Module modes control where individual modules obtain their operational
+/// data.
 ///
-/// A connection becomes required only when a module configured for production
-/// needs that provider.
+/// Connection references are independent from module modes. This allows, for
+/// example, BackupAggregator to use fixture data while ticket submission uses
+/// a configured Zendesk sandbox.
+///
+/// External writes are disabled by default and must be enabled explicitly by
+/// the active profile or an environment override.
 /// </summary>
 public sealed class SupportToolkitProfile
 {
     public string? AcronisConnection { get; set; }
 
     public string? ZendeskConnection { get; set; }
+
+    public bool AllowWrites { get; set; } =
+        false;
 
     public Dictionary<string, SupportToolkitMode> Modules { get; set; } =
         new();
