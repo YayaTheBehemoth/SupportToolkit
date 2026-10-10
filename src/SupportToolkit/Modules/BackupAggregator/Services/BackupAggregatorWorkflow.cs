@@ -113,6 +113,31 @@ public sealed class BackupAggregatorWorkflow
             );
     }
 
+    /// <summary>
+    /// Builds a ticket draft from an already completed full backup review.
+    ///
+    /// This overload is used by interactive workflows so preview and
+    /// submission operate on the exact review the operator has inspected.
+    /// </summary>
+    public TicketDraft CreateTicketDraft(
+        AggregatedBackupReport report)
+    {
+        ArgumentNullException.ThrowIfNull(
+            report
+        );
+
+        return new BackupReviewTicketDraftFactory()
+            .Create(
+                report
+            );
+    }
+
+    /// <summary>
+    /// Performs a fresh full review and creates a ticket draft.
+    ///
+    /// This keeps raw CLI usage stateless while interactive callers may use
+    /// CreateTicketDraft(report) to work from an existing reviewed snapshot.
+    /// </summary>
     public async Task<TicketDraft>
         CreateTicketDraftAsync(
             CancellationToken cancellationToken = default)
@@ -122,16 +147,27 @@ public sealed class BackupAggregatorWorkflow
                 cancellationToken
             );
 
-        return new BackupReviewTicketDraftFactory()
-            .Create(
-                report
-            );
+        return CreateTicketDraft(
+            report
+        );
     }
 
+    /// <summary>
+    /// Submits a ticket representing an already completed full review.
+    ///
+    /// Write permission is checked independently from the BackupAggregator
+    /// runtime mode. Fixture reviews may therefore be submitted to a configured
+    /// Zendesk connection when the active profile explicitly permits writes.
+    /// </summary>
     public async Task<CreatedTicket>
         SubmitTicketAsync(
+            AggregatedBackupReport report,
             CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(
+            report
+        );
+
         var allowWrites =
             await _configurationResolver
                 .GetAllowWritesAsync(
@@ -148,10 +184,42 @@ public sealed class BackupAggregatorWorkflow
         }
 
         var draft =
-            await CreateTicketDraftAsync(
+            CreateTicketDraft(
+                report
+            );
+
+        return await SubmitTicketDraftAsync(
+            draft,
+            cancellationToken
+        );
+    }
+
+    /// <summary>
+    /// Performs a fresh full review and submits the resulting ticket.
+    ///
+    /// This overload exists for stateless raw CLI usage.
+    /// Interactive callers should normally submit an already reviewed report.
+    /// </summary>
+    public async Task<CreatedTicket>
+        SubmitTicketAsync(
+            CancellationToken cancellationToken = default)
+    {
+        var report =
+            await ReviewAllTenantsAsync(
                 cancellationToken
             );
 
+        return await SubmitTicketAsync(
+            report,
+            cancellationToken
+        );
+    }
+
+    private async Task<CreatedTicket>
+        SubmitTicketDraftAsync(
+            TicketDraft draft,
+            CancellationToken cancellationToken)
+    {
         var resolvedConnection =
             await _configurationResolver
                 .GetZendeskConnectionAsync(
