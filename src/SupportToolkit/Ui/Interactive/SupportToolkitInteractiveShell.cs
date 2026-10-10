@@ -137,6 +137,9 @@ public sealed class SupportToolkitInteractiveShell
     private async Task RunBackupAggregatorMenuAsync(
         CancellationToken cancellationToken)
     {
+        AggregatedBackupReport? currentFullReview =
+            null;
+
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -158,13 +161,19 @@ public sealed class SupportToolkitInteractiveShell
             Console.WriteLine();
 
             Console.WriteLine(
-                $"Mode: {FormatMode(mode)}"
+                $"Mode:        {FormatMode(mode)}"
+            );
+
+            Console.WriteLine(
+                $"Full review: {FormatReviewState(currentFullReview)}"
             );
 
             Console.WriteLine();
 
             Console.WriteLine(
-                "1. Review all tenants"
+                currentFullReview is null
+                    ? "1. Review all tenants"
+                    : "1. Refresh full review"
             );
 
             Console.WriteLine(
@@ -198,17 +207,10 @@ public sealed class SupportToolkitInteractiveShell
             switch (choice)
             {
                 case 1:
-                    WriteProgress(
-                        "Loading backup data..."
-                    );
-
-                    await ExecuteBackupReviewAsync(
-                        () =>
-                            _backupAggregatorWorkflow
-                                .ReviewAllTenantsAsync(
-                                    cancellationToken
-                                )
-                    );
+                    currentFullReview =
+                        await ReviewAllTenantsAsync(
+                            cancellationToken
+                        );
 
                     break;
 
@@ -220,14 +222,15 @@ public sealed class SupportToolkitInteractiveShell
                     break;
 
                 case 3:
-                    await PreviewTicketAsync(
-                        cancellationToken
+                    PreviewTicket(
+                        currentFullReview
                     );
 
                     break;
 
                 case 4:
                     await SubmitTicketAsync(
+                        currentFullReview,
                         cancellationToken
                     );
 
@@ -237,6 +240,217 @@ public sealed class SupportToolkitInteractiveShell
                     return;
             }
         }
+    }
+
+    private async Task<AggregatedBackupReport?>
+        ReviewAllTenantsAsync(
+            CancellationToken cancellationToken)
+    {
+        WriteProgress(
+            "Loading backup data..."
+        );
+
+        try
+        {
+            var report =
+                await _backupAggregatorWorkflow
+                    .ReviewAllTenantsAsync(
+                        cancellationToken
+                    );
+
+            Console.WriteLine();
+
+            _backupAggregatorReporter
+                .Write(
+                    report
+                );
+
+            Pause();
+
+            return report;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            WriteError(
+                exception
+            );
+
+            Pause();
+
+            return null;
+        }
+    }
+
+    private async Task ReviewOneTenantAsync(
+        CancellationToken cancellationToken)
+    {
+        Console.Write(
+            "Tenant name: "
+        );
+
+        var tenantName =
+            Console.ReadLine();
+
+        if (string.IsNullOrWhiteSpace(
+                tenantName))
+        {
+            Console.WriteLine();
+
+            Console.WriteLine(
+                "Tenant review cancelled."
+            );
+
+            Console.WriteLine();
+
+            return;
+        }
+
+        Console.WriteLine();
+
+        WriteProgress(
+            "Loading backup data..."
+        );
+
+        try
+        {
+            var report =
+                await _backupAggregatorWorkflow
+                    .ReviewTenantAsync(
+                        tenantName,
+                        cancellationToken
+                    );
+
+            Console.WriteLine();
+
+            _backupAggregatorReporter
+                .Write(
+                    report
+                );
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            WriteError(
+                exception
+            );
+        }
+
+        Pause();
+    }
+
+    private void PreviewTicket(
+        AggregatedBackupReport? currentFullReview)
+    {
+        if (currentFullReview is null)
+        {
+            WriteFullReviewRequired();
+
+            Pause();
+
+            return;
+        }
+
+        try
+        {
+            var draft =
+                _backupAggregatorWorkflow
+                    .CreateTicketDraft(
+                        currentFullReview
+                    );
+
+            _ticketDraftPreviewer
+                .Write(
+                    draft
+                );
+        }
+        catch (Exception exception)
+        {
+            WriteError(
+                exception
+            );
+        }
+
+        Pause();
+    }
+
+    private async Task SubmitTicketAsync(
+        AggregatedBackupReport? currentFullReview,
+        CancellationToken cancellationToken)
+    {
+        if (currentFullReview is null)
+        {
+            WriteFullReviewRequired();
+
+            Pause();
+
+            return;
+        }
+
+        Console.WriteLine(
+            "This will submit a ticket based on the current full review."
+        );
+
+        Console.WriteLine();
+
+        if (!ReadConfirmation(
+                "Submit ticket? [y/N]: ",
+                defaultValue:
+                    false
+            ))
+        {
+            Console.WriteLine();
+
+            Console.WriteLine(
+                "Ticket submission cancelled."
+            );
+
+            Console.WriteLine();
+
+            Pause();
+
+            return;
+        }
+
+        Console.WriteLine();
+
+        WriteProgress(
+            "Submitting ticket..."
+        );
+
+        try
+        {
+            var ticket =
+                await _backupAggregatorWorkflow
+                    .SubmitTicketAsync(
+                        currentFullReview,
+                        cancellationToken
+                    );
+
+            Console.WriteLine();
+
+            WriteCreatedTicket(
+                ticket
+            );
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            WriteError(
+                exception
+            );
+        }
+
+        Pause();
     }
 
     private async Task RunBackupHealthMenuAsync(
@@ -301,173 +515,6 @@ public sealed class SupportToolkitInteractiveShell
                     return;
             }
         }
-    }
-
-    private async Task ReviewOneTenantAsync(
-        CancellationToken cancellationToken)
-    {
-        Console.Write(
-            "Tenant name: "
-        );
-
-        var tenantName =
-            Console.ReadLine();
-
-        if (string.IsNullOrWhiteSpace(
-                tenantName))
-        {
-            Console.WriteLine();
-
-            Console.WriteLine(
-                "Tenant review cancelled."
-            );
-
-            Console.WriteLine();
-
-            return;
-        }
-
-        Console.WriteLine();
-
-        WriteProgress(
-            "Loading backup data..."
-        );
-
-        await ExecuteBackupReviewAsync(
-            () =>
-                _backupAggregatorWorkflow
-                    .ReviewTenantAsync(
-                        tenantName,
-                        cancellationToken
-                    )
-        );
-    }
-
-    private async Task PreviewTicketAsync(
-        CancellationToken cancellationToken)
-    {
-        WriteProgress(
-            "Generating ticket preview..."
-        );
-
-        try
-        {
-            var draft =
-                await _backupAggregatorWorkflow
-                    .CreateTicketDraftAsync(
-                        cancellationToken
-                    );
-
-            Console.WriteLine();
-
-            _ticketDraftPreviewer
-                .Write(
-                    draft
-                );
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            WriteError(
-                exception
-            );
-        }
-
-        Pause();
-    }
-
-    private async Task SubmitTicketAsync(
-        CancellationToken cancellationToken)
-    {
-        Console.WriteLine(
-            "This will create a ticket in the configured ticketing system."
-        );
-
-        Console.WriteLine();
-
-        if (!ReadConfirmation(
-                "Submit ticket? [y/N]: ",
-                defaultValue:
-                    false
-            ))
-        {
-            Console.WriteLine();
-
-            Console.WriteLine(
-                "Ticket submission cancelled."
-            );
-
-            Console.WriteLine();
-
-            Pause();
-
-            return;
-        }
-
-        Console.WriteLine();
-
-        WriteProgress(
-            "Submitting ticket..."
-        );
-
-        try
-        {
-            var ticket =
-                await _backupAggregatorWorkflow
-                    .SubmitTicketAsync(
-                        cancellationToken
-                    );
-
-            Console.WriteLine();
-
-            WriteCreatedTicket(
-                ticket
-            );
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            WriteError(
-                exception
-            );
-        }
-
-        Pause();
-    }
-
-    private async Task ExecuteBackupReviewAsync(
-        Func<Task<AggregatedBackupReport>> review)
-    {
-        try
-        {
-            var report =
-                await review();
-
-            Console.WriteLine();
-
-            _backupAggregatorReporter
-                .Write(
-                    report
-                );
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            WriteError(
-                exception
-            );
-        }
-
-        Pause();
     }
 
     private async Task ExecuteBackupHealthAsync(
@@ -646,11 +693,39 @@ public sealed class SupportToolkitInteractiveShell
         return configuration.ActiveProfile;
     }
 
+    private static string FormatReviewState(
+        AggregatedBackupReport? review)
+    {
+        if (review is null)
+        {
+            return "not run";
+        }
+
+        return
+            $"{review.TenantCount} tenant(s), " +
+            $"{review.FindingsCount} finding(s)";
+    }
+
+    private static void WriteFullReviewRequired()
+    {
+        Console.WriteLine(
+            "A full tenant review is required first."
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Run 'Review all tenants' before previewing or submitting a ticket."
+        );
+
+        Console.WriteLine();
+    }
+
     private static void WriteCreatedTicket(
         CreatedTicket ticket)
     {
         Console.WriteLine(
-            "Ticket submitted successfully."
+            "Ticket request completed successfully."
         );
 
         Console.WriteLine();
