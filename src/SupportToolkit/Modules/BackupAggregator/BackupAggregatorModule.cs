@@ -1,14 +1,13 @@
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Logging;
+using SupportToolkit.Core.Modules;
 using SupportToolkit.Core.Ticketing.Models;
 using SupportToolkit.Core.Ticketing.Reporting;
 using SupportToolkit.Core.Ticketing.Services;
-using SupportToolkit.Core.Modules;
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Modules.BackupAggregator.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Modules.BackupAggregator.Ticketing;
-using SupportToolkit.Providers.Acronis.Transport;
 using SupportToolkit.Providers.Zendesk.Transport;
 
 namespace SupportToolkit.Modules.BackupAggregator;
@@ -18,6 +17,9 @@ public sealed class BackupAggregatorModule
 {
     public const string ModuleCommand =
         "backup-aggregator";
+
+    private readonly BackupAggregatorWorkflow
+        _workflow;
 
     private readonly SupportToolkitConfigurationResolver
         _configurationResolver;
@@ -29,8 +31,15 @@ public sealed class BackupAggregatorModule
         "Review Acronis backup inventory and surface only exceptions.";
 
     public BackupAggregatorModule(
+        BackupAggregatorWorkflow workflow,
         SupportToolkitConfigurationResolver configurationResolver)
     {
+        _workflow =
+            workflow
+            ?? throw new ArgumentNullException(
+                nameof(workflow)
+            );
+
         _configurationResolver =
             configurationResolver
             ?? throw new ArgumentNullException(
@@ -49,33 +58,49 @@ public sealed class BackupAggregatorModule
             return 0;
         }
 
-        var mode =
-            await _configurationResolver
-                .GetModuleModeAsync(
-                    ModuleCommand
-                );
-
         if (IsTicketPreviewCommand(
                 args))
         {
-            return await RunTicketPreviewAsync(
-                mode
-            );
+            return await RunTicketPreviewAsync();
         }
 
         if (IsTicketSubmitCommand(
                 args))
         {
-            return await RunTicketSubmitAsync(
-                mode
-            );
+            return await RunTicketSubmitAsync();
         }
 
-        if (mode
-            == SupportToolkitMode.Fixture)
+        /*
+         * Preserve the fixture-mode development shortcut:
+         *
+         * SupportToolkit backup-aggregator
+         *
+         * Production mode still requires an explicit inventory-review
+         * operation.
+         */
+        if (args.Length == 0)
         {
-            return RunFixture(
-                args
+            var mode =
+                await _workflow.GetModeAsync();
+
+            if (mode
+                != SupportToolkitMode.Fixture)
+            {
+                PrintUsage();
+
+                return 1;
+            }
+
+            var fixtureReport =
+                await _workflow
+                    .ReviewAllTenantsAsync();
+
+            WriteReport(
+                fixtureReport
+            );
+
+            return GetExitCode(
+                fixtureReport
             );
         }
 
@@ -87,30 +112,10 @@ public sealed class BackupAggregatorModule
             return 1;
         }
 
-        var resolvedConnection =
-            await _configurationResolver
-                .GetAcronisConnectionAsync();
-
-        var acronisOptions =
-            AcronisOptions.Create(
-                resolvedConnection.DatacenterUrl,
-                resolvedConnection.ClientId,
-                resolvedConnection.ClientSecret
-            );
-
-        var logger =
-            OperationalLogger.FromEnvironment();
-
-        using var session =
-            BackupAggregatorProductionSession.Create(
-                acronisOptions,
-                logger
-            );
-
         /*
-         * Runtime configuration decides where the data comes from.
+         * Runtime configuration decides where data comes from.
          *
-         * Command arguments still decide what should be reviewed.
+         * CLI arguments decide what should be reviewed.
          */
         var report =
             string.Equals(
@@ -118,39 +123,28 @@ public sealed class BackupAggregatorModule
                 "--all",
                 StringComparison.OrdinalIgnoreCase
             )
-                ? await session.ReviewService
+                ? await _workflow
                     .ReviewAllTenantsAsync()
 
-                : await session.ReviewService
+                : await _workflow
                     .ReviewTenantAsync(
                         args[1]
                     );
 
-        new ConsoleBackupAggregatorReporter()
-            .Write(
-                report
-            );
+        WriteReport(
+            report
+        );
 
-        /*
-         * Backup findings are valid report output and therefore do not make
-         * the process fail.
-         *
-         * Incomplete tenant coverage does. Returning a non-zero exit code for
-         * failed tenant reviews lets future automation distinguish a complete
-         * review from a partial one.
-         */
-        return report.FailedTenantCount > 0
-            ? 2
-            : 0;
+        return GetExitCode(
+            report
+        );
     }
 
-    private async Task<int> RunTicketPreviewAsync(
-        SupportToolkitMode mode)
+    private async Task<int> RunTicketPreviewAsync()
     {
         var report =
-            await BuildConsolidatedReportAsync(
-                mode
-            );
+            await _workflow
+                .ReviewAllTenantsAsync();
 
         var draft =
             new BackupReviewTicketDraftFactory()
@@ -166,8 +160,7 @@ public sealed class BackupAggregatorModule
         return 0;
     }
 
-    private async Task<int> RunTicketSubmitAsync(
-        SupportToolkitMode mode)
+    private async Task<int> RunTicketSubmitAsync()
     {
         if (!WritesAreEnabled())
         {
@@ -175,9 +168,8 @@ public sealed class BackupAggregatorModule
         }
 
         var report =
-            await BuildConsolidatedReportAsync(
-                mode
-            );
+            await _workflow
+                .ReviewAllTenantsAsync();
 
         var draft =
             new BackupReviewTicketDraftFactory()
@@ -225,39 +217,27 @@ public sealed class BackupAggregatorModule
         return 0;
     }
 
-    private async Task<AggregatedBackupReport>
-        BuildConsolidatedReportAsync(
-            SupportToolkitMode mode)
+    private static void WriteReport(
+        AggregatedBackupReport report)
     {
-        if (mode
-            == SupportToolkitMode.Fixture)
-        {
-            return new BackupAggregatorFixtureReviewService()
-                .BuildReport();
-        }
-
-        var resolvedConnection =
-            await _configurationResolver
-                .GetAcronisConnectionAsync();
-
-        var acronisOptions =
-            AcronisOptions.Create(
-                resolvedConnection.DatacenterUrl,
-                resolvedConnection.ClientId,
-                resolvedConnection.ClientSecret
+        new ConsoleBackupAggregatorReporter()
+            .Write(
+                report
             );
+    }
 
-        var logger =
-            OperationalLogger.FromEnvironment();
-
-        using var session =
-            BackupAggregatorProductionSession.Create(
-                acronisOptions,
-                logger
-            );
-
-        return await session.ReviewService
-            .ReviewAllTenantsAsync();
+    private static int GetExitCode(
+        AggregatedBackupReport report)
+    {
+        /*
+         * Findings are legitimate report output.
+         *
+         * Failed tenant reviews indicate incomplete execution and therefore
+         * retain the existing non-zero exit behavior.
+         */
+        return report.FailedTenantCount > 0
+            ? 2
+            : 0;
     }
 
     private static bool WritesAreEnabled()
@@ -305,92 +285,6 @@ public sealed class BackupAggregatorModule
         }
 
         Console.WriteLine();
-    }
-
-    private static int RunFixture(
-        string[] args)
-    {
-        /*
-         * Bare fixture execution remains available as a quick development
-         * shortcut, while the normal inventory-review command surface mirrors
-         * production behavior.
-         */
-        if (args.Length != 0
-            && !IsInventoryReviewCommand(
-                args))
-        {
-            PrintUsage();
-
-            return 1;
-        }
-
-        var completeReport =
-            new BackupAggregatorFixtureReviewService()
-                .BuildReport();
-
-        AggregatedBackupReport report;
-
-        if (args.Length == 0
-            || string.Equals(
-                args[1],
-                "--all",
-                StringComparison.OrdinalIgnoreCase
-            ))
-        {
-            report =
-                completeReport;
-        }
-        else
-        {
-            var matches =
-                completeReport.Tenants
-                    .Where(
-                        tenant =>
-                            string.Equals(
-                                tenant.TenantName,
-                                args[1],
-                                StringComparison.OrdinalIgnoreCase
-                            )
-                    )
-                    .ToList();
-
-            if (matches.Count == 0)
-            {
-                Console.Error.WriteLine(
-                    $"ERROR: fixture tenant '{args[1]}' was not found."
-                );
-
-                return 1;
-            }
-
-            if (matches.Count > 1)
-            {
-                Console.Error.WriteLine(
-                    $"ERROR: more than one fixture tenant named " +
-                    $"'{args[1]}' was found."
-                );
-
-                return 1;
-            }
-
-            report =
-                new AggregatedBackupReport
-                {
-                    Tenants =
-                    [
-                        matches[0]
-                    ]
-                };
-        }
-
-        new ConsoleBackupAggregatorReporter()
-            .Write(
-                report
-            );
-
-        return report.FailedTenantCount > 0
-            ? 2
-            : 0;
     }
 
     private static bool IsInventoryReviewCommand(
