@@ -1,17 +1,39 @@
 {
-  "activeProfile": "development",
-  "profiles": {
-    "development": {
-      "acronis": {
+  "activeProfile": "local-dev",
+  "connections": {
+    "acronis": {
+      "example-production": {
         "datacenterUrl": "https://example.acronis.invalid",
         "clientId": "example-acronis-client-id"
-      },
-      "zendesk": {
+      }
+    },
+    "zendesk": {
+      "example-sandbox": {
         "subdomain": "example",
         "clientId": "example-zendesk-client-id"
-      },
+      }
+    }
+  },
+  "profiles": {
+    "local-dev": {
       "modules": {
         "backup-aggregator": "fixture",
+        "backup-health": "fixture",
+        "ticketing": "fixture"
+      }
+    },
+    "ticketing-sandbox": {
+      "zendeskConnection": "example-sandbox",
+      "modules": {
+        "backup-aggregator": "fixture",
+        "backup-health": "fixture",
+        "ticketing": "production"
+      }
+    },
+    "readonly-validation": {
+      "acronisConnection": "example-production",
+      "modules": {
+        "backup-aggregator": "production",
         "backup-health": "fixture",
         "ticketing": "fixture"
       }

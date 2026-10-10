@@ -6,14 +6,23 @@ namespace SupportToolkit.Cli.Commands;
 /// <summary>
 /// Interactive operator command for configuring SupportToolkit.
 ///
-/// Non-secret settings are persisted through the configuration store.
-/// Authentication secrets are persisted separately through ISecretStore.
+/// Profiles define runtime behavior.
+/// Connections define reusable external provider endpoints.
+/// Authentication secrets are stored separately through ISecretStore.
 ///
-/// This is a host-level command rather than an operational SupportToolkit
-/// module.
+/// This is a host-level command rather than an operational module.
 /// </summary>
 public sealed class ConfigureCommand
 {
+    private const string BackupAggregatorCommand =
+        "backup-aggregator";
+
+    private const string BackupHealthCommand =
+        "backup-health";
+
+    private const string TicketingCommand =
+        "ticketing";
+
     private readonly ISupportToolkitConfigurationStore
         _configurationStore;
 
@@ -42,7 +51,10 @@ public sealed class ConfigureCommand
     {
         if (args.Length == 0)
         {
-            return await ConfigureAsync();
+            return await ConfigureProfileAsync(
+                requestedProfileName:
+                    null
+            );
         }
 
         if (args.Length == 1
@@ -53,6 +65,30 @@ public sealed class ConfigureCommand
             ))
         {
             return await WriteStatusAsync();
+        }
+
+        if (args.Length == 2
+            && string.Equals(
+                args[0],
+                "profile",
+                StringComparison.OrdinalIgnoreCase
+            ))
+        {
+            return await ConfigureProfileAsync(
+                args[1]
+            );
+        }
+
+        if (args.Length == 2
+            && string.Equals(
+                args[0],
+                "use",
+                StringComparison.OrdinalIgnoreCase
+            ))
+        {
+            return await UseProfileAsync(
+                args[1]
+            );
         }
 
         if (args.Length == 1
@@ -68,41 +104,18 @@ public sealed class ConfigureCommand
         return 1;
     }
 
-    private async Task<int> ConfigureAsync()
+    private async Task<int> ConfigureProfileAsync(
+        string? requestedProfileName)
     {
         EnsureInteractiveConsole();
 
         var configuration =
             await _configurationStore.LoadAsync();
 
-        var defaultProfileName =
-            string.IsNullOrWhiteSpace(
-                configuration.ActiveProfile)
-                ? "development"
-                : configuration.ActiveProfile;
-
-        Console.WriteLine(
-            "SupportToolkit configuration"
-        );
-
-        Console.WriteLine(
-            "============================"
-        );
-
-        Console.WriteLine();
-
-        Console.WriteLine(
-            $"Configuration file: {_configurationStore.ConfigurationPath}"
-        );
-
-        Console.WriteLine();
-
         var profileName =
-            SupportToolkitProfileNames.Normalize(
-                ReadWithDefault(
-                    "Profile name",
-                    defaultProfileName
-                )
+            ResolveProfileName(
+                configuration,
+                requestedProfileName
             );
 
         var existingProfile =
@@ -115,87 +128,26 @@ public sealed class ConfigureCommand
             existingProfile
             ?? new SupportToolkitProfile();
 
-        Console.WriteLine();
+        var pendingSecrets =
+            new List<PendingSecret>();
 
         Console.WriteLine(
-            "Acronis"
+            "SupportToolkit profile configuration"
         );
 
         Console.WriteLine(
-            "-------"
+            "===================================="
         );
-
-        profile.Acronis.DatacenterUrl =
-            ReadRequiredWithDefault(
-                "Datacenter URL",
-                profile.Acronis.DatacenterUrl
-            );
-
-        profile.Acronis.ClientId =
-            ReadRequiredWithDefault(
-                "Client ID",
-                profile.Acronis.ClientId
-            );
-
-        var acronisSecretKey =
-            SupportToolkitSecretKeys
-                .AcronisClientSecret(
-                    profileName
-                );
-
-        var acronisSecretExists =
-            !string.IsNullOrWhiteSpace(
-                await _secretStore.GetSecretAsync(
-                    acronisSecretKey
-                )
-            );
-
-        var acronisSecret =
-            ReadSecret(
-                "Client secret",
-                acronisSecretExists
-            );
 
         Console.WriteLine();
 
         Console.WriteLine(
-            "Zendesk"
+            $"Configuration file: {_configurationStore.ConfigurationPath}"
         );
 
         Console.WriteLine(
-            "-------"
+            $"Profile:            {profileName}"
         );
-
-        profile.Zendesk.Subdomain =
-            ReadRequiredWithDefault(
-                "Subdomain",
-                profile.Zendesk.Subdomain
-            );
-
-        profile.Zendesk.ClientId =
-            ReadRequiredWithDefault(
-                "Client ID",
-                profile.Zendesk.ClientId
-            );
-
-        var zendeskSecretKey =
-            SupportToolkitSecretKeys
-                .ZendeskClientSecret(
-                    profileName
-                );
-
-        var zendeskSecretExists =
-            !string.IsNullOrWhiteSpace(
-                await _secretStore.GetSecretAsync(
-                    zendeskSecretKey
-                )
-            );
-
-        var zendeskSecret =
-            ReadSecret(
-                "Client secret",
-                zendeskSecretExists
-            );
 
         Console.WriteLine();
 
@@ -208,50 +160,84 @@ public sealed class ConfigureCommand
         );
 
         profile.Modules[
-            "backup-aggregator"
+            BackupAggregatorCommand
         ] =
             ReadMode(
                 "Backup Aggregator",
                 GetConfiguredMode(
                     profile,
-                    "backup-aggregator"
+                    BackupAggregatorCommand
                 )
             );
 
         profile.Modules[
-            "backup-health"
+            BackupHealthCommand
         ] =
             ReadMode(
                 "Backup Health",
                 GetConfiguredMode(
                     profile,
-                    "backup-health"
+                    BackupHealthCommand
                 )
             );
 
         profile.Modules[
-            "ticketing"
+            TicketingCommand
         ] =
             ReadMode(
                 "Ticketing",
                 GetConfiguredMode(
                     profile,
-                    "ticketing"
+                    TicketingCommand
                 )
             );
 
-        configuration.ActiveProfile =
-            profileName;
+        if (RequiresAcronisConnection(
+                profile))
+        {
+            Console.WriteLine();
 
-        RemoveProfileIgnoringCase(
+            var pendingSecret =
+                await ConfigureAcronisConnectionAsync(
+                    configuration,
+                    profile
+                );
+
+            if (pendingSecret is not null)
+            {
+                pendingSecrets.Add(
+                    pendingSecret
+                );
+            }
+        }
+
+        if (RequiresZendeskConnection(
+                profile))
+        {
+            Console.WriteLine();
+
+            var pendingSecret =
+                await ConfigureZendeskConnectionAsync(
+                    configuration,
+                    profile
+                );
+
+            if (pendingSecret is not null)
+            {
+                pendingSecrets.Add(
+                    pendingSecret
+                );
+            }
+        }
+
+        UpsertProfile(
             configuration,
-            profileName
+            profileName,
+            profile
         );
 
-        configuration.Profiles[
-            profileName
-        ] =
-            profile;
+        configuration.ActiveProfile =
+            profileName;
 
         Console.WriteLine();
 
@@ -268,27 +254,24 @@ public sealed class ConfigureCommand
             return 0;
         }
 
+        /*
+         * Persist newly entered secrets before the JSON configuration.
+         *
+         * If configuration persistence subsequently fails, an unused
+         * credential may remain in the secret store, but the configuration
+         * file will never claim a missing credential was successfully stored.
+         */
+        foreach (var pendingSecret in pendingSecrets)
+        {
+            await _secretStore.SetSecretAsync(
+                pendingSecret.Key,
+                pendingSecret.Value
+            );
+        }
+
         await _configurationStore.SaveAsync(
             configuration
         );
-
-        if (!string.IsNullOrEmpty(
-                acronisSecret))
-        {
-            await _secretStore.SetSecretAsync(
-                acronisSecretKey,
-                acronisSecret
-            );
-        }
-
-        if (!string.IsNullOrEmpty(
-                zendeskSecret))
-        {
-            await _secretStore.SetSecretAsync(
-                zendeskSecretKey,
-                zendeskSecret
-            );
-        }
 
         Console.WriteLine();
 
@@ -300,29 +283,300 @@ public sealed class ConfigureCommand
             $"Active profile: {profileName}"
         );
 
+        return 0;
+    }
+
+    private async Task<PendingSecret?>
+        ConfigureAcronisConnectionAsync(
+            SupportToolkitConfiguration configuration,
+            SupportToolkitProfile profile)
+    {
         Console.WriteLine(
-            $"Configuration file: {_configurationStore.ConfigurationPath}"
+            "Acronis connection"
         );
 
-        Console.WriteLine();
+        Console.WriteLine(
+            "------------------"
+        );
 
-        if (!acronisSecretExists
+        var defaultConnectionName =
+            GetDefaultConnectionName(
+                profile.AcronisConnection,
+                configuration.Connections
+                    .Acronis.Keys
+            );
+
+        var connectionName =
+            SupportToolkitConfigurationNames
+                .NormalizeConnectionName(
+                    ReadRequiredWithDefault(
+                        "Connection name",
+                        defaultConnectionName
+                    )
+                );
+
+        profile.AcronisConnection =
+            connectionName;
+
+        var existingConnection =
+            FindAcronisConnection(
+                configuration,
+                connectionName
+            );
+
+        var connection =
+            existingConnection
+            ?? new AcronisConnectionConfiguration();
+
+        if (existingConnection is not null)
+        {
+            Console.WriteLine();
+
+            Console.WriteLine(
+                $"Using existing connection '{connectionName}'."
+            );
+
+            Console.WriteLine(
+                $"Datacenter URL: {DisplayValue(connection.DatacenterUrl)}"
+            );
+
+            Console.WriteLine(
+                $"Client ID:      {DisplayValue(connection.ClientId)}"
+            );
+
+            Console.WriteLine();
+
+            if (ReadConfirmation(
+                    "Update connection metadata? [y/N]: ",
+                    defaultValue:
+                        false
+                ))
+            {
+                ConfigureAcronisMetadata(
+                    connection
+                );
+            }
+        }
+        else
+        {
+            Console.WriteLine();
+
+            Console.WriteLine(
+                $"Creating Acronis connection '{connectionName}'."
+            );
+
+            ConfigureAcronisMetadata(
+                connection
+            );
+        }
+
+        UpsertAcronisConnection(
+            configuration,
+            connectionName,
+            connection
+        );
+
+        var secretKey =
+            SupportToolkitSecretKeys
+                .AcronisClientSecret(
+                    connectionName
+                );
+
+        var secretConfigured =
+            !string.IsNullOrWhiteSpace(
+                await _secretStore.GetSecretAsync(
+                    secretKey
+                )
+            );
+
+        var secret =
+            ReadSecret(
+                "Client secret",
+                secretConfigured
+            );
+
+        if (!secretConfigured
             && string.IsNullOrEmpty(
-                acronisSecret))
+                secret))
         {
             Console.WriteLine(
                 "WARNING: Acronis client secret is not configured."
             );
         }
 
-        if (!zendeskSecretExists
+        return string.IsNullOrEmpty(
+                secret)
+            ? null
+            : new PendingSecret(
+                secretKey,
+                secret
+            );
+    }
+
+    private async Task<PendingSecret?>
+        ConfigureZendeskConnectionAsync(
+            SupportToolkitConfiguration configuration,
+            SupportToolkitProfile profile)
+    {
+        Console.WriteLine(
+            "Zendesk connection"
+        );
+
+        Console.WriteLine(
+            "------------------"
+        );
+
+        var defaultConnectionName =
+            GetDefaultConnectionName(
+                profile.ZendeskConnection,
+                configuration.Connections
+                    .Zendesk.Keys
+            );
+
+        var connectionName =
+            SupportToolkitConfigurationNames
+                .NormalizeConnectionName(
+                    ReadRequiredWithDefault(
+                        "Connection name",
+                        defaultConnectionName
+                    )
+                );
+
+        profile.ZendeskConnection =
+            connectionName;
+
+        var existingConnection =
+            FindZendeskConnection(
+                configuration,
+                connectionName
+            );
+
+        var connection =
+            existingConnection
+            ?? new ZendeskConnectionConfiguration();
+
+        if (existingConnection is not null)
+        {
+            Console.WriteLine();
+
+            Console.WriteLine(
+                $"Using existing connection '{connectionName}'."
+            );
+
+            Console.WriteLine(
+                $"Subdomain: {DisplayValue(connection.Subdomain)}"
+            );
+
+            Console.WriteLine(
+                $"Client ID: {DisplayValue(connection.ClientId)}"
+            );
+
+            Console.WriteLine();
+
+            if (ReadConfirmation(
+                    "Update connection metadata? [y/N]: ",
+                    defaultValue:
+                        false
+                ))
+            {
+                ConfigureZendeskMetadata(
+                    connection
+                );
+            }
+        }
+        else
+        {
+            Console.WriteLine();
+
+            Console.WriteLine(
+                $"Creating Zendesk connection '{connectionName}'."
+            );
+
+            ConfigureZendeskMetadata(
+                connection
+            );
+        }
+
+        UpsertZendeskConnection(
+            configuration,
+            connectionName,
+            connection
+        );
+
+        var secretKey =
+            SupportToolkitSecretKeys
+                .ZendeskClientSecret(
+                    connectionName
+                );
+
+        var secretConfigured =
+            !string.IsNullOrWhiteSpace(
+                await _secretStore.GetSecretAsync(
+                    secretKey
+                )
+            );
+
+        var secret =
+            ReadSecret(
+                "Client secret",
+                secretConfigured
+            );
+
+        if (!secretConfigured
             && string.IsNullOrEmpty(
-                zendeskSecret))
+                secret))
         {
             Console.WriteLine(
                 "WARNING: Zendesk client secret is not configured."
             );
         }
+
+        return string.IsNullOrEmpty(
+                secret)
+            ? null
+            : new PendingSecret(
+                secretKey,
+                secret
+            );
+    }
+
+    private async Task<int> UseProfileAsync(
+        string requestedProfileName)
+    {
+        var configuration =
+            await _configurationStore.LoadAsync();
+
+        var profileName =
+            SupportToolkitConfigurationNames
+                .NormalizeProfileName(
+                    requestedProfileName
+                );
+
+        var profile =
+            FindProfile(
+                configuration,
+                profileName
+            );
+
+        if (profile is null)
+        {
+            Console.Error.WriteLine(
+                $"ERROR: profile '{profileName}' does not exist."
+            );
+
+            return 1;
+        }
+
+        configuration.ActiveProfile =
+            profileName;
+
+        await _configurationStore.SaveAsync(
+            configuration
+        );
+
+        Console.WriteLine(
+            $"Active profile: {profileName}"
+        );
 
         return 0;
     }
@@ -346,117 +600,432 @@ public sealed class ConfigureCommand
             $"Configuration file: {_configurationStore.ConfigurationPath}"
         );
 
+        Console.WriteLine(
+            $"Active profile:     {configuration.ActiveProfile}"
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Profiles"
+        );
+
+        Console.WriteLine(
+            "--------"
+        );
+
         if (configuration.Profiles.Count == 0)
         {
             Console.WriteLine(
-                "Status: not configured"
+                "No profiles configured."
             );
+        }
+        else
+        {
+            foreach (var pair in configuration.Profiles
+                         .OrderBy(
+                             pair =>
+                                 pair.Key,
+                             StringComparer.OrdinalIgnoreCase
+                         ))
+            {
+                var marker =
+                    string.Equals(
+                        pair.Key,
+                        configuration.ActiveProfile,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                        ? "*"
+                        : " ";
 
-            return 0;
+                var profile =
+                    pair.Value;
+
+                Console.WriteLine(
+                    $"{marker} {pair.Key}"
+                );
+
+                Console.WriteLine(
+                    $"    Acronis connection: " +
+                    $"{DisplayOptionalValue(profile.AcronisConnection)}"
+                );
+
+                Console.WriteLine(
+                    $"    Zendesk connection: " +
+                    $"{DisplayOptionalValue(profile.ZendeskConnection)}"
+                );
+
+                Console.WriteLine(
+                    $"    Backup Aggregator:  " +
+                    $"{FormatMode(GetConfiguredMode(profile, BackupAggregatorCommand))}"
+                );
+
+                Console.WriteLine(
+                    $"    Backup Health:      " +
+                    $"{FormatMode(GetConfiguredMode(profile, BackupHealthCommand))}"
+                );
+
+                Console.WriteLine(
+                    $"    Ticketing:          " +
+                    $"{FormatMode(GetConfiguredMode(profile, TicketingCommand))}"
+                );
+            }
         }
 
-        var profileName =
-            SupportToolkitProfileNames.Normalize(
-                configuration.ActiveProfile
-            );
+        Console.WriteLine();
 
-        var profile =
-            FindProfile(
-                configuration,
-                profileName
-            );
+        Console.WriteLine(
+            "Acronis connections"
+        );
 
-        if (profile is null)
+        Console.WriteLine(
+            "-------------------"
+        );
+
+        if (configuration.Connections.Acronis.Count == 0)
         {
             Console.WriteLine(
-                $"Active profile '{profileName}' does not exist."
+                "No Acronis connections configured."
             );
+        }
+        else
+        {
+            foreach (var pair in configuration.Connections
+                         .Acronis
+                         .OrderBy(
+                             pair =>
+                                 pair.Key,
+                             StringComparer.OrdinalIgnoreCase
+                         ))
+            {
+                var secretConfigured =
+                    !string.IsNullOrWhiteSpace(
+                        await _secretStore.GetSecretAsync(
+                            SupportToolkitSecretKeys
+                                .AcronisClientSecret(
+                                    pair.Key
+                                )
+                        )
+                    );
 
-            return 1;
+                Console.WriteLine(
+                    pair.Key
+                );
+
+                Console.WriteLine(
+                    $"    Datacenter URL: {DisplayValue(pair.Value.DatacenterUrl)}"
+                );
+
+                Console.WriteLine(
+                    $"    Client ID:      {DisplayValue(pair.Value.ClientId)}"
+                );
+
+                Console.WriteLine(
+                    $"    Client secret:  {DisplaySecretStatus(secretConfigured)}"
+                );
+            }
         }
 
-        var acronisSecretConfigured =
-            !string.IsNullOrWhiteSpace(
-                await _secretStore.GetSecretAsync(
-                    SupportToolkitSecretKeys
-                        .AcronisClientSecret(
-                            profileName
-                        )
-                )
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Zendesk connections"
+        );
+
+        Console.WriteLine(
+            "-------------------"
+        );
+
+        if (configuration.Connections.Zendesk.Count == 0)
+        {
+            Console.WriteLine(
+                "No Zendesk connections configured."
             );
-
-        var zendeskSecretConfigured =
-            !string.IsNullOrWhiteSpace(
-                await _secretStore.GetSecretAsync(
-                    SupportToolkitSecretKeys
-                        .ZendeskClientSecret(
-                            profileName
+        }
+        else
+        {
+            foreach (var pair in configuration.Connections
+                         .Zendesk
+                         .OrderBy(
+                             pair =>
+                                 pair.Key,
+                             StringComparer.OrdinalIgnoreCase
+                         ))
+            {
+                var secretConfigured =
+                    !string.IsNullOrWhiteSpace(
+                        await _secretStore.GetSecretAsync(
+                            SupportToolkitSecretKeys
+                                .ZendeskClientSecret(
+                                    pair.Key
+                                )
                         )
-                )
-            );
+                    );
 
-        Console.WriteLine(
-            $"Active profile: {profileName}"
-        );
+                Console.WriteLine(
+                    pair.Key
+                );
 
-        Console.WriteLine();
+                Console.WriteLine(
+                    $"    Subdomain:     {DisplayValue(pair.Value.Subdomain)}"
+                );
 
-        Console.WriteLine(
-            "Acronis"
-        );
+                Console.WriteLine(
+                    $"    Client ID:     {DisplayValue(pair.Value.ClientId)}"
+                );
 
-        Console.WriteLine(
-            $"  Datacenter URL: {DisplayValue(profile.Acronis.DatacenterUrl)}"
-        );
-
-        Console.WriteLine(
-            $"  Client ID:      {DisplayValue(profile.Acronis.ClientId)}"
-        );
-
-        Console.WriteLine(
-            $"  Client secret:  {DisplaySecretStatus(acronisSecretConfigured)}"
-        );
-
-        Console.WriteLine();
-
-        Console.WriteLine(
-            "Zendesk"
-        );
-
-        Console.WriteLine(
-            $"  Subdomain:      {DisplayValue(profile.Zendesk.Subdomain)}"
-        );
-
-        Console.WriteLine(
-            $"  Client ID:      {DisplayValue(profile.Zendesk.ClientId)}"
-        );
-
-        Console.WriteLine(
-            $"  Client secret:  {DisplaySecretStatus(zendeskSecretConfigured)}"
-        );
-
-        Console.WriteLine();
-
-        Console.WriteLine(
-            "Runtime"
-        );
-
-        Console.WriteLine(
-            $"  Backup Aggregator: " +
-            $"{GetConfiguredMode(profile, "backup-aggregator").ToString().ToLowerInvariant()}"
-        );
-
-        Console.WriteLine(
-            $"  Backup Health:     " +
-            $"{GetConfiguredMode(profile, "backup-health").ToString().ToLowerInvariant()}"
-        );
-
-        Console.WriteLine(
-            $"  Ticketing:         " +
-            $"{GetConfiguredMode(profile, "ticketing").ToString().ToLowerInvariant()}"
-        );
+                Console.WriteLine(
+                    $"    Client secret: {DisplaySecretStatus(secretConfigured)}"
+                );
+            }
+        }
 
         return 0;
+    }
+
+    private static string ResolveProfileName(
+        SupportToolkitConfiguration configuration,
+        string? requestedProfileName)
+    {
+        if (!string.IsNullOrWhiteSpace(
+                requestedProfileName))
+        {
+            return SupportToolkitConfigurationNames
+                .NormalizeProfileName(
+                    requestedProfileName
+                );
+        }
+
+        var defaultProfileName =
+            string.IsNullOrWhiteSpace(
+                configuration.ActiveProfile)
+                ? "local-dev"
+                : configuration.ActiveProfile;
+
+        return SupportToolkitConfigurationNames
+            .NormalizeProfileName(
+                ReadWithDefault(
+                    "Profile name",
+                    defaultProfileName
+                )
+            );
+    }
+
+    private static bool RequiresAcronisConnection(
+        SupportToolkitProfile profile)
+    {
+        return GetConfiguredMode(
+                   profile,
+                   BackupAggregatorCommand
+               )
+               == SupportToolkitMode.Production
+            || GetConfiguredMode(
+                   profile,
+                   BackupHealthCommand
+               )
+               == SupportToolkitMode.Production;
+    }
+
+    private static bool RequiresZendeskConnection(
+        SupportToolkitProfile profile)
+    {
+        return GetConfiguredMode(
+                   profile,
+                   TicketingCommand
+               )
+               == SupportToolkitMode.Production;
+    }
+
+    private static void ConfigureAcronisMetadata(
+        AcronisConnectionConfiguration connection)
+    {
+        connection.DatacenterUrl =
+            ReadRequiredWithDefault(
+                "Datacenter URL",
+                connection.DatacenterUrl
+            );
+
+        connection.ClientId =
+            ReadRequiredWithDefault(
+                "Client ID",
+                connection.ClientId
+            );
+    }
+
+    private static void ConfigureZendeskMetadata(
+        ZendeskConnectionConfiguration connection)
+    {
+        connection.Subdomain =
+            ReadRequiredWithDefault(
+                "Subdomain",
+                connection.Subdomain
+            );
+
+        connection.ClientId =
+            ReadRequiredWithDefault(
+                "Client ID",
+                connection.ClientId
+            );
+    }
+
+    private static string GetDefaultConnectionName(
+        string? profileConnection,
+        IEnumerable<string> configuredConnections)
+    {
+        if (!string.IsNullOrWhiteSpace(
+                profileConnection))
+        {
+            return profileConnection;
+        }
+
+        var connectionNames =
+            configuredConnections
+                .ToList();
+
+        return connectionNames.Count == 1
+            ? connectionNames[0]
+            : string.Empty;
+    }
+
+    private static SupportToolkitProfile? FindProfile(
+        SupportToolkitConfiguration configuration,
+        string profileName)
+    {
+        return configuration.Profiles
+            .FirstOrDefault(
+                pair =>
+                    string.Equals(
+                        pair.Key,
+                        profileName,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+            )
+            .Value;
+    }
+
+    private static AcronisConnectionConfiguration?
+        FindAcronisConnection(
+            SupportToolkitConfiguration configuration,
+            string connectionName)
+    {
+        return configuration.Connections.Acronis
+            .FirstOrDefault(
+                pair =>
+                    string.Equals(
+                        pair.Key,
+                        connectionName,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+            )
+            .Value;
+    }
+
+    private static ZendeskConnectionConfiguration?
+        FindZendeskConnection(
+            SupportToolkitConfiguration configuration,
+            string connectionName)
+    {
+        return configuration.Connections.Zendesk
+            .FirstOrDefault(
+                pair =>
+                    string.Equals(
+                        pair.Key,
+                        connectionName,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+            )
+            .Value;
+    }
+
+    private static void UpsertProfile(
+        SupportToolkitConfiguration configuration,
+        string profileName,
+        SupportToolkitProfile profile)
+    {
+        RemoveKeyIgnoringCase(
+            configuration.Profiles,
+            profileName
+        );
+
+        configuration.Profiles[
+            profileName
+        ] =
+            profile;
+    }
+
+    private static void UpsertAcronisConnection(
+        SupportToolkitConfiguration configuration,
+        string connectionName,
+        AcronisConnectionConfiguration connection)
+    {
+        RemoveKeyIgnoringCase(
+            configuration.Connections.Acronis,
+            connectionName
+        );
+
+        configuration.Connections.Acronis[
+            connectionName
+        ] =
+            connection;
+    }
+
+    private static void UpsertZendeskConnection(
+        SupportToolkitConfiguration configuration,
+        string connectionName,
+        ZendeskConnectionConfiguration connection)
+    {
+        RemoveKeyIgnoringCase(
+            configuration.Connections.Zendesk,
+            connectionName
+        );
+
+        configuration.Connections.Zendesk[
+            connectionName
+        ] =
+            connection;
+    }
+
+    private static void RemoveKeyIgnoringCase<TValue>(
+        IDictionary<string, TValue> dictionary,
+        string key)
+    {
+        var existingKey =
+            dictionary.Keys
+                .FirstOrDefault(
+                    candidate =>
+                        string.Equals(
+                            candidate,
+                            key,
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                );
+
+        if (existingKey is not null)
+        {
+            dictionary.Remove(
+                existingKey
+            );
+        }
+    }
+
+    private static SupportToolkitMode GetConfiguredMode(
+        SupportToolkitProfile profile,
+        string moduleCommand)
+    {
+        var match =
+            profile.Modules.FirstOrDefault(
+                pair =>
+                    string.Equals(
+                        pair.Key,
+                        moduleCommand,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+            );
+
+        return string.IsNullOrEmpty(
+                match.Key)
+            ? SupportToolkitMode.Fixture
+            : match.Value;
     }
 
     private static string ReadWithDefault(
@@ -535,7 +1104,7 @@ public sealed class ConfigureCommand
         {
             Console.Write(
                 $"{label} mode " +
-                $"[{defaultMode.ToString().ToLowerInvariant()}]: "
+                $"[{FormatMode(defaultMode)}]: "
             );
 
             var value =
@@ -612,65 +1181,6 @@ public sealed class ConfigureCommand
         }
     }
 
-    private static SupportToolkitMode GetConfiguredMode(
-        SupportToolkitProfile profile,
-        string moduleCommand)
-    {
-        var match =
-            profile.Modules.FirstOrDefault(
-                pair =>
-                    string.Equals(
-                        pair.Key,
-                        moduleCommand,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-            );
-
-        return string.IsNullOrEmpty(
-                match.Key)
-            ? SupportToolkitMode.Fixture
-            : match.Value;
-    }
-
-    private static SupportToolkitProfile? FindProfile(
-        SupportToolkitConfiguration configuration,
-        string profileName)
-    {
-        return configuration.Profiles
-            .FirstOrDefault(
-                pair =>
-                    string.Equals(
-                        pair.Key,
-                        profileName,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-            )
-            .Value;
-    }
-
-    private static void RemoveProfileIgnoringCase(
-        SupportToolkitConfiguration configuration,
-        string profileName)
-    {
-        var existingKey =
-            configuration.Profiles.Keys
-                .FirstOrDefault(
-                    key =>
-                        string.Equals(
-                            key,
-                            profileName,
-                            StringComparison.OrdinalIgnoreCase
-                        )
-                );
-
-        if (existingKey is not null)
-        {
-            configuration.Profiles.Remove(
-                existingKey
-            );
-        }
-    }
-
     private static string DisplayValue(
         string value)
     {
@@ -680,12 +1190,29 @@ public sealed class ConfigureCommand
             : value;
     }
 
+    private static string DisplayOptionalValue(
+        string? value)
+    {
+        return string.IsNullOrWhiteSpace(
+                value)
+            ? "none"
+            : value;
+    }
+
     private static string DisplaySecretStatus(
         bool configured)
     {
         return configured
             ? "configured"
             : "missing";
+    }
+
+    private static string FormatMode(
+        SupportToolkitMode mode)
+    {
+        return mode
+            .ToString()
+            .ToLowerInvariant();
     }
 
     private static void EnsureInteractiveConsole()
@@ -711,13 +1238,22 @@ public sealed class ConfigureCommand
         );
 
         Console.WriteLine(
+            "  SupportToolkit configure profile <name>"
+        );
+
+        Console.WriteLine(
+            "  SupportToolkit configure use <name>"
+        );
+
+        Console.WriteLine(
             "  SupportToolkit configure status"
         );
 
         Console.WriteLine();
 
         Console.WriteLine(
-            "The configuration file contains only non-secret settings."
+            "Profiles define runtime behavior and reference reusable " +
+            "external connections."
         );
 
         Console.WriteLine(
@@ -725,4 +1261,9 @@ public sealed class ConfigureCommand
             "configured secret store."
         );
     }
+
+    private sealed record PendingSecret(
+        string Key,
+        string Value
+    );
 }

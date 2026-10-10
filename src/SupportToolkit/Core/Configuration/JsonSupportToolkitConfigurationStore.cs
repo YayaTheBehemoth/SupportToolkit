@@ -145,10 +145,9 @@ public sealed class JsonSupportToolkitConfigurationStore
                 );
             }
 
-            configuration.Profiles ??=
-                new Dictionary<
-                    string,
-                    SupportToolkitProfile>();
+            NormalizeConfiguration(
+                configuration
+            );
 
             return configuration;
         }
@@ -167,6 +166,10 @@ public sealed class JsonSupportToolkitConfigurationStore
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(
+            configuration
+        );
+
+        NormalizeConfiguration(
             configuration
         );
 
@@ -229,6 +232,36 @@ public sealed class JsonSupportToolkitConfigurationStore
         }
     }
 
+    private static void NormalizeConfiguration(
+        SupportToolkitConfiguration configuration)
+    {
+        configuration.Connections ??=
+            new SupportToolkitConnections();
+
+        configuration.Connections.Acronis ??=
+            new Dictionary<
+                string,
+                AcronisConnectionConfiguration>();
+
+        configuration.Connections.Zendesk ??=
+            new Dictionary<
+                string,
+                ZendeskConnectionConfiguration>();
+
+        configuration.Profiles ??=
+            new Dictionary<
+                string,
+                SupportToolkitProfile>();
+
+        foreach (var profile in configuration.Profiles.Values)
+        {
+            profile.Modules ??=
+                new Dictionary<
+                    string,
+                    SupportToolkitMode>();
+        }
+    }
+
     private static string FindRepositoryRoot(
         string startingDirectory)
     {
@@ -273,7 +306,10 @@ public sealed class JsonSupportToolkitConfigurationStore
                     JsonNamingPolicy.CamelCase,
 
                 WriteIndented =
-                    true
+                    true,
+
+                DefaultIgnoreCondition =
+                    JsonIgnoreCondition.WhenWritingNull
             };
 
         options.Converters.Add(

@@ -5,39 +5,44 @@ namespace SupportToolkit.Core.Secrets;
 /// <summary>
 /// Generates stable logical identifiers for SupportToolkit secrets.
 ///
-/// Secret identifiers are profile-scoped so multiple environments can coexist
-/// without sharing credentials accidentally.
+/// Secrets belong to named external connections rather than runtime profiles.
+/// This allows many profiles to reuse one credential without duplicating the
+/// stored secret.
 /// </summary>
 public static class SupportToolkitSecretKeys
 {
     public static string AcronisClientSecret(
-        string profileName)
+        string connectionName)
     {
         return Build(
-            profileName,
-            "acronis.client-secret"
+            "acronis",
+            connectionName,
+            "client-secret"
         );
     }
 
     public static string ZendeskClientSecret(
-        string profileName)
+        string connectionName)
     {
         return Build(
-            profileName,
-            "zendesk.client-secret"
+            "zendesk",
+            connectionName,
+            "client-secret"
         );
     }
 
     private static string Build(
-        string profileName,
+        string provider,
+        string connectionName,
         string secretName)
     {
-        var normalizedProfileName =
-            SupportToolkitProfileNames.Normalize(
-                profileName
-            );
+        var normalizedConnectionName =
+            SupportToolkitConfigurationNames
+                .NormalizeConnectionName(
+                    connectionName
+                );
 
         return
-            $"{normalizedProfileName}:{secretName}";
+            $"{provider}:{normalizedConnectionName}:{secretName}";
     }
 }

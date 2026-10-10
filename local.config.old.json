@@ -1,0 +1,20 @@
+{
+  "activeProfile": "development",
+  "profiles": {
+    "development": {
+      "acronis": {
+        "datacenterUrl": "https://eu2-cloud.acronis.com",
+        "clientId": "01da5b4f-ad1f-451c-88f8-40301bca7510"
+      },
+      "zendesk": {
+        "subdomain": "bigmoneybusiness",
+        "clientId": "supportToolkit"
+      },
+      "modules": {
+        "backup-aggregator": "fixture",
+        "backup-health": "fixture",
+        "ticketing": "production"
+      }
+    }
+  }
+}

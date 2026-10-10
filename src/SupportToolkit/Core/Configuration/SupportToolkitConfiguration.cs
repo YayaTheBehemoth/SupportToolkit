@@ -3,28 +3,58 @@ namespace SupportToolkit.Core.Configuration;
 /// <summary>
 /// Persistent, non-secret SupportToolkit configuration.
 ///
-/// This model deliberately contains no authentication secrets.
+/// Connection metadata is defined independently from runtime profiles so the
+/// same external connection can be reused by multiple profiles.
+///
+/// Authentication secrets deliberately do not exist in this model.
 /// Secrets belong in ISecretStore.
 /// </summary>
 public sealed class SupportToolkitConfiguration
 {
     public string ActiveProfile { get; set; } =
-        "development";
+        "local-dev";
+
+    public SupportToolkitConnections Connections { get; set; } =
+        new();
 
     public Dictionary<string, SupportToolkitProfile> Profiles { get; set; } =
         new();
 }
 
 /// <summary>
-/// Non-secret configuration belonging to one named SupportToolkit profile.
+/// Named external connections available to SupportToolkit profiles.
+/// </summary>
+public sealed class SupportToolkitConnections
+{
+    public Dictionary<string, AcronisConnectionConfiguration> Acronis
+    {
+        get;
+        set;
+    } =
+        new();
+
+    public Dictionary<string, ZendeskConnectionConfiguration> Zendesk
+    {
+        get;
+        set;
+    } =
+        new();
+}
+
+/// <summary>
+/// Defines one runtime profile.
+///
+/// Connection references are optional because fixture-only profiles do not
+/// require external systems.
+///
+/// A connection becomes required only when a module configured for production
+/// needs that provider.
 /// </summary>
 public sealed class SupportToolkitProfile
 {
-    public AcronisProfileConfiguration Acronis { get; set; } =
-        new();
+    public string? AcronisConnection { get; set; }
 
-    public ZendeskProfileConfiguration Zendesk { get; set; } =
-        new();
+    public string? ZendeskConnection { get; set; }
 
     public Dictionary<string, SupportToolkitMode> Modules { get; set; } =
         new();
@@ -35,7 +65,7 @@ public sealed class SupportToolkitProfile
 ///
 /// ClientSecret intentionally does not exist here.
 /// </summary>
-public sealed class AcronisProfileConfiguration
+public sealed class AcronisConnectionConfiguration
 {
     public string DatacenterUrl { get; set; } =
         string.Empty;
@@ -49,7 +79,7 @@ public sealed class AcronisProfileConfiguration
 ///
 /// ClientSecret intentionally does not exist here.
 /// </summary>
-public sealed class ZendeskProfileConfiguration
+public sealed class ZendeskConnectionConfiguration
 {
     public string Subdomain { get; set; } =
         string.Empty;
