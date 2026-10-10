@@ -1,0 +1,20 @@
+{
+  "activeProfile": "development",
+  "profiles": {
+    "development": {
+      "acronis": {
+        "datacenterUrl": "https://example.acronis.invalid",
+        "clientId": "example-acronis-client-id"
+      },
+      "zendesk": {
+        "subdomain": "example",
+        "clientId": "example-zendesk-client-id"
+      },
+      "modules": {
+        "backup-aggregator": "fixture",
+        "backup-health": "fixture",
+        "ticketing": "fixture"
+      }
+    }
+  }
+}
