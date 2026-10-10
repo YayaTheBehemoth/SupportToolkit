@@ -113,46 +113,14 @@ public sealed class BackupHealthWorkflow
                 resolvedConnection.ClientSecret
             );
 
-        using var innerHandler =
-            new HttpClientHandler
-            {
-                AllowAutoRedirect =
-                    false
-            };
-
-        using var readOnlyHandler =
-            new AcronisReadOnlyHandler(
-                acronisOptions.DatacenterUrl,
-                innerHandler
-            );
-
-        using var httpClient =
-            new HttpClient(
-                readOnlyHandler
-            )
-            {
-                Timeout =
-                    TimeSpan.FromSeconds(
-                        30
-                    )
-            };
-
-        var apiClient =
-            new AcronisApiClient(
-                httpClient,
+        using var session =
+            BackupHealthProductionSession.Create(
                 acronisOptions,
-                logger:
-                    logger
-            );
-
-        var provider =
-            new HttpAcronisProvider(
-                apiClient,
                 logger
             );
 
         return await EvaluateAsync(
-            provider,
+            session.HealthService,
             TimeProvider.System,
             logger,
             cancellationToken
@@ -176,13 +144,18 @@ public sealed class BackupHealthWorkflow
                 fixtureDirectory
             );
 
+        var healthService =
+            new BackupHealthService(
+                provider
+            );
+
         var timeProvider =
             new FixedTimeProvider(
                 FixtureNow
             );
 
         return EvaluateAsync(
-            provider,
+            healthService,
             timeProvider,
             logger,
             cancellationToken
@@ -191,15 +164,14 @@ public sealed class BackupHealthWorkflow
 
     private static async Task<BackupHealthResult>
         EvaluateAsync(
-            IAcronisProvider provider,
+            BackupHealthService healthService,
             TimeProvider timeProvider,
             OperationalLogger logger,
             CancellationToken cancellationToken)
     {
-        var backupHealthService =
-            new BackupHealthService(
-                provider
-            );
+        ArgumentNullException.ThrowIfNull(
+            healthService
+        );
 
         var exceptionEngine =
             new BackupExceptionEngine(
@@ -212,7 +184,7 @@ public sealed class BackupHealthWorkflow
         );
 
         var snapshot =
-            await backupHealthService
+            await healthService
                 .GetSnapshotAsync(
                     cancellationToken
                 );
