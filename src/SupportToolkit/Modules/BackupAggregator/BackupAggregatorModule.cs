@@ -10,8 +10,11 @@ namespace SupportToolkit.Modules.BackupAggregator;
 public sealed class BackupAggregatorModule
     : ISupportToolkitModule
 {
-    public string Command =>
+    public const string ModuleCommand =
         "backup-aggregator";
+
+    public string Command =>
+        ModuleCommand;
 
     public string Description =>
         "Review Acronis backup inventory and surface only exceptions.";
@@ -28,9 +31,12 @@ public sealed class BackupAggregatorModule
         }
 
         var runtimeOptions =
-            SupportToolkitRuntimeOptions.FromEnvironment();
+            SupportToolkitRuntimeOptions.FromEnvironment(
+                ModuleCommand
+            );
 
-        if (runtimeOptions.Mode == SupportToolkitMode.Fixture)
+        if (runtimeOptions.Mode
+            == SupportToolkitMode.Fixture)
         {
             return RunFixture(
                 args
@@ -68,7 +74,9 @@ public sealed class BackupAggregatorModule
                     );
 
         new ConsoleBackupAggregatorReporter()
-            .Write(report);
+            .Write(
+                report
+            );
 
         /*
          * Backup findings are valid report output and therefore do not make
@@ -160,7 +168,9 @@ public sealed class BackupAggregatorModule
         }
 
         new ConsoleBackupAggregatorReporter()
-            .Write(report);
+            .Write(
+                report
+            );
 
         return report.FailedTenantCount > 0
             ? 2
@@ -203,11 +213,21 @@ public sealed class BackupAggregatorModule
         Console.WriteLine();
 
         Console.WriteLine(
-            "Fixture mode:"
+            "Runtime configuration:"
         );
 
         Console.WriteLine(
-            "  set SUPPORTTOOLKIT_MODE=fixture"
+            "  set SUPPORTTOOLKIT_BACKUP_AGGREGATOR_MODE=fixture"
+        );
+
+        Console.WriteLine(
+            "  set SUPPORTTOOLKIT_BACKUP_AGGREGATOR_MODE=production"
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Fixture mode:"
         );
 
         Console.WriteLine(
