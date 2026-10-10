@@ -1,10 +1,15 @@
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Logging;
+using SupportToolkit.Core.Ticketing.Models;
+using SupportToolkit.Core.Ticketing.Reporting;
+using SupportToolkit.Core.Ticketing.Services;
 using SupportToolkit.Core.Modules;
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Modules.BackupAggregator.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Services;
+using SupportToolkit.Modules.BackupAggregator.Ticketing;
 using SupportToolkit.Providers.Acronis.Transport;
+using SupportToolkit.Providers.Zendesk.Transport;
 
 namespace SupportToolkit.Modules.BackupAggregator;
 
@@ -49,6 +54,22 @@ public sealed class BackupAggregatorModule
                 .GetModuleModeAsync(
                     ModuleCommand
                 );
+
+        if (IsTicketPreviewCommand(
+                args))
+        {
+            return await RunTicketPreviewAsync(
+                mode
+            );
+        }
+
+        if (IsTicketSubmitCommand(
+                args))
+        {
+            return await RunTicketSubmitAsync(
+                mode
+            );
+        }
 
         if (mode
             == SupportToolkitMode.Fixture)
@@ -121,6 +142,169 @@ public sealed class BackupAggregatorModule
         return report.FailedTenantCount > 0
             ? 2
             : 0;
+    }
+
+    private async Task<int> RunTicketPreviewAsync(
+        SupportToolkitMode mode)
+    {
+        var report =
+            await BuildConsolidatedReportAsync(
+                mode
+            );
+
+        var draft =
+            new BackupReviewTicketDraftFactory()
+                .Create(
+                    report
+                );
+
+        new ConsoleTicketDraftPreviewer()
+            .Write(
+                draft
+            );
+
+        return 0;
+    }
+
+    private async Task<int> RunTicketSubmitAsync(
+        SupportToolkitMode mode)
+    {
+        if (!WritesAreEnabled())
+        {
+            return 1;
+        }
+
+        var report =
+            await BuildConsolidatedReportAsync(
+                mode
+            );
+
+        var draft =
+            new BackupReviewTicketDraftFactory()
+                .Create(
+                    report
+                );
+
+        var resolvedConnection =
+            await _configurationResolver
+                .GetZendeskConnectionAsync();
+
+        var zendeskOptions =
+            ZendeskOptions.Create(
+                resolvedConnection.Subdomain,
+                resolvedConnection.ClientId,
+                resolvedConnection.ClientSecret
+            );
+
+        var logger =
+            OperationalLogger.FromEnvironment();
+
+        using var session =
+            TicketingProductionSession.Create(
+                zendeskOptions,
+                logger
+            );
+
+        var idempotencyKey =
+            TicketIdempotencyKeyFactory.Create(
+                "backup-review",
+                draft
+            );
+
+        var ticket =
+            await session.TicketProvider
+                .CreateTicketAsync(
+                    draft,
+                    idempotencyKey
+                );
+
+        WriteCreatedTicket(
+            ticket
+        );
+
+        return 0;
+    }
+
+    private async Task<AggregatedBackupReport>
+        BuildConsolidatedReportAsync(
+            SupportToolkitMode mode)
+    {
+        if (mode
+            == SupportToolkitMode.Fixture)
+        {
+            return new BackupAggregatorFixtureReviewService()
+                .BuildReport();
+        }
+
+        var resolvedConnection =
+            await _configurationResolver
+                .GetAcronisConnectionAsync();
+
+        var acronisOptions =
+            AcronisOptions.Create(
+                resolvedConnection.DatacenterUrl,
+                resolvedConnection.ClientId,
+                resolvedConnection.ClientSecret
+            );
+
+        var logger =
+            OperationalLogger.FromEnvironment();
+
+        using var session =
+            BackupAggregatorProductionSession.Create(
+                acronisOptions,
+                logger
+            );
+
+        return await session.ReviewService
+            .ReviewAllTenantsAsync();
+    }
+
+    private static bool WritesAreEnabled()
+    {
+        var writeOptions =
+            SupportToolkitWriteOptions
+                .FromEnvironment();
+
+        if (writeOptions.AllowWrites)
+        {
+            return true;
+        }
+
+        Console.Error.WriteLine(
+            "ERROR: external writes are disabled."
+        );
+
+        Console.Error.WriteLine(
+            "Set SUPPORTTOOLKIT_ALLOW_WRITES=true " +
+            "to explicitly enable write operations."
+        );
+
+        return false;
+    }
+
+    private static void WriteCreatedTicket(
+        CreatedTicket ticket)
+    {
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Ticket submitted successfully."
+        );
+
+        Console.WriteLine(
+            $"Ticket ID: {ticket.Id}"
+        );
+
+        if (!string.IsNullOrWhiteSpace(
+                ticket.Url))
+        {
+            Console.WriteLine(
+                $"API URL:   {ticket.Url}"
+            );
+        }
+
+        Console.WriteLine();
     }
 
     private static int RunFixture(
@@ -220,6 +404,38 @@ public sealed class BackupAggregatorModule
             );
     }
 
+    private static bool IsTicketPreviewCommand(
+        string[] args)
+    {
+        return args.Length == 2
+            && string.Equals(
+                args[0],
+                "ticket",
+                StringComparison.OrdinalIgnoreCase
+            )
+            && string.Equals(
+                args[1],
+                "preview",
+                StringComparison.OrdinalIgnoreCase
+            );
+    }
+
+    private static bool IsTicketSubmitCommand(
+        string[] args)
+    {
+        return args.Length == 2
+            && string.Equals(
+                args[0],
+                "ticket",
+                StringComparison.OrdinalIgnoreCase
+            )
+            && string.Equals(
+                args[1],
+                "submit",
+                StringComparison.OrdinalIgnoreCase
+            );
+    }
+
     private static void PrintUsage()
     {
         Console.WriteLine(
@@ -240,6 +456,32 @@ public sealed class BackupAggregatorModule
         Console.WriteLine(
             "  SupportToolkit backup-aggregator " +
             "inventory-review --all"
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Ticket workflow:"
+        );
+
+        Console.WriteLine(
+            "  SupportToolkit backup-aggregator ticket preview"
+        );
+
+        Console.WriteLine(
+            "  SupportToolkit backup-aggregator ticket submit"
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Ticket preview uses the same BackupAggregator runtime mode " +
+            "as the inventory review."
+        );
+
+        Console.WriteLine(
+            "Ticket submission additionally requires a configured Zendesk " +
+            "connection and SUPPORTTOOLKIT_ALLOW_WRITES=true."
         );
 
         Console.WriteLine();
