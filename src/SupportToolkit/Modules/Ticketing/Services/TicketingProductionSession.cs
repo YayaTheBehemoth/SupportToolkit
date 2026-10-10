@@ -9,6 +9,8 @@ namespace SupportToolkit.Modules.Ticketing.Services;
 ///
 /// Zendesk is currently the concrete production provider, but callers depend
 /// only on the SupportToolkit ticketing abstraction.
+///
+/// Configuration is resolved by the caller before the session is created.
 /// </summary>
 public sealed class TicketingProductionSession
     : IDisposable
@@ -29,10 +31,16 @@ public sealed class TicketingProductionSession
     }
 
     public static TicketingProductionSession Create(
+        ZendeskOptions options,
         OperationalLogger logger)
     {
-        var options =
-            ZendeskOptions.FromEnvironment();
+        ArgumentNullException.ThrowIfNull(
+            options
+        );
+
+        ArgumentNullException.ThrowIfNull(
+            logger
+        );
 
         var handler =
             new HttpClientHandler

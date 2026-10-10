@@ -9,6 +9,8 @@ namespace SupportToolkit.Modules.BackupAggregator.Services;
 /// <summary>
 /// Owns the production Acronis transport lifetime and composes the narrowly
 /// scoped providers required by BackupAggregator.
+///
+/// Configuration is resolved by the caller before the session is created.
 /// </summary>
 public sealed class BackupAggregatorProductionSession
     : IDisposable
@@ -21,20 +23,30 @@ public sealed class BackupAggregatorProductionSession
         HttpClient httpClient,
         BackupInventoryReviewService reviewService)
     {
-        _httpClient = httpClient;
-        ReviewService = reviewService;
+        _httpClient =
+            httpClient;
+
+        ReviewService =
+            reviewService;
     }
 
     public static BackupAggregatorProductionSession Create(
+        AcronisOptions options,
         OperationalLogger logger)
     {
-        var options =
-            AcronisOptions.FromEnvironment();
+        ArgumentNullException.ThrowIfNull(
+            options
+        );
+
+        ArgumentNullException.ThrowIfNull(
+            logger
+        );
 
         var innerHandler =
             new HttpClientHandler
             {
-                AllowAutoRedirect = false
+                AllowAutoRedirect =
+                    false
             };
 
         var readOnlyHandler =
@@ -48,7 +60,10 @@ public sealed class BackupAggregatorProductionSession
                 readOnlyHandler
             )
             {
-                Timeout = TimeSpan.FromSeconds(30)
+                Timeout =
+                    TimeSpan.FromSeconds(
+                        30
+                    )
             };
 
         var diagnosticLogger =

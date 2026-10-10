@@ -5,6 +5,7 @@ using SupportToolkit.Modules.Ticketing.Models;
 using SupportToolkit.Modules.Ticketing.Reporting;
 using SupportToolkit.Modules.Ticketing.Services;
 using SupportToolkit.Modules.Ticketing.Sources;
+using SupportToolkit.Providers.Zendesk.Transport;
 
 namespace SupportToolkit.Modules.Ticketing;
 
@@ -17,6 +18,9 @@ public sealed class TicketingModule
     private readonly IReadOnlyList<ITicketDraftSource>
         _draftSources;
 
+    private readonly SupportToolkitConfigurationResolver
+        _configurationResolver;
+
     public string Command =>
         ModuleCommand;
 
@@ -24,11 +28,18 @@ public sealed class TicketingModule
         "Preview and create tickets through configured ticketing workflows.";
 
     public TicketingModule(
-        IEnumerable<ITicketDraftSource> draftSources)
+        IEnumerable<ITicketDraftSource> draftSources,
+        SupportToolkitConfigurationResolver configurationResolver)
     {
         ArgumentNullException.ThrowIfNull(
             draftSources
         );
+
+        _configurationResolver =
+            configurationResolver
+            ?? throw new ArgumentNullException(
+                nameof(configurationResolver)
+            );
 
         _draftSources =
             draftSources.ToList();
@@ -132,7 +143,7 @@ public sealed class TicketingModule
             return 1;
         }
 
-        if (!TicketingProductionModeIsEnabled())
+        if (!await TicketingProductionModeIsEnabledAsync())
         {
             return 1;
         }
@@ -141,8 +152,8 @@ public sealed class TicketingModule
          * Draft generation remains independent from the ticket provider.
          *
          * For example, BackupAggregator may be in fixture mode while
-         * Ticketing is configured to submit that synthetic draft to the real
-         * Zendesk sandbox.
+         * Ticketing submits that synthetic draft to a configured Zendesk
+         * sandbox.
          */
         var draft =
             await source.CreateDraftAsync();
@@ -153,11 +164,23 @@ public sealed class TicketingModule
                 draft
             );
 
+        var resolvedConnection =
+            await _configurationResolver
+                .GetZendeskConnectionAsync();
+
+        var zendeskOptions =
+            ZendeskOptions.Create(
+                resolvedConnection.Subdomain,
+                resolvedConnection.ClientId,
+                resolvedConnection.ClientSecret
+            );
+
         var logger =
             OperationalLogger.FromEnvironment();
 
         using var session =
             TicketingProductionSession.Create(
+                zendeskOptions,
                 logger
             );
 
@@ -176,24 +199,35 @@ public sealed class TicketingModule
         return 0;
     }
 
-    private static async Task<int>
-        RunCreateTestTicketAsync()
+    private async Task<int> RunCreateTestTicketAsync()
     {
         if (!WritesAreEnabled())
         {
             return 1;
         }
 
-        if (!TicketingProductionModeIsEnabled())
+        if (!await TicketingProductionModeIsEnabledAsync())
         {
             return 1;
         }
+
+        var resolvedConnection =
+            await _configurationResolver
+                .GetZendeskConnectionAsync();
+
+        var zendeskOptions =
+            ZendeskOptions.Create(
+                resolvedConnection.Subdomain,
+                resolvedConnection.ClientId,
+                resolvedConnection.ClientSecret
+            );
 
         var logger =
             OperationalLogger.FromEnvironment();
 
         using var session =
             TicketingProductionSession.Create(
+                zendeskOptions,
                 logger
             );
 
@@ -261,22 +295,24 @@ public sealed class TicketingModule
         return false;
     }
 
-    private static bool TicketingProductionModeIsEnabled()
+    private async Task<bool>
+        TicketingProductionModeIsEnabledAsync()
     {
-        var runtimeOptions =
-            SupportToolkitRuntimeOptions.FromEnvironment(
-                ModuleCommand
-            );
+        var mode =
+            await _configurationResolver
+                .GetModuleModeAsync(
+                    ModuleCommand
+                );
 
-        if (runtimeOptions.Mode
+        if (mode
             == SupportToolkitMode.Production)
         {
             return true;
         }
 
         Console.Error.WriteLine(
-            "ERROR: ticket submission requires " +
-            "SUPPORTTOOLKIT_TICKETING_MODE=production."
+            "ERROR: ticket submission requires Ticketing to be " +
+            "configured in production mode for the active profile."
         );
 
         return false;
@@ -416,7 +452,14 @@ public sealed class TicketingModule
         Console.WriteLine();
 
         Console.WriteLine(
-            "Ticketing provider runtime:"
+            "The active SupportToolkit profile controls Ticketing " +
+            "runtime mode and Zendesk connection."
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Optional runtime override:"
         );
 
         Console.WriteLine(

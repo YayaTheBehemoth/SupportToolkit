@@ -29,11 +29,24 @@ public sealed class BackupHealthModule
             TimeSpan.Zero
         );
 
+    private readonly SupportToolkitConfigurationResolver
+        _configurationResolver;
+
     public string Command =>
         ModuleCommand;
 
     public string Description =>
         "Evaluate backup health across Acronis tenants.";
+
+    public BackupHealthModule(
+        SupportToolkitConfigurationResolver configurationResolver)
+    {
+        _configurationResolver =
+            configurationResolver
+            ?? throw new ArgumentNullException(
+                nameof(configurationResolver)
+            );
+    }
 
     public async Task<int> RunAsync(
         string[] args)
@@ -45,20 +58,21 @@ public sealed class BackupHealthModule
             );
         }
 
-        var runtimeOptions =
-            SupportToolkitRuntimeOptions.FromEnvironment(
-                ModuleCommand
-            );
+        var mode =
+            await _configurationResolver
+                .GetModuleModeAsync(
+                    ModuleCommand
+                );
 
         var logger =
             new OperationalLogger();
 
         logger.Info(
             $"Starting {Command} in " +
-            $"{runtimeOptions.Mode.ToString().ToLowerInvariant()} mode."
+            $"{mode.ToString().ToLowerInvariant()} mode."
         );
 
-        return runtimeOptions.Mode switch
+        return mode switch
         {
             SupportToolkitMode.Fixture =>
                 await RunFixtureAsync(
@@ -72,44 +86,24 @@ public sealed class BackupHealthModule
 
             _ =>
                 throw new InvalidOperationException(
-                    $"Unsupported SupportToolkit mode: " +
-                    $"{runtimeOptions.Mode}."
+                    $"Unsupported SupportToolkit mode: {mode}."
                 )
         };
     }
 
-    private static async Task<int> RunFixtureAsync(
+    private async Task<int> RunProductionAsync(
         OperationalLogger logger)
     {
-        var fixtureDirectory =
-            Path.Combine(
-                AppContext.BaseDirectory,
-                "Fixtures",
-                "Acronis"
-            );
+        var resolvedConnection =
+            await _configurationResolver
+                .GetAcronisConnectionAsync();
 
-        var provider =
-            new FixtureAcronisProvider(
-                fixtureDirectory
-            );
-
-        var timeProvider =
-            new FixedTimeProvider(
-                FixtureNow
-            );
-
-        return await RunBackupHealthAsync(
-            provider,
-            timeProvider,
-            logger
-        );
-    }
-
-    private static async Task<int> RunProductionAsync(
-        OperationalLogger logger)
-    {
         var acronisOptions =
-            AcronisOptions.FromEnvironment();
+            AcronisOptions.Create(
+                resolvedConnection.DatacenterUrl,
+                resolvedConnection.ClientId,
+                resolvedConnection.ClientSecret
+            );
 
         using var innerHandler =
             new HttpClientHandler
@@ -152,6 +146,33 @@ public sealed class BackupHealthModule
         return await RunBackupHealthAsync(
             provider,
             TimeProvider.System,
+            logger
+        );
+    }
+
+    private static async Task<int> RunFixtureAsync(
+        OperationalLogger logger)
+    {
+        var fixtureDirectory =
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "Fixtures",
+                "Acronis"
+            );
+
+        var provider =
+            new FixtureAcronisProvider(
+                fixtureDirectory
+            );
+
+        var timeProvider =
+            new FixedTimeProvider(
+                FixtureNow
+            );
+
+        return await RunBackupHealthAsync(
+            provider,
+            timeProvider,
             logger
         );
     }

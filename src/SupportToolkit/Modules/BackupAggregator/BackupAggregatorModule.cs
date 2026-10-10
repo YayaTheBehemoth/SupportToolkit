@@ -4,6 +4,7 @@ using SupportToolkit.Core.Modules;
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Modules.BackupAggregator.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Services;
+using SupportToolkit.Providers.Acronis.Transport;
 
 namespace SupportToolkit.Modules.BackupAggregator;
 
@@ -13,11 +14,24 @@ public sealed class BackupAggregatorModule
     public const string ModuleCommand =
         "backup-aggregator";
 
+    private readonly SupportToolkitConfigurationResolver
+        _configurationResolver;
+
     public string Command =>
         ModuleCommand;
 
     public string Description =>
         "Review Acronis backup inventory and surface only exceptions.";
+
+    public BackupAggregatorModule(
+        SupportToolkitConfigurationResolver configurationResolver)
+    {
+        _configurationResolver =
+            configurationResolver
+            ?? throw new ArgumentNullException(
+                nameof(configurationResolver)
+            );
+    }
 
     public async Task<int> RunAsync(
         string[] args)
@@ -30,12 +44,13 @@ public sealed class BackupAggregatorModule
             return 0;
         }
 
-        var runtimeOptions =
-            SupportToolkitRuntimeOptions.FromEnvironment(
-                ModuleCommand
-            );
+        var mode =
+            await _configurationResolver
+                .GetModuleModeAsync(
+                    ModuleCommand
+                );
 
-        if (runtimeOptions.Mode
+        if (mode
             == SupportToolkitMode.Fixture)
         {
             return RunFixture(
@@ -51,14 +66,31 @@ public sealed class BackupAggregatorModule
             return 1;
         }
 
+        var resolvedConnection =
+            await _configurationResolver
+                .GetAcronisConnectionAsync();
+
+        var acronisOptions =
+            AcronisOptions.Create(
+                resolvedConnection.DatacenterUrl,
+                resolvedConnection.ClientId,
+                resolvedConnection.ClientSecret
+            );
+
         var logger =
             OperationalLogger.FromEnvironment();
 
         using var session =
             BackupAggregatorProductionSession.Create(
+                acronisOptions,
                 logger
             );
 
+        /*
+         * Runtime configuration decides where the data comes from.
+         *
+         * Command arguments still decide what should be reviewed.
+         */
         var report =
             string.Equals(
                 args[1],
@@ -197,7 +229,7 @@ public sealed class BackupAggregatorModule
         Console.WriteLine();
 
         Console.WriteLine(
-            "Production or fixture mode:"
+            "Inventory review:"
         );
 
         Console.WriteLine(
@@ -213,7 +245,14 @@ public sealed class BackupAggregatorModule
         Console.WriteLine();
 
         Console.WriteLine(
-            "Runtime configuration:"
+            "The active SupportToolkit profile controls whether " +
+            "BackupAggregator uses fixture or production data."
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Optional runtime override:"
         );
 
         Console.WriteLine(
@@ -227,7 +266,7 @@ public sealed class BackupAggregatorModule
         Console.WriteLine();
 
         Console.WriteLine(
-            "Fixture mode:"
+            "Fixture mode also supports:"
         );
 
         Console.WriteLine(

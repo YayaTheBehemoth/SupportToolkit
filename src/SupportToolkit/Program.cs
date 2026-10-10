@@ -1,4 +1,4 @@
-﻿using SupportToolkit.Cli.Commands;
+﻿﻿using SupportToolkit.Cli.Commands;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.ErrorHandling;
 using SupportToolkit.Core.Modules;
@@ -16,6 +16,12 @@ var configurationStore =
 ISecretStore secretStore =
     new WindowsCredentialStore();
 
+var configurationResolver =
+    new SupportToolkitConfigurationResolver(
+        configurationStore,
+        secretStore
+    );
+
 var configureCommand =
     new ConfigureCommand(
         configurationStore,
@@ -24,17 +30,24 @@ var configureCommand =
 
 ITicketDraftSource[] ticketDraftSources =
 [
-    new BackupReviewTicketDraftSource()
+    new BackupReviewTicketDraftSource(
+        configurationResolver
+    )
 ];
 
 ISupportToolkitModule[] modules =
 [
-    new BackupHealthModule(),
+    new BackupHealthModule(
+        configurationResolver
+    ),
 
-    new BackupAggregatorModule(),
+    new BackupAggregatorModule(
+        configurationResolver
+    ),
 
     new TicketingModule(
-        ticketDraftSources
+        ticketDraftSources,
+        configurationResolver
     )
 ];
 
