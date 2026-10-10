@@ -5,12 +5,26 @@ using System.Text.Json.Serialization;
 namespace SupportToolkit.Core.Configuration;
 
 /// <summary>
-/// Persists non-secret SupportToolkit configuration as JSON in the current
-/// user's local application-data directory.
+/// Persists non-secret SupportToolkit configuration as JSON.
+///
+/// By default, configuration lives in local.config.json at the SupportToolkit
+/// repository root. An explicit SUPPORTTOOLKIT_CONFIG environment variable may
+/// override that location.
+///
+/// Authentication secrets are not stored by this class.
 /// </summary>
 public sealed class JsonSupportToolkitConfigurationStore
     : ISupportToolkitConfigurationStore
 {
+    public const string ConfigurationPathEnvironmentVariable =
+        "SUPPORTTOOLKIT_CONFIG";
+
+    public const string DefaultConfigurationFileName =
+        "local.config.json";
+
+    private const string SolutionFileName =
+        "SupportToolkit.slnx";
+
     private readonly JsonSerializerOptions _serializerOptions;
 
     public string ConfigurationPath { get; }
@@ -37,27 +51,55 @@ public sealed class JsonSupportToolkitConfigurationStore
     }
 
     public static JsonSupportToolkitConfigurationStore
-        CreateDefault()
+        CreateDefault(
+            Func<string, string?>? environmentReader = null,
+            string? currentDirectory = null)
     {
-        var applicationDataDirectory =
-            Environment.GetFolderPath(
-                Environment.SpecialFolder.LocalApplicationData
+        environmentReader ??=
+            Environment.GetEnvironmentVariable;
+
+        var workingDirectory =
+            string.IsNullOrWhiteSpace(
+                currentDirectory)
+                ? Directory.GetCurrentDirectory()
+                : Path.GetFullPath(
+                    currentDirectory
+                );
+
+        var configuredPath =
+            environmentReader(
+                ConfigurationPathEnvironmentVariable
             );
 
-        if (string.IsNullOrWhiteSpace(
-                applicationDataDirectory))
+        if (!string.IsNullOrWhiteSpace(
+                configuredPath))
         {
-            throw new InvalidOperationException(
-                "Windows local application-data directory " +
-                "could not be resolved."
+            var trimmedPath =
+                configuredPath.Trim();
+
+            var resolvedPath =
+                Path.IsPathRooted(
+                    trimmedPath)
+                    ? trimmedPath
+                    : Path.Combine(
+                        workingDirectory,
+                        trimmedPath
+                    );
+
+            return new JsonSupportToolkitConfigurationStore(
+                resolvedPath
             );
         }
 
+        var repositoryRoot =
+            FindRepositoryRoot(
+                workingDirectory
+            );
+
         var configurationPath =
             Path.Combine(
-                applicationDataDirectory,
-                "SupportToolkit",
-                "config.json"
+                repositoryRoot,
+                DefaultConfigurationFileName
             );
 
         return new JsonSupportToolkitConfigurationStore(
@@ -185,6 +227,40 @@ public sealed class JsonSupportToolkitConfigurationStore
                 );
             }
         }
+    }
+
+    private static string FindRepositoryRoot(
+        string startingDirectory)
+    {
+        var directory =
+            new DirectoryInfo(
+                startingDirectory
+            );
+
+        while (directory is not null)
+        {
+            var solutionPath =
+                Path.Combine(
+                    directory.FullName,
+                    SolutionFileName
+                );
+
+            if (File.Exists(
+                    solutionPath))
+            {
+                return directory.FullName;
+            }
+
+            directory =
+                directory.Parent;
+        }
+
+        throw new InvalidOperationException(
+            $"Could not locate the SupportToolkit repository root. " +
+            $"Run SupportToolkit from within the repository tree or set " +
+            $"'{ConfigurationPathEnvironmentVariable}' to an explicit " +
+            $"configuration file path."
+        );
     }
 
     private static JsonSerializerOptions
