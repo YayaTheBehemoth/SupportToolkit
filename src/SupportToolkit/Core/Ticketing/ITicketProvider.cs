@@ -1,6 +1,6 @@
-using SupportToolkit.Modules.Ticketing.Models;
+using SupportToolkit.Core.Ticketing.Models;
 
-namespace SupportToolkit.Modules.Ticketing;
+namespace SupportToolkit.Core.Ticketing;
 
 /// <summary>
 /// Provider-independent contract for creating tickets in an external

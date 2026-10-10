@@ -1,7 +1,7 @@
-using SupportToolkit.Modules.Ticketing.Models;
-using SupportToolkit.Modules.Ticketing.Services;
+using SupportToolkit.Core.Ticketing.Models;
+using SupportToolkit.Core.Ticketing.Services;
 
-namespace SupportToolkit.Tests.Modules.Ticketing.Services;
+namespace SupportToolkit.Tests.Core.Ticketing.Services;
 
 public class TicketIdempotencyKeyFactoryTests
 {

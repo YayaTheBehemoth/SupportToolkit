@@ -1,8 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
-using SupportToolkit.Modules.Ticketing.Models;
+using SupportToolkit.Core.Ticketing.Models;
 
-namespace SupportToolkit.Modules.Ticketing.Services;
+namespace SupportToolkit.Core.Ticketing.Services;
 
 /// <summary>
 /// Creates stable idempotency keys for ticket submission.

@@ -47,7 +47,7 @@ public class SupportToolkitRuntimeOptionsTests
                 ["SUPPORTTOOLKIT_BACKUP_AGGREGATOR_MODE"] =
                     "fixture",
 
-                ["SUPPORTTOOLKIT_TICKETING_MODE"] =
+                ["SUPPORTTOOLKIT_BACKUP_HEALTH_MODE"] =
                     "production"
             };
 
@@ -68,9 +68,9 @@ public class SupportToolkitRuntimeOptionsTests
                 ReadEnvironment
             );
 
-        var ticketing =
+        var backupHealth =
             SupportToolkitRuntimeOptions.FromEnvironment(
-                "ticketing",
+                "backup-health",
                 ReadEnvironment
             );
 
@@ -81,7 +81,7 @@ public class SupportToolkitRuntimeOptionsTests
 
         Assert.Equal(
             SupportToolkitMode.Production,
-            ticketing.Mode
+            backupHealth.Mode
         );
     }
 
@@ -111,17 +111,17 @@ public class SupportToolkitRuntimeOptionsTests
                 () =>
                     SupportToolkitRuntimeOptions
                         .FromEnvironment(
-                            "ticketing",
+                            "backup-health",
                             variable =>
                                 variable
-                                == "SUPPORTTOOLKIT_TICKETING_MODE"
+                                == "SUPPORTTOOLKIT_BACKUP_HEALTH_MODE"
                                     ? "banana"
                                     : null
                         )
             );
 
         Assert.Contains(
-            "SUPPORTTOOLKIT_TICKETING_MODE",
+            "SUPPORTTOOLKIT_BACKUP_HEALTH_MODE",
             exception.Message
         );
 

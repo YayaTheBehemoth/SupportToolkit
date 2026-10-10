@@ -18,24 +18,21 @@
     "local-dev": {
       "modules": {
         "backup-aggregator": "fixture",
-        "backup-health": "fixture",
-        "ticketing": "fixture"
+        "backup-health": "fixture"
       }
     },
-    "ticketing-sandbox": {
+    "zendesk-sandbox": {
       "zendeskConnection": "example-sandbox",
       "modules": {
         "backup-aggregator": "fixture",
-        "backup-health": "fixture",
-        "ticketing": "production"
+        "backup-health": "fixture"
       }
     },
     "readonly-validation": {
       "acronisConnection": "example-production",
       "modules": {
         "backup-aggregator": "production",
-        "backup-health": "fixture",
-        "ticketing": "fixture"
+        "backup-health": "fixture"
       }
     }
   }

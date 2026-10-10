@@ -1,14 +1,15 @@
 using SupportToolkit.Core.Logging;
+using SupportToolkit.Core.Ticketing;
 using SupportToolkit.Providers.Zendesk.Tickets;
 using SupportToolkit.Providers.Zendesk.Transport;
 
-namespace SupportToolkit.Modules.Ticketing.Services;
+namespace SupportToolkit.Core.Ticketing.Services;
 
 /// <summary>
 /// Owns the runtime lifetime of the configured external ticketing provider.
 ///
 /// Zendesk is currently the concrete production provider, but callers depend
-/// only on the SupportToolkit ticketing abstraction.
+/// only on the SupportToolkit ticketing capability.
 ///
 /// Configuration is resolved by the caller before the session is created.
 /// </summary>

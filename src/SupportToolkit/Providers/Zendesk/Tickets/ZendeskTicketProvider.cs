@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
-using SupportToolkit.Modules.Ticketing;
-using SupportToolkit.Modules.Ticketing.Models;
+using SupportToolkit.Core.Ticketing;
+using SupportToolkit.Core.Ticketing.Models;
 using SupportToolkit.Providers.Zendesk.Tickets.Dtos;
 using SupportToolkit.Providers.Zendesk.Transport;
 

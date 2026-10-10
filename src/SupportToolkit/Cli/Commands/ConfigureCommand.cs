@@ -20,9 +20,6 @@ public sealed class ConfigureCommand
     private const string BackupHealthCommand =
         "backup-health";
 
-    private const string TicketingCommand =
-        "ticketing";
-
     private readonly ISupportToolkitConfigurationStore
         _configurationStore;
 
@@ -181,17 +178,6 @@ public sealed class ConfigureCommand
                 )
             );
 
-        profile.Modules[
-            TicketingCommand
-        ] =
-            ReadMode(
-                "Ticketing",
-                GetConfiguredMode(
-                    profile,
-                    TicketingCommand
-                )
-            );
-
         if (RequiresAcronisConnection(
                 profile))
         {
@@ -211,8 +197,13 @@ public sealed class ConfigureCommand
             }
         }
 
-        if (RequiresZendeskConnection(
-                profile))
+        if (!string.IsNullOrWhiteSpace(
+                profile.ZendeskConnection)
+            || ReadConfirmation(
+                "Configure Zendesk ticket submission for this profile? [y/N]: ",
+                defaultValue:
+                    false
+            ))
         {
             Console.WriteLine();
 
@@ -665,10 +656,6 @@ public sealed class ConfigureCommand
                     $"{FormatMode(GetConfiguredMode(profile, BackupHealthCommand))}"
                 );
 
-                Console.WriteLine(
-                    $"    Ticketing:          " +
-                    $"{FormatMode(GetConfiguredMode(profile, TicketingCommand))}"
-                );
             }
         }
 
@@ -822,16 +809,6 @@ public sealed class ConfigureCommand
             || GetConfiguredMode(
                    profile,
                    BackupHealthCommand
-               )
-               == SupportToolkitMode.Production;
-    }
-
-    private static bool RequiresZendeskConnection(
-        SupportToolkitProfile profile)
-    {
-        return GetConfiguredMode(
-                   profile,
-                   TicketingCommand
                )
                == SupportToolkitMode.Production;
     }

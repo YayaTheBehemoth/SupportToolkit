@@ -4,10 +4,7 @@ using SupportToolkit.Core.ErrorHandling;
 using SupportToolkit.Core.Modules;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Modules.BackupAggregator;
-using SupportToolkit.Modules.BackupAggregator.Ticketing;
 using SupportToolkit.Modules.BackupHealth;
-using SupportToolkit.Modules.Ticketing;
-using SupportToolkit.Modules.Ticketing.Sources;
 
 var configurationStore =
     JsonSupportToolkitConfigurationStore
@@ -28,13 +25,6 @@ var configureCommand =
         secretStore
     );
 
-ITicketDraftSource[] ticketDraftSources =
-[
-    new BackupReviewTicketDraftSource(
-        configurationResolver
-    )
-];
-
 ISupportToolkitModule[] modules =
 [
     new BackupHealthModule(
@@ -42,11 +32,6 @@ ISupportToolkitModule[] modules =
     ),
 
     new BackupAggregatorModule(
-        configurationResolver
-    ),
-
-    new TicketingModule(
-        ticketDraftSources,
         configurationResolver
     )
 ];

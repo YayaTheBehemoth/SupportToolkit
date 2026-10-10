@@ -1,6 +1,6 @@
-using SupportToolkit.Modules.Ticketing.Models;
+using SupportToolkit.Core.Ticketing.Models;
 
-namespace SupportToolkit.Modules.Ticketing.Reporting;
+namespace SupportToolkit.Core.Ticketing.Reporting;
 
 /// <summary>
 /// Writes a ticket draft to the console for operator review without contacting

@@ -1,4 +1,4 @@
-namespace SupportToolkit.Modules.Ticketing.Models;
+namespace SupportToolkit.Core.Ticketing.Models;
 
 /// <summary>
 /// Provider-independent representation of a successfully created ticket.
