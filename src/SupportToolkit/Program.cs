@@ -1,14 +1,23 @@
-﻿﻿using SupportToolkit.Core.ErrorHandling;
+using SupportToolkit.Core.ErrorHandling;
 using SupportToolkit.Core.Modules;
 using SupportToolkit.Modules.BackupAggregator;
+using SupportToolkit.Modules.BackupAggregator.Ticketing;
 using SupportToolkit.Modules.BackupHealth;
 using SupportToolkit.Modules.Ticketing;
+using SupportToolkit.Modules.Ticketing.Sources;
+
+ITicketDraftSource[] ticketDraftSources =
+[
+    new BackupReviewTicketDraftSource()
+];
 
 ISupportToolkitModule[] modules =
 [
     new BackupHealthModule(),
     new BackupAggregatorModule(),
-    new TicketingModule()
+    new TicketingModule(
+        ticketDraftSources
+    )
 ];
 
 try
