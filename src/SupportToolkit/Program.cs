@@ -1,12 +1,14 @@
-﻿using SupportToolkit.Core.ErrorHandling;
+﻿﻿using SupportToolkit.Core.ErrorHandling;
 using SupportToolkit.Core.Modules;
 using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupHealth;
+using SupportToolkit.Modules.Ticketing;
 
 ISupportToolkitModule[] modules =
 [
     new BackupHealthModule(),
-    new BackupAggregatorModule()
+    new BackupAggregatorModule(),
+    new TicketingModule()
 ];
 
 try
@@ -62,6 +64,7 @@ catch (Exception exception)
     if (IsDebugEnabled())
     {
         Console.Error.WriteLine();
+
         Console.Error.WriteLine(
             exception
         );
