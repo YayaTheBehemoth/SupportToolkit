@@ -1,16 +1,16 @@
 using System.Text;
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Modules.BackupAggregator.Reporting;
-using SupportToolkit.Modules.Ticketing.Models;
+using SupportToolkit.Core.Ticketing.Models;
 
 namespace SupportToolkit.Modules.BackupAggregator.Ticketing;
 
 /// <summary>
 /// Translates a completed BackupAggregator report into the provider-independent
-/// ticket model owned by the Ticketing module.
+/// shared ticket model owned by Core/Ticketing.
 ///
 /// BackupAggregator owns this translation because it owns the meaning of the
-/// source report. The Ticketing module remains unaware of BackupAggregator
+/// source report. The shared ticketing capability remains unaware of BackupAggregator
 /// domain models.
 /// </summary>
 public sealed class BackupReviewTicketDraftFactory
