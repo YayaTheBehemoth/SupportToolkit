@@ -1,4 +1,5 @@
 using SupportToolkit.Core.Logging;
+using SupportToolkit.Core.Ticketing;
 using SupportToolkit.Providers.Zendesk.Tickets;
 using SupportToolkit.Providers.Zendesk.Transport;
 
