@@ -1,0 +1,40 @@
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - build/github-actions-ci
+
+  pull_request:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and test (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore SupportToolkit.slnx
+
+      - name: Build
+        run: dotnet build SupportToolkit.slnx --configuration Release --no-restore
+
+      - name: Run tests
+        run: dotnet test SupportToolkit.slnx --configuration Release --no-build --no-restore
