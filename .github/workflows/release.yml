@@ -32,15 +32,50 @@ jobs:
         shell: cmd
         run: call scripts\publish-windows.cmd
 
-      - name: Verify release package
+      - name: Verify ZIP extraction
         shell: pwsh
         run: |
-          if (-not (Test-Path "artifacts/SupportToolkit-win-x64.zip")) {
-            throw "Release package was not created."
+          $ErrorActionPreference = 'Stop'
+
+          $archive = 'artifacts/SupportToolkit-win-x64.zip'
+          $destination = 'artifacts/release-validation'
+
+          if (-not (Test-Path $archive -PathType Leaf)) {
+            throw "Release ZIP was not created."
           }
 
-          Get-Item "artifacts/SupportToolkit-win-x64.zip" |
-            Select-Object Name, Length
+          New-Item -ItemType Directory -Path $destination -Force | Out-Null
+
+          Expand-Archive -LiteralPath $archive -DestinationPath $destination -Force -ErrorAction Stop
+
+          $executable = Join-Path $destination 'SupportToolkit.exe'
+          $fixtures = Join-Path $destination 'Fixtures/Acronis'
+
+          if (-not (Test-Path $executable -PathType Leaf)) {
+            throw "SupportToolkit.exe is missing from the extracted package."
+          }
+
+          if (-not (Test-Path $fixtures -PathType Container)) {
+            throw "Acronis fixtures are missing from the extracted package."
+          }
+
+          Write-Host "ZIP extraction succeeded."
+          Write-Host "Executable and fixtures verified."
+
+      - name: Verify executable startup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $exe = Join-Path (Get-Location) 'artifacts/release-validation/SupportToolkit.exe'
+
+          & $exe --help
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Published executable failed its startup check."
+          }
+
+          Write-Host "Executable startup verified."
 
       - name: Publish GitHub Release
         shell: pwsh
