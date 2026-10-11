@@ -1,0 +1,56 @@
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Package and publish (Windows)
+    runs-on: windows-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build, test and package
+        shell: cmd
+        run: call scripts\publish-windows.cmd
+
+      - name: Verify release package
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "artifacts/SupportToolkit-win-x64.zip")) {
+            throw "Release package was not created."
+          }
+
+          Get-Item "artifacts/SupportToolkit-win-x64.zip" |
+            Select-Object Name, Length
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$env:RELEASE_TAG" `
+            "artifacts/SupportToolkit-win-x64.zip" `
+            --verify-tag `
+            --title "SupportToolkit $env:RELEASE_TAG" `
+            --notes "Portable Windows x64 build. Extract the ZIP and run SupportToolkit.exe." `
+            --prerelease
