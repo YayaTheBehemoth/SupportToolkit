@@ -97,27 +97,22 @@ internal sealed class TenantInventoryReviewService
     }
 
 }
- 
-    internal sealed record TenantReviewResult(
-        TenantBackupReport Report,
-        int Microsoft365ResourceCount,
-        int DeviceResourceCount
-    );
 
+internal sealed record TenantReviewResult(
+    TenantBackupReport Report,
+    int Microsoft365ResourceCount,
+    int DeviceResourceCount
+);
 
-    internal sealed class TenantReviewStageException
-        : Exception
+internal sealed class TenantReviewStageException : Exception
+{
+    public string Stage { get; }
+
+    public TenantReviewStageException(
+        string stage,
+        Exception innerException)
+        : base($"{stage} failed.", innerException)
     {
-        public string Stage { get; }
-
-        public TenantReviewStageException(
-            string stage,
-            Exception innerException)
-            : base(
-                $"{stage} failed.",
-                innerException
-            )
-        {
-            Stage = stage;
-        }
+        Stage = stage;
     }
+}
