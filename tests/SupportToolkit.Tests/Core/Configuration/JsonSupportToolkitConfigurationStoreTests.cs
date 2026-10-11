@@ -6,29 +6,28 @@ namespace SupportToolkit.Tests.Core.Configuration;
 public class JsonSupportToolkitConfigurationStoreTests
 {
     [Fact]
-    public void CreateDefault_WhenRepositoryRootExists_UsesRootLocalConfig()
+    public void DebugBuild_InRepository_UsesRootLocalConfig()
     {
-        var temporaryRoot =
+        var root =
             Directory.CreateTempSubdirectory(
                 "supporttoolkit-config-test-"
             );
 
         try
         {
-            File.WriteAllText(
-                Path.Combine(
-                    temporaryRoot.FullName,
-                    "SupportToolkit.slnx"
-                ),
-                string.Empty
+            CreateSolutionMarker(
+                root.FullName
             );
 
-            var nestedDirectory =
+            var applicationDirectory =
                 Directory.CreateDirectory(
                     Path.Combine(
-                        temporaryRoot.FullName,
+                        root.FullName,
                         "src",
-                        "SupportToolkit"
+                        "SupportToolkit",
+                        "bin",
+                        "Debug",
+                        "net10.0"
                     )
                 );
 
@@ -36,12 +35,14 @@ public class JsonSupportToolkitConfigurationStoreTests
                 JsonSupportToolkitConfigurationStore
                     .CreateDefault(
                         _ => null,
-                        nestedDirectory.FullName
+                        root.FullName,
+                        applicationDirectory.FullName,
+                        isDevelopmentBuild: true
                     );
 
             Assert.Equal(
                 Path.Combine(
-                    temporaryRoot.FullName,
+                    root.FullName,
                     "local.config.json"
                 ),
                 store.ConfigurationPath
@@ -49,17 +50,234 @@ public class JsonSupportToolkitConfigurationStoreTests
         }
         finally
         {
-            temporaryRoot.Delete(
-                recursive:
-                    true
-            );
+            root.Delete(recursive: true);
         }
     }
 
     [Fact]
-    public void CreateDefault_WhenExplicitPathExists_UsesOverride()
+    public void DebugBuild_OutsideRepository_UsesLocalAppData()
     {
-        var temporaryRoot =
+        var root =
+            Directory.CreateTempSubdirectory(
+                "supporttoolkit-config-test-"
+            );
+
+        try
+        {
+            var store =
+                JsonSupportToolkitConfigurationStore
+                    .CreateDefault(
+                        _ => null,
+                        root.FullName,
+                        root.FullName,
+                        isDevelopmentBuild: true
+                    );
+
+            Assert.Equal(
+                ExpectedLocalAppDataPath(),
+                store.ConfigurationPath
+            );
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ReleaseBuild_InsideRepository_UsesLocalAppData()
+    {
+        var root =
+            Directory.CreateTempSubdirectory(
+                "supporttoolkit-config-test-"
+            );
+
+        try
+        {
+            CreateSolutionMarker(
+                root.FullName
+            );
+
+            var publishDirectory =
+                Directory.CreateDirectory(
+                    Path.Combine(
+                        root.FullName,
+                        "artifacts",
+                        "publish",
+                        "win-x64"
+                    )
+                );
+
+            var store =
+                JsonSupportToolkitConfigurationStore
+                    .CreateDefault(
+                        _ => null,
+                        root.FullName,
+                        publishDirectory.FullName,
+                        isDevelopmentBuild: false
+                    );
+
+            Assert.Equal(
+                ExpectedLocalAppDataPath(),
+                store.ConfigurationPath
+            );
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ReleaseBuild_OutsideRepository_UsesLocalAppData()
+    {
+        var root =
+            Directory.CreateTempSubdirectory(
+                "supporttoolkit-config-test-"
+            );
+
+        try
+        {
+            var store =
+                JsonSupportToolkitConfigurationStore
+                    .CreateDefault(
+                        _ => null,
+                        root.FullName,
+                        root.FullName,
+                        isDevelopmentBuild: false
+                    );
+
+            Assert.Equal(
+                ExpectedLocalAppDataPath(),
+                store.ConfigurationPath
+            );
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void DebugBuild_ExternalWorkingDirectory_StillUsesRepository()
+    {
+        var root =
+            Directory.CreateTempSubdirectory(
+                "supporttoolkit-config-test-"
+            );
+
+        try
+        {
+            var repository =
+                Directory.CreateDirectory(
+                    Path.Combine(
+                        root.FullName,
+                        "repository"
+                    )
+                );
+
+            CreateSolutionMarker(
+                repository.FullName
+            );
+
+            var applicationDirectory =
+                Directory.CreateDirectory(
+                    Path.Combine(
+                        repository.FullName,
+                        "src",
+                        "SupportToolkit",
+                        "bin"
+                    )
+                );
+
+            var externalDirectory =
+                Directory.CreateDirectory(
+                    Path.Combine(
+                        root.FullName,
+                        "external"
+                    )
+                );
+
+            var store =
+                JsonSupportToolkitConfigurationStore
+                    .CreateDefault(
+                        _ => null,
+                        externalDirectory.FullName,
+                        applicationDirectory.FullName,
+                        isDevelopmentBuild: true
+                    );
+
+            Assert.Equal(
+                Path.Combine(
+                    repository.FullName,
+                    "local.config.json"
+                ),
+                store.ConfigurationPath
+            );
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ReleaseBuild_RepositoryWorkingDirectory_UsesLocalAppData()
+    {
+        var root =
+            Directory.CreateTempSubdirectory(
+                "supporttoolkit-config-test-"
+            );
+
+        try
+        {
+            var repository =
+                Directory.CreateDirectory(
+                    Path.Combine(
+                        root.FullName,
+                        "repository"
+                    )
+                );
+
+            CreateSolutionMarker(
+                repository.FullName
+            );
+
+            var portableDirectory =
+                Directory.CreateDirectory(
+                    Path.Combine(
+                        root.FullName,
+                        "portable"
+                    )
+                );
+
+            var store =
+                JsonSupportToolkitConfigurationStore
+                    .CreateDefault(
+                        _ => null,
+                        repository.FullName,
+                        portableDirectory.FullName,
+                        isDevelopmentBuild: false
+                    );
+
+            Assert.Equal(
+                ExpectedLocalAppDataPath(),
+                store.ConfigurationPath
+            );
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ExplicitAbsoluteOverride_AlwaysTakesPrecedence(
+        bool isDevelopmentBuild)
+    {
+        var root =
             Directory.CreateTempSubdirectory(
                 "supporttoolkit-config-test-"
             );
@@ -68,7 +286,7 @@ public class JsonSupportToolkitConfigurationStoreTests
         {
             var configuredPath =
                 Path.Combine(
-                    temporaryRoot.FullName,
+                    root.FullName,
                     "custom.config.json"
                 );
 
@@ -81,7 +299,9 @@ public class JsonSupportToolkitConfigurationStoreTests
                                 .ConfigurationPathEnvironmentVariable
                                 ? configuredPath
                                 : null,
-                        temporaryRoot.FullName
+                        root.FullName,
+                        root.FullName,
+                        isDevelopmentBuild
                     );
 
             Assert.Equal(
@@ -91,17 +311,17 @@ public class JsonSupportToolkitConfigurationStoreTests
         }
         finally
         {
-            temporaryRoot.Delete(
-                recursive:
-                    true
-            );
+            root.Delete(recursive: true);
         }
     }
 
-    [Fact]
-    public void CreateDefault_WhenRelativeOverrideExists_ResolvesFromWorkingDirectory()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ExplicitRelativeOverride_UsesWorkingDirectory(
+        bool isDevelopmentBuild)
     {
-        var temporaryRoot =
+        var root =
             Directory.CreateTempSubdirectory(
                 "supporttoolkit-config-test-"
             );
@@ -115,14 +335,19 @@ public class JsonSupportToolkitConfigurationStoreTests
                             variable
                             == JsonSupportToolkitConfigurationStore
                                 .ConfigurationPathEnvironmentVariable
-                                ? "configuration\\custom.json"
+                                ? Path.Combine(
+                                    "configuration",
+                                    "custom.json"
+                                )
                                 : null,
-                        temporaryRoot.FullName
+                        root.FullName,
+                        root.FullName,
+                        isDevelopmentBuild
                     );
 
             Assert.Equal(
                 Path.Combine(
-                    temporaryRoot.FullName,
+                    root.FullName,
                     "configuration",
                     "custom.json"
                 ),
@@ -131,50 +356,30 @@ public class JsonSupportToolkitConfigurationStoreTests
         }
         finally
         {
-            temporaryRoot.Delete(
-                recursive:
-                    true
-            );
+            root.Delete(recursive: true);
         }
     }
 
-    [Fact]
-    public void CreateDefault_WhenRepositoryRootCannotBeFound_UsesLocalAppData()
+    private static void CreateSolutionMarker(
+        string directory)
     {
-        var temporaryRoot =
-            Directory.CreateTempSubdirectory(
-                "supporttoolkit-config-test-"
-            );
+        File.WriteAllText(
+            Path.Combine(
+                directory,
+                "SupportToolkit.slnx"
+            ),
+            string.Empty
+        );
+    }
 
-        try
-        {
-            var store =
-                JsonSupportToolkitConfigurationStore
-                    .CreateDefault(
-                        _ => null,
-                        temporaryRoot.FullName
-                    );
-
-            var expectedPath =
-                Path.Combine(
-                    Environment.GetFolderPath(
-                        Environment.SpecialFolder.LocalApplicationData
-                    ),
-                    "SupportToolkit",
-                    "local.config.json"
-                );
-
-            Assert.Equal(
-                expectedPath,
-                store.ConfigurationPath
-            );
-        }
-        finally
-        {
-            temporaryRoot.Delete(
-                recursive:
-                    true
-            );
-        }
+    private static string ExpectedLocalAppDataPath()
+    {
+        return Path.Combine(
+            Environment.GetFolderPath(
+                Environment.SpecialFolder.LocalApplicationData
+            ),
+            "SupportToolkit",
+            "local.config.json"
+        );
     }
 }

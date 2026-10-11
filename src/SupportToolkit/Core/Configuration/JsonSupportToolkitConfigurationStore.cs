@@ -8,13 +8,10 @@ namespace SupportToolkit.Core.Configuration;
 /// <summary>
 /// Persists non-secret SupportToolkit configuration as JSON.
 ///
-/// During repository development, configuration is stored in
-/// local.config.json at the repository root.
+/// Debug builds use local.config.json at the repository root.
+/// Release builds use the current user's LocalApplicationData directory.
 ///
-/// Outside the repository, configuration is stored under the
-/// current user's LocalApplicationData/SupportToolkit directory.
-///
-/// SUPPORTTOOLKIT_CONFIG can explicitly override either location.
+/// SUPPORTTOOLKIT_CONFIG overrides the default configuration location.
 ///
 /// Authentication secrets are stored separately through ISecretStore.
 /// </summary>
@@ -61,7 +58,9 @@ public sealed class JsonSupportToolkitConfigurationStore
     public static JsonSupportToolkitConfigurationStore
         CreateDefault(
             Func<string, string?>? environmentReader = null,
-            string? currentDirectory = null)
+            string? currentDirectory = null,
+            string? applicationDirectory = null,
+            bool? isDevelopmentBuild = null)
     {
         environmentReader ??=
             Environment.GetEnvironmentVariable;
@@ -99,23 +98,40 @@ public sealed class JsonSupportToolkitConfigurationStore
             );
         }
 
-        var repositoryRoot =
-            TryFindRepositoryRoot(
-                workingDirectory
-            );
+        var developmentBuild =
+            isDevelopmentBuild
+            ?? IsDevelopmentBuild();
 
         var configurationDirectory =
-            repositoryRoot
-            ?? GetApplicationConfigurationDirectory();
+            GetApplicationConfigurationDirectory();
 
-        var configurationPath =
+        if (developmentBuild)
+        {
+            var executableDirectory =
+                string.IsNullOrWhiteSpace(
+                    applicationDirectory)
+                    ? AppContext.BaseDirectory
+                    : Path.GetFullPath(
+                        applicationDirectory
+                    );
+
+            var repositoryRoot =
+                TryFindRepositoryRoot(
+                    executableDirectory
+                );
+
+            if (repositoryRoot is not null)
+            {
+                configurationDirectory =
+                    repositoryRoot;
+            }
+        }
+
+        return new JsonSupportToolkitConfigurationStore(
             Path.Combine(
                 configurationDirectory,
                 DefaultConfigurationFileName
-            );
-
-        return new JsonSupportToolkitConfigurationStore(
-            configurationPath
+            )
         );
     }
 
@@ -166,8 +182,8 @@ public sealed class JsonSupportToolkitConfigurationStore
         catch (JsonException exception)
         {
             throw new InvalidOperationException(
-                $"SupportToolkit configuration file is invalid JSON: " +
-                $"{ConfigurationPath}",
+                "SupportToolkit configuration file is invalid JSON: " +
+                ConfigurationPath,
                 exception
             );
         }
@@ -272,6 +288,15 @@ public sealed class JsonSupportToolkitConfigurationStore
                     string,
                     SupportToolkitMode>();
         }
+    }
+
+    private static bool IsDevelopmentBuild()
+    {
+#if DEBUG
+        return true;
+#else
+        return false;
+#endif
     }
 
     private static string?
