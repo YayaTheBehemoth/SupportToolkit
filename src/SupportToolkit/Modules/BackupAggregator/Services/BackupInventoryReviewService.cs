@@ -16,13 +16,7 @@ public sealed class BackupInventoryReviewService
 
     private readonly AcronisTenantResolver _tenantResolver;
 
-    private readonly IAcronisMicrosoft365InventoryProvider
-        _microsoft365Inventory;
-
-    private readonly IAcronisDeviceInventoryProvider
-        _deviceInventory;
-
-    private readonly BackupInventoryNormalizer _normalizer;
+    private readonly TenantInventoryReviewService _tenantReviewer;
 
     private readonly OperationalLogger? _logger;
 
@@ -45,9 +39,11 @@ public sealed class BackupInventoryReviewService
         }
 
         _tenantResolver = tenantResolver;
-        _microsoft365Inventory = microsoft365Inventory;
-        _deviceInventory = deviceInventory;
-        _normalizer = normalizer;
+        _tenantReviewer = new TenantInventoryReviewService(
+            microsoft365Inventory,
+            deviceInventory,
+            normalizer
+        );
         _logger = logger;
         _maxConcurrentTenants = maxConcurrentTenants;
     }
@@ -71,7 +67,7 @@ public sealed class BackupInventoryReviewService
         );
 
         var result =
-            await ReviewResolvedTenantAsync(
+            await _tenantReviewer.ReviewResolvedTenantAsync(
                 tenant,
                 cancellationToken
             );
@@ -246,7 +242,7 @@ public sealed class BackupInventoryReviewService
         try
         {
             var result =
-                await ReviewResolvedTenantAsync(
+                await _tenantReviewer.ReviewResolvedTenantAsync(
                     tenant,
                     cancellationToken
                 );
@@ -316,75 +312,6 @@ public sealed class BackupInventoryReviewService
         }
     }
 
-    private async Task<TenantReviewResult>
-        ReviewResolvedTenantAsync(
-            TenantDto tenant,
-            CancellationToken cancellationToken)
-    {
-        IReadOnlyList<AcronisMicrosoft365ResourceDto>
-            microsoft365Resources;
-
-        try
-        {
-            microsoft365Resources =
-                await _microsoft365Inventory
-                    .GetResourcesForTenantAsync(
-                        tenant.Id,
-                        cancellationToken
-                    );
-        }
-        catch (OperationCanceledException)
-            when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            throw new TenantReviewStageException(
-                "Microsoft 365 inventory",
-                exception
-            );
-        }
-
-        IReadOnlyList<AcronisDeviceResourceDto>
-            deviceResources;
-
-        try
-        {
-            deviceResources =
-                await _deviceInventory
-                    .GetResourcesForTenantAsync(
-                        tenant.Id,
-                        cancellationToken
-                    );
-        }
-        catch (OperationCanceledException)
-            when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            throw new TenantReviewStageException(
-                "Device inventory",
-                exception
-            );
-        }
-
-        var tenantReport =
-            _normalizer.BuildTenantReport(
-                tenant.Name,
-                microsoft365Resources,
-                deviceResources
-            );
-
-        return new TenantReviewResult(
-            tenantReport,
-            microsoft365Resources.Count,
-            deviceResources.Count
-        );
-    }
-
     private static string GetSafeFailureReason(
         Exception exception)
     {
@@ -407,31 +334,9 @@ public sealed class BackupInventoryReviewService
             "Enable debug logging for technical details.";
     }
 
-    private sealed record TenantReviewResult(
-        TenantBackupReport Report,
-        int Microsoft365ResourceCount,
-        int DeviceResourceCount
-    );
-
     private sealed record TenantReviewOutcome(
         TenantBackupReport? Report,
         TenantBackupReviewFailure? Failure
     );
 
-    private sealed class TenantReviewStageException
-        : Exception
-    {
-        public string Stage { get; }
-
-        public TenantReviewStageException(
-            string stage,
-            Exception innerException)
-            : base(
-                $"{stage} failed.",
-                innerException
-            )
-        {
-            Stage = stage;
-        }
-    }
 }
