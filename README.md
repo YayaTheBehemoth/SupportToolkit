@@ -17,59 +17,170 @@ The application supports both an interactive console and direct CLI commands.
 | Interactive CLI | Menu-driven access to operational workflows |
 | Configuration | Persistent runtime profiles, provider connections, and credential management |
 
-## Requirements
+## Installation
+
+### Portable Windows Installation
+
+SupportToolkit can be distributed as a self-contained Windows x64 application.
+
+The portable package does not require the .NET SDK or a separate .NET runtime installation.
+
+1. Obtain `SupportToolkit-win-x64.zip`.
+2. Extract the archive to a directory of your choice.
+3. Run `SupportToolkit.exe`.
+4. Complete the configuration wizard on first launch.
+
+The archive includes the executable and the supporting files required by the application.
+
+No installation wizard or administrator-level installation is required by SupportToolkit itself.
+
+### First-Run Configuration
+
+When no configuration profile exists, SupportToolkit automatically launches its configuration wizard.
+
+The wizard allows the operator to configure:
+
+- Runtime profile name
+- Fixture or production execution mode for each module
+- Acronis API connection
+- Optional Zendesk connection
+- External-write permissions
+
+Production connections require the relevant API credentials.
+
+Fixture mode can be used without connecting to external services.
+
+After saving the configuration, SupportToolkit opens its interactive menu.
+
+### Configuration Storage
+
+Portable releases store non-secret configuration at:
+
+```text
+%LOCALAPPDATA%\SupportToolkit\local.config.json
+```
+
+Authentication secrets are stored separately using Windows Credential Manager.
+
+Configuration remains available between application launches.
+
+To inspect the current configuration:
+
+```cmd
+SupportToolkit.exe configure status
+```
+
+To modify it:
+
+```cmd
+SupportToolkit.exe configure
+```
+
+To select a different profile:
+
+```cmd
+SupportToolkit.exe configure use profile-name
+```
+
+### Updating the Portable Application
+
+To update an existing portable installation:
+
+1. Obtain a newer distribution archive.
+2. Extract it to the desired application directory.
+3. Launch the updated executable.
+
+The default configuration and stored credentials are maintained separately from the application directory, so replacing the executable does not remove them.
+
+---
+
+## Building from Source
+
+### Requirements
 
 - Windows
 - .NET 10 SDK
-- Acronis API credentials for production backup operations
-- Zendesk credentials for ticket submission
+- Git
 
-## Getting Started
+Clone the repository:
 
-Clone the repository and navigate to its root directory.
+```cmd
+git clone https://github.com/YayaTheBehemoth/SupportToolkit.git
+cd SupportToolkit
+```
 
-Build and test:
+Build:
 
-```powershell
+```cmd
 dotnet build
+```
+
+Run tests:
+
+```cmd
 dotnet test
 ```
 
-Launch SupportToolkit:
+Launch the application:
 
-```powershell
-dotnet run --project src/SupportToolkit
+```cmd
+dotnet run --project src\SupportToolkit
 ```
 
 Running without arguments starts the interactive console.
 
-### Initial Configuration
+### Development Configuration
 
-Start the configuration wizard:
+Debug builds use `local.config.json` at the repository root.
 
-```powershell
-dotnet run --project src/SupportToolkit -- configure
+Release builds use `%LOCALAPPDATA%\SupportToolkit`.
+
+An explicit `SUPPORTTOOLKIT_CONFIG` environment variable overrides the default location.
+
+To start configuration manually:
+
+```cmd
+dotnet run --project src\SupportToolkit -- configure
 ```
 
-Additional configuration commands:
+Additional commands:
 
-```powershell
-# View configuration status
-dotnet run --project src/SupportToolkit -- configure status
-
-# Create or edit a profile
-dotnet run --project src/SupportToolkit -- configure profile local-dev
-
-# Select an active profile
-dotnet run --project src/SupportToolkit -- configure use local-dev
-
-# Delete an inactive profile
-dotnet run --project src/SupportToolkit -- configure profile delete old-profile
+```cmd
+dotnet run --project src\SupportToolkit -- configure status
+dotnet run --project src\SupportToolkit -- configure profile local-dev
+dotnet run --project src\SupportToolkit -- configure use local-dev
+dotnet run --project src\SupportToolkit -- configure profile delete old-profile
 ```
 
-Configuration metadata is persisted locally as JSON. Authentication secrets are stored separately using Windows Credential Manager.
+### Building a Portable Distribution
 
-Each module can independently operate in fixture or production mode.
+From the repository root:
+
+```cmd
+scripts\publish-windows.cmd
+```
+
+The publishing script:
+
+1. Builds the project in Release configuration.
+2. Runs the automated tests.
+3. Publishes a self-contained Windows x64 executable.
+4. Packages the published files into a ZIP archive.
+
+Generated output:
+
+```text
+artifacts/
+├── publish/
+│   └── win-x64/
+│       └── SupportToolkit.exe
+│
+└── SupportToolkit-win-x64.zip
+```
+
+The publish directory also contains the supporting fixture files.
+
+The generated ZIP can be extracted and run independently of the source repository.
 
 ---
 
@@ -122,22 +233,24 @@ Coverage is limited to the inventory sources currently implemented and validated
 
 ### Commands
 
+The following commands use the source-development CLI. For portable installations, replace `dotnet run --project src\SupportToolkit --` with `SupportToolkit.exe`.
+
 Review a single tenant:
 
-```powershell
-dotnet run --project src/SupportToolkit -- backup-aggregator inventory-review "Customer Example"
+```cmd
+dotnet run --project src\SupportToolkit -- backup-aggregator inventory-review "Customer Example"
 ```
 
 Review all customer tenants:
 
-```powershell
-dotnet run --project src/SupportToolkit -- backup-aggregator inventory-review --all
+```cmd
+dotnet run --project src\SupportToolkit -- backup-aggregator inventory-review --all
 ```
 
 Run the fixture workflow:
 
-```powershell
-dotnet run --project src/SupportToolkit -- backup-aggregator
+```cmd
+dotnet run --project src\SupportToolkit -- backup-aggregator
 ```
 
 The last command requires BackupAggregator to be configured for fixture mode.
@@ -160,17 +273,17 @@ BackupHealth retrieves Acronis backup health information and evaluates resources
 
 The workflow:
 
-1. Retrieves resource and diagnostic information
-2. Builds a normalized backup health snapshot
-3. Evaluates resources for exceptions
-4. Presents the results in the console
+1. Retrieves resource and diagnostic information.
+2. Builds a normalized backup health snapshot.
+3. Evaluates resources for exceptions.
+4. Presents the results in the console.
 
 The current exception evaluation includes detection of stale backup activity using a 48-hour threshold.
 
 ### Command
 
-```powershell
-dotnet run --project src/SupportToolkit -- backup-health
+```cmd
+dotnet run --project src\SupportToolkit -- backup-health
 ```
 
 BackupHealth supports both fixture and production execution.
@@ -191,14 +304,14 @@ The integration supports:
 
 Preview a ticket:
 
-```powershell
-dotnet run --project src/SupportToolkit -- backup-aggregator ticket preview
+```cmd
+dotnet run --project src\SupportToolkit -- backup-aggregator ticket preview
 ```
 
 Submit a ticket:
 
-```powershell
-dotnet run --project src/SupportToolkit -- backup-aggregator ticket submit
+```cmd
+dotnet run --project src\SupportToolkit -- backup-aggregator ticket submit
 ```
 
 Ticket submission requires a configured Zendesk connection and explicitly enabled external-write permission.
@@ -290,7 +403,17 @@ src/
     │
     ├── Modules/
     │   ├── BackupAggregator/
+    │   │   ├── Fixtures/
+    │   │   ├── Models/
+    │   │   ├── Reporting/
+    │   │   ├── Services/
+    │   │   └── Ticketing/
+    │   │
     │   └── BackupHealth/
+    │       ├── Evaluation/
+    │       ├── Models/
+    │       ├── Reporting/
+    │       └── Services/
     │
     └── Providers/
         ├── Acronis/
@@ -298,6 +421,9 @@ src/
 
 tests/
 └── SupportToolkit.Tests/
+
+scripts/
+└── publish-windows.cmd
 ```
 
 **Modules** contain operational workflows, domain models, services, and reporting.
@@ -325,7 +451,7 @@ Production credentials and unsanitized customer data should not be committed to 
 
 Run the test suite:
 
-```powershell
+```cmd
 dotnet test
 ```
 
