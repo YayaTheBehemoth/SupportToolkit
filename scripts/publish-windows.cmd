@@ -20,19 +20,31 @@ echo SupportToolkit - Windows Publish
 echo ========================================
 echo.
 
-rem Validate build and tests before packaging.
+rem --------------------------------------------------
+rem 1. Build
+rem --------------------------------------------------
 
-echo [1/4] Building project...
+echo [1/5] Building project...
+
 dotnet build -c Release
 if errorlevel 1 goto failed
 
+rem --------------------------------------------------
+rem 2. Test
+rem --------------------------------------------------
+
 echo.
-echo [2/4] Running tests...
+echo [2/5] Running tests...
+
 dotnet test -c Release --no-build
 if errorlevel 1 goto failed
 
+rem --------------------------------------------------
+rem 3. Publish
+rem --------------------------------------------------
+
 echo.
-echo [3/4] Publishing Windows executable...
+echo [3/5] Publishing Windows executable...
 
 if exist "%PUBLISH_DIR%" (
     rmdir /s /q "%PUBLISH_DIR%"
@@ -55,18 +67,48 @@ if not exist "%PUBLISH_DIR%\SupportToolkit.exe" (
     goto failed
 )
 
-echo.
-echo [4/4] Creating ZIP package...
+rem --------------------------------------------------
+rem 4. Create ZIP
+rem --------------------------------------------------
 
-if not exist "%PACKAGE_DIR%" mkdir "%PACKAGE_DIR%"
+echo.
+echo [4/5] Creating ZIP package...
+
+if not exist "%PACKAGE_DIR%" (
+    mkdir "%PACKAGE_DIR%"
+    if errorlevel 1 goto failed
+)
 
 if exist "%PACKAGE_DIR%\%PACKAGE_NAME%" (
     del /q "%PACKAGE_DIR%\%PACKAGE_NAME%"
     if errorlevel 1 goto failed
 )
 
-tar -a -c -f "%PACKAGE_DIR%\%PACKAGE_NAME%" -C "%PUBLISH_DIR%" .
+powershell -NoProfile -NonInteractive -Command ^
+    "$ErrorActionPreference = 'Stop'; Compress-Archive -Path '%PUBLISH_DIR%\*' -DestinationPath '%PACKAGE_DIR%\%PACKAGE_NAME%' -CompressionLevel Optimal"
+
 if errorlevel 1 goto failed
+
+if not exist "%PACKAGE_DIR%\%PACKAGE_NAME%" (
+    echo ERROR: ZIP package not found.
+    goto failed
+)
+
+rem --------------------------------------------------
+rem 5. Validate ZIP
+rem --------------------------------------------------
+
+echo.
+echo [5/5] Validating ZIP package...
+
+powershell -NoProfile -NonInteractive -Command ^
+    "$ErrorActionPreference = 'Stop'; Add-Type -AssemblyName System.IO.Compression.FileSystem; $archive = (Resolve-Path '%PACKAGE_DIR%\%PACKAGE_NAME%').Path; $zip = [System.IO.Compression.ZipFile]::OpenRead($archive); try { if (-not ($zip.Entries | Where-Object { $_.FullName -eq 'SupportToolkit.exe' })) { throw 'SupportToolkit.exe missing from ZIP' }; foreach ($entry in $zip.Entries) { if ($entry.Name) { $stream = $entry.Open(); try { $stream.CopyTo([System.IO.Stream]::Null) } finally { $stream.Dispose() } } }; Write-Host 'ZIP validation passed.' } finally { $zip.Dispose() }"
+
+if errorlevel 1 goto failed
+
+rem --------------------------------------------------
+rem Complete
+rem --------------------------------------------------
 
 echo.
 echo ========================================
@@ -84,8 +126,10 @@ popd
 exit /b 0
 
 :failed
+
 echo.
-echo ERROR: Build, test, or packaging failed.
+echo ERROR: Build, test, publishing, or packaging failed.
 echo.
+
 popd
 exit /b 1
