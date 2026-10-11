@@ -1,4 +1,5 @@
-﻿using SupportToolkit.Cli.Commands;
+﻿
+using SupportToolkit.Cli.Commands;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.ErrorHandling;
 using SupportToolkit.Core.Modules;
@@ -56,12 +57,21 @@ var interactiveShell =
         backupHealthWorkflow
     );
 
+var firstRunStartup =
+    new FirstRunStartup(
+        configurationStore
+    );
+
 try
 {
     if (args.Length == 0)
     {
-        return await interactiveShell
-            .RunAsync();
+        return await firstRunStartup.RunAsync(
+            () => configureCommand.RunAsync(
+                Array.Empty<string>()
+            ),
+            () => interactiveShell.RunAsync()
+        );
     }
 
     if (args[0] is "--help" or "-h")

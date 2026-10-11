@@ -1,3 +1,4 @@
+
 using SupportToolkit.Core.Configuration;
 
 namespace SupportToolkit.Tests.Core.Configuration;
@@ -138,7 +139,7 @@ public class JsonSupportToolkitConfigurationStoreTests
     }
 
     [Fact]
-    public void CreateDefault_WhenRepositoryRootCannotBeFound_Throws()
+    public void CreateDefault_WhenRepositoryRootCannotBeFound_UsesLocalAppData()
     {
         var temporaryRoot =
             Directory.CreateTempSubdirectory(
@@ -147,25 +148,25 @@ public class JsonSupportToolkitConfigurationStoreTests
 
         try
         {
-            var exception =
-                Assert.Throws<InvalidOperationException>(
-                    () =>
-                        JsonSupportToolkitConfigurationStore
-                            .CreateDefault(
-                                _ => null,
-                                temporaryRoot.FullName
-                            )
+            var store =
+                JsonSupportToolkitConfigurationStore
+                    .CreateDefault(
+                        _ => null,
+                        temporaryRoot.FullName
+                    );
+
+            var expectedPath =
+                Path.Combine(
+                    Environment.GetFolderPath(
+                        Environment.SpecialFolder.LocalApplicationData
+                    ),
+                    "SupportToolkit",
+                    "local.config.json"
                 );
 
-            Assert.Contains(
-                "SUPPORTTOOLKIT_CONFIG",
-                exception.Message
-            );
-
-            Assert.Contains(
-                "repository root",
-                exception.Message,
-                StringComparison.OrdinalIgnoreCase
+            Assert.Equal(
+                expectedPath,
+                store.ConfigurationPath
             );
         }
         finally
