@@ -1,10 +1,11 @@
 using SupportToolkit.Modules.BackupAggregator.Models;
+using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Providers.Acronis.Devices.Dtos;
 using SupportToolkit.Providers.Acronis.Microsoft365.Dtos;
 
-namespace SupportToolkit.Modules.BackupAggregator.Services;
+namespace SupportToolkit.Modules.BackupAggregator.Fixtures;
 
-public sealed class BackupAggregatorFixtureReviewService
+public sealed class BackupAggregatorFixtureFactory
 {
     public AggregatedBackupReport BuildReport()
     {

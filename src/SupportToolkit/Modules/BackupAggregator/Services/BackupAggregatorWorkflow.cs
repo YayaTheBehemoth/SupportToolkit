@@ -1,4 +1,5 @@
 using SupportToolkit.Core.Configuration;
+using SupportToolkit.Modules.BackupAggregator.Fixtures;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Core.Ticketing.Models;
 using SupportToolkit.Core.Ticketing.Services;
@@ -56,7 +57,7 @@ public sealed class BackupAggregatorWorkflow
         if (mode
             == SupportToolkitMode.Fixture)
         {
-            return new BackupAggregatorFixtureReviewService()
+            return new BackupAggregatorFixtureFactory()
                 .BuildReport();
         }
 
@@ -287,7 +288,7 @@ public sealed class BackupAggregatorWorkflow
         string tenantName)
     {
         var completeReport =
-            new BackupAggregatorFixtureReviewService()
+            new BackupAggregatorFixtureFactory()
                 .BuildReport();
 
         var matches =
