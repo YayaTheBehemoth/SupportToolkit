@@ -1,3 +1,4 @@
+
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -7,11 +8,15 @@ namespace SupportToolkit.Core.Configuration;
 /// <summary>
 /// Persists non-secret SupportToolkit configuration as JSON.
 ///
-/// By default, configuration lives in local.config.json at the SupportToolkit
-/// repository root. An explicit SUPPORTTOOLKIT_CONFIG environment variable may
-/// override that location.
+/// During repository development, configuration is stored in
+/// local.config.json at the repository root.
 ///
-/// Authentication secrets are not stored by this class.
+/// Outside the repository, configuration is stored under the
+/// current user's LocalApplicationData/SupportToolkit directory.
+///
+/// SUPPORTTOOLKIT_CONFIG can explicitly override either location.
+///
+/// Authentication secrets are stored separately through ISecretStore.
 /// </summary>
 public sealed class JsonSupportToolkitConfigurationStore
     : ISupportToolkitConfigurationStore
@@ -24,6 +29,9 @@ public sealed class JsonSupportToolkitConfigurationStore
 
     private const string SolutionFileName =
         "SupportToolkit.slnx";
+
+    private const string ApplicationDirectoryName =
+        "SupportToolkit";
 
     private readonly JsonSerializerOptions _serializerOptions;
 
@@ -92,13 +100,17 @@ public sealed class JsonSupportToolkitConfigurationStore
         }
 
         var repositoryRoot =
-            FindRepositoryRoot(
+            TryFindRepositoryRoot(
                 workingDirectory
             );
 
+        var configurationDirectory =
+            repositoryRoot
+            ?? GetApplicationConfigurationDirectory();
+
         var configurationPath =
             Path.Combine(
-                repositoryRoot,
+                configurationDirectory,
                 DefaultConfigurationFileName
             );
 
@@ -262,8 +274,9 @@ public sealed class JsonSupportToolkitConfigurationStore
         }
     }
 
-    private static string FindRepositoryRoot(
-        string startingDirectory)
+    private static string?
+        TryFindRepositoryRoot(
+            string startingDirectory)
     {
         var directory =
             new DirectoryInfo(
@@ -288,11 +301,30 @@ public sealed class JsonSupportToolkitConfigurationStore
                 directory.Parent;
         }
 
-        throw new InvalidOperationException(
-            $"Could not locate the SupportToolkit repository root. " +
-            $"Run SupportToolkit from within the repository tree or set " +
-            $"'{ConfigurationPathEnvironmentVariable}' to an explicit " +
-            $"configuration file path."
+        return null;
+    }
+
+    private static string
+        GetApplicationConfigurationDirectory()
+    {
+        var localApplicationData =
+            Environment.GetFolderPath(
+                Environment.SpecialFolder.LocalApplicationData
+            );
+
+        if (string.IsNullOrWhiteSpace(
+                localApplicationData))
+        {
+            throw new InvalidOperationException(
+                "Could not resolve the user's local application " +
+                "data directory. Set SUPPORTTOOLKIT_CONFIG " +
+                "to an explicit configuration file path."
+            );
+        }
+
+        return Path.Combine(
+            localApplicationData,
+            ApplicationDirectoryName
         );
     }
 
