@@ -1,3 +1,5 @@
+[![Download for Windows](https://img.shields.io/badge/Download-Windows_x64-blue?logo=windows)](https://github.com/YayaTheBehemoth/SupportToolkit/releases)CLICK TO DOWNLOAD NEWEST RELEASE
+
 
 # SupportToolkit
 
