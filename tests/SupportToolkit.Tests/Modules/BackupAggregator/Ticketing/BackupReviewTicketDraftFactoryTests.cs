@@ -1,3 +1,4 @@
+using SupportToolkit.Modules.BackupAggregator.Fixtures;
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Modules.BackupAggregator.Ticketing;
@@ -10,7 +11,7 @@ public class BackupReviewTicketDraftFactoryTests
     public void Create_ConvertsCompleteFixtureReportIntoTicketDraft()
     {
         var report =
-            new BackupAggregatorFixtureReviewService()
+            new BackupAggregatorFixtureFactory()
                 .BuildReport();
 
         var factory =
@@ -106,7 +107,7 @@ public class BackupReviewTicketDraftFactoryTests
     public void Create_RejectsIncompleteTenantCoverage()
     {
         var completeReport =
-            new BackupAggregatorFixtureReviewService()
+            new BackupAggregatorFixtureFactory()
                 .BuildReport();
 
         var incompleteReport =
