@@ -1,3 +1,4 @@
+
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Core.Ticketing;
 using SupportToolkit.Providers.Zendesk.Tickets;
@@ -11,7 +12,8 @@ namespace SupportToolkit.Core.Ticketing.Services;
 /// Zendesk is currently the concrete production provider, but callers depend
 /// only on the SupportToolkit ticketing capability.
 ///
-/// Configuration is resolved by the caller before the session is created.
+/// Configuration and destination routing are resolved by the caller before
+/// the session is created.
 /// </summary>
 public sealed class TicketingProductionSession
     : IDisposable
@@ -33,6 +35,7 @@ public sealed class TicketingProductionSession
 
     public static TicketingProductionSession Create(
         ZendeskOptions options,
+        long groupId,
         OperationalLogger logger)
     {
         ArgumentNullException.ThrowIfNull(
@@ -42,6 +45,15 @@ public sealed class TicketingProductionSession
         ArgumentNullException.ThrowIfNull(
             logger
         );
+
+        if (groupId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(groupId),
+                groupId,
+                "A positive Zendesk destination group ID is required."
+            );
+        }
 
         var handler =
             new HttpClientHandler
@@ -75,7 +87,8 @@ public sealed class TicketingProductionSession
 
         var ticketProvider =
             new ZendeskTicketProvider(
-                apiClient
+                apiClient,
+                groupId
             );
 
         return new TicketingProductionSession(

@@ -1,3 +1,4 @@
+
 using System.Security.Cryptography;
 using System.Text;
 using SupportToolkit.Core.Ticketing.Models;
@@ -7,15 +8,20 @@ namespace SupportToolkit.Core.Ticketing.Services;
 /// <summary>
 /// Creates stable idempotency keys for ticket submission.
 ///
-/// The same ticket source producing the same ticket contents will produce the
-/// same key, allowing the external provider to protect against ambiguous
-/// retries where supported.
+/// Identical source, destination, and ticket contents produce identical keys.
+///
+/// Different destinations produce different keys so that submissions to
+/// separate operational queues do not share retry identities.
+///
+/// Idempotency is not permanent ticket deduplication. Actual protection
+/// depends on the external provider's retention window.
 /// </summary>
 public static class TicketIdempotencyKeyFactory
 {
     public static string Create(
         string sourceCommand,
-        TicketDraft draft)
+        TicketDraft draft,
+        string destinationIdentity)
     {
         ArgumentNullException.ThrowIfNull(
             draft
@@ -48,15 +54,30 @@ public static class TicketIdempotencyKeyFactory
             );
         }
 
+        if (string.IsNullOrWhiteSpace(
+                destinationIdentity))
+        {
+            throw new ArgumentException(
+                "Ticket destination identity cannot be empty.",
+                nameof(destinationIdentity)
+            );
+        }
+
         var normalizedSource =
             NormalizeSourceCommand(
                 sourceCommand
             );
 
+        var normalizedDestination =
+            destinationIdentity
+                .Trim()
+                .ToLowerInvariant();
+
         var material =
             string.Join(
                 '\n',
                 normalizedSource,
+                normalizedDestination,
                 draft.Subject,
                 draft.Body
             );

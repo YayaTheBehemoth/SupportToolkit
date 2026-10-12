@@ -1,3 +1,4 @@
+
 using SupportToolkit.Core.Ticketing.Models;
 using SupportToolkit.Core.Ticketing.Services;
 
@@ -6,34 +7,30 @@ namespace SupportToolkit.Tests.Core.Ticketing.Services;
 public class TicketIdempotencyKeyFactoryTests
 {
     [Fact]
-    public void Create_SameSourceAndDraft_ProducesSameKey()
+    public void Create_SameSourceDraftAndDestination_ProducesSameKey()
     {
         var draft =
             new TicketDraft
             {
-                Subject =
-                    "Example ticket",
-
-                Body =
-                    "Example ticket body."
+                Subject = "Example ticket",
+                Body = "Example ticket body."
             };
 
         var first =
             TicketIdempotencyKeyFactory.Create(
                 "backup-review",
-                draft
+                draft,
+                "zendesk:fixture:111111"
             );
 
         var second =
             TicketIdempotencyKeyFactory.Create(
                 "backup-review",
-                draft
+                draft,
+                "zendesk:fixture:111111"
             );
 
-        Assert.Equal(
-            first,
-            second
-        );
+        Assert.Equal(first, second);
     }
 
     [Fact]
@@ -44,12 +41,10 @@ public class TicketIdempotencyKeyFactoryTests
                 "backup-review",
                 new TicketDraft
                 {
-                    Subject =
-                        "Example ticket",
-
-                    Body =
-                        "First body."
-                }
+                    Subject = "Example ticket",
+                    Body = "First body."
+                },
+                "zendesk:fixture:111111"
             );
 
         var second =
@@ -57,18 +52,94 @@ public class TicketIdempotencyKeyFactoryTests
                 "backup-review",
                 new TicketDraft
                 {
-                    Subject =
-                        "Example ticket",
-
-                    Body =
-                        "Second body."
-                }
+                    Subject = "Example ticket",
+                    Body = "Second body."
+                },
+                "zendesk:fixture:111111"
             );
 
-        Assert.NotEqual(
-            first,
-            second
-        );
+        Assert.NotEqual(first, second);
+    }
+
+    [Fact]
+    public void Create_DifferentGroup_ProducesDifferentKey()
+    {
+        var draft =
+            new TicketDraft
+            {
+                Subject = "Example ticket",
+                Body = "Example ticket body."
+            };
+
+        var devKey =
+            TicketIdempotencyKeyFactory.Create(
+                "backup-review",
+                draft,
+                "zendesk:fixture:111111"
+            );
+
+        var operationsKey =
+            TicketIdempotencyKeyFactory.Create(
+                "backup-review",
+                draft,
+                "zendesk:fixture:222222"
+            );
+
+        Assert.NotEqual(devKey, operationsKey);
+    }
+
+    [Fact]
+    public void Create_DifferentInstance_ProducesDifferentKey()
+    {
+        var draft =
+            new TicketDraft
+            {
+                Subject = "Example ticket",
+                Body = "Example ticket body."
+            };
+
+        var first =
+            TicketIdempotencyKeyFactory.Create(
+                "backup-review",
+                draft,
+                "zendesk:instance-one:111111"
+            );
+
+        var second =
+            TicketIdempotencyKeyFactory.Create(
+                "backup-review",
+                draft,
+                "zendesk:instance-two:111111"
+            );
+
+        Assert.NotEqual(first, second);
+    }
+
+    [Fact]
+    public void Create_DestinationIdentity_IsCaseInsensitive()
+    {
+        var draft =
+            new TicketDraft
+            {
+                Subject = "Example ticket",
+                Body = "Example ticket body."
+            };
+
+        var first =
+            TicketIdempotencyKeyFactory.Create(
+                "backup-review",
+                draft,
+                "ZENDESK:FIXTURE:111111"
+            );
+
+        var second =
+            TicketIdempotencyKeyFactory.Create(
+                "backup-review",
+                draft,
+                "zendesk:fixture:111111"
+            );
+
+        Assert.Equal(first, second);
     }
 
     [Fact]
@@ -79,17 +150,34 @@ public class TicketIdempotencyKeyFactoryTests
                 "Backup Review",
                 new TicketDraft
                 {
-                    Subject =
-                        "Example ticket",
-
-                    Body =
-                        "Example body."
-                }
+                    Subject = "Example ticket",
+                    Body = "Example body."
+                },
+                "zendesk:fixture:111111"
             );
 
         Assert.StartsWith(
             "supporttoolkit-backup-review-",
             key
+        );
+    }
+
+    [Fact]
+    public void Create_MissingDestination_Throws()
+    {
+        var draft =
+            new TicketDraft
+            {
+                Subject = "Example ticket",
+                Body = "Example body."
+            };
+
+        Assert.Throws<ArgumentException>(
+            () => TicketIdempotencyKeyFactory.Create(
+                "backup-review",
+                draft,
+                " "
+            )
         );
     }
 }

@@ -1,28 +1,30 @@
+
 namespace SupportToolkit.Core.Configuration;
 
 /// <summary>
 /// Persistent, non-secret SupportToolkit configuration.
 ///
-/// Connection metadata is defined independently from runtime profiles so the
-/// same external connection can be reused by multiple profiles.
+/// Connection metadata is independent from runtime profiles so the
+/// same connection may be used by more than one profile.
 ///
-/// Authentication secrets deliberately do not exist in this model.
-/// Secrets belong in ISecretStore.
+/// Authentication secrets belong in ISecretStore.
 /// </summary>
 public sealed class SupportToolkitConfiguration
 {
-    public string ActiveProfile { get; set; } =
-        "local-dev";
+    public string ActiveProfile { get; set; } = "local-dev";
 
     public SupportToolkitConnections Connections { get; set; } =
         new();
 
-    public Dictionary<string, SupportToolkitProfile> Profiles { get; set; } =
-        new();
+    public Dictionary<string, SupportToolkitProfile> Profiles
+    {
+        get;
+        set;
+    } = new();
 }
 
 /// <summary>
-/// Named external connections available to SupportToolkit profiles.
+/// Named external connections available to profiles.
 /// </summary>
 public sealed class SupportToolkitConnections
 {
@@ -30,29 +32,25 @@ public sealed class SupportToolkitConnections
     {
         get;
         set;
-    } =
-        new();
+    } = new();
 
     public Dictionary<string, ZendeskConnectionConfiguration> Zendesk
     {
         get;
         set;
-    } =
-        new();
+    } = new();
 }
 
 /// <summary>
 /// Defines one runtime profile.
 ///
-/// Module modes control where individual modules obtain their operational
-/// data.
+/// Module modes control operational data sources.
+/// Connection references select reusable external connections.
 ///
-/// Connection references are independent from module modes. This allows, for
-/// example, BackupAggregator to use fixture data while ticket submission uses
-/// a configured Zendesk sandbox.
+/// ZendeskDestination selects an explicitly configured group within
+/// the profile's Zendesk connection.
 ///
-/// External writes are disabled by default and must be enabled explicitly by
-/// the active profile or an environment override.
+/// External writes remain disabled unless explicitly enabled.
 /// </summary>
 public sealed class SupportToolkitProfile
 {
@@ -60,17 +58,19 @@ public sealed class SupportToolkitProfile
 
     public string? ZendeskConnection { get; set; }
 
-    public bool AllowWrites { get; set; } =
-        false;
+    public string? ZendeskDestination { get; set; }
 
-    public Dictionary<string, SupportToolkitMode> Modules { get; set; } =
-        new();
+    public bool AllowWrites { get; set; } = false;
+
+    public Dictionary<string, SupportToolkitMode> Modules
+    {
+        get;
+        set;
+    } = new();
 }
 
 /// <summary>
 /// Non-secret Acronis connection metadata.
-///
-/// ClientSecret intentionally does not exist here.
 /// </summary>
 public sealed class AcronisConnectionConfiguration
 {
@@ -84,7 +84,8 @@ public sealed class AcronisConnectionConfiguration
 /// <summary>
 /// Non-secret Zendesk connection metadata.
 ///
-/// ClientSecret intentionally does not exist here.
+/// Destinations are scoped to this Zendesk instance, preventing
+/// profiles from accidentally sharing group IDs across instances.
 /// </summary>
 public sealed class ZendeskConnectionConfiguration
 {
@@ -93,4 +94,21 @@ public sealed class ZendeskConnectionConfiguration
 
     public string ClientId { get; set; } =
         string.Empty;
+
+    public Dictionary<string, ZendeskDestinationConfiguration> Destinations
+    {
+        get;
+        set;
+    } = new();
+}
+
+/// <summary>
+/// A named ticket destination within one Zendesk instance.
+///
+/// GroupId is the Zendesk group_id used for ticket routing.
+/// Zero is invalid and must be rejected during resolution.
+/// </summary>
+public sealed class ZendeskDestinationConfiguration
+{
+    public long GroupId { get; set; }
 }
