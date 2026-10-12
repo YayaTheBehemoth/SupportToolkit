@@ -252,6 +252,239 @@ public class Microsoft365BackupResourceNormalizerTests
         );
     }
 
+    [Fact]
+    public void Normalize_TeamAndBackingGroup_BecomeOneLogicalWorkload()
+    {
+        var resources =
+            new[]
+            {
+                CreateResource(
+                    protectedResource: true,
+                    status: "ok",
+                    state: "idle",
+                    lastSuccess:
+                        DateTimeOffset.Parse(
+                            "2026-10-08T12:00:00Z"
+                        ),
+                    name:
+                        "Deployment team",
+                    kind:
+                        "GROUP",
+                    internalId:
+                        "GROUP.c65366dd-00d2-35e9-9dc1-1aad8254f1be"
+                ),
+
+                CreateResource(
+                    protectedResource: true,
+                    status: "ok",
+                    state: "idle",
+                    lastSuccess:
+                        DateTimeOffset.Parse(
+                            "2026-10-08T13:00:00Z"
+                        ),
+                    name:
+                        "Deployment team",
+                    kind:
+                        "TEAM",
+                    internalId:
+                        "TEAM.c65366dd-00d2-35e9-9dc1-1aad8254f1be"
+                )
+            };
+
+        var entry =
+            Assert.Single(
+                _normalizer.Normalize(
+                    resources
+                )
+            );
+
+        Assert.Equal(
+            "Deployment team",
+            entry.ResourceName
+        );
+
+        Assert.Equal(
+            BackupReportEntryClassification.Healthy,
+            entry.Classification
+        );
+    }
+
+    [Fact]
+    public void Normalize_TeamBackingGroupFailure_IsNotSuppressed()
+    {
+        var resources =
+            new[]
+            {
+                CreateResource(
+                    protectedResource: true,
+                    status: "warning",
+                    state: "idle",
+                    lastSuccess:
+                        DateTimeOffset.Parse(
+                            "2026-10-08T12:00:00Z"
+                        ),
+                    name:
+                        "LinkedIN",
+                    kind:
+                        "GROUP",
+                    internalId:
+                        "GROUP.49a72b1c-44fb-3621-8377-18ba772216eb"
+                ),
+
+                CreateResource(
+                    protectedResource: true,
+                    status: "ok",
+                    state: "idle",
+                    lastSuccess:
+                        DateTimeOffset.Parse(
+                            "2026-10-08T13:00:00Z"
+                        ),
+                    name:
+                        "LinkedIN",
+                    kind:
+                        "TEAM",
+                    internalId:
+                        "TEAM.49a72b1c-44fb-3621-8377-18ba772216eb"
+                )
+            };
+
+        var entry =
+            Assert.Single(
+                _normalizer.Normalize(
+                    resources
+                )
+            );
+
+        Assert.Equal(
+            BackupReportEntryClassification.NeedsReview,
+            entry.Classification
+        );
+
+        Assert.Equal(
+            "warning",
+            entry.LastResult
+        );
+
+        Assert.Equal(
+            "LinkedIN",
+            entry.ResourceName
+        );
+    }
+
+    [Fact]
+    public void Normalize_UnrelatedGroup_IsPreserved()
+    {
+        var resources =
+            new[]
+            {
+                CreateResource(
+                    protectedResource: true,
+                    status: "ok",
+                    state: "idle",
+                    lastSuccess:
+                        DateTimeOffset.Parse(
+                            "2026-10-08T12:00:00Z"
+                        ),
+                    name:
+                        "Finance",
+                    kind:
+                        "GROUP",
+                    internalId:
+                        "GROUP.11111111-1111-1111-1111-111111111111"
+                ),
+
+                CreateResource(
+                    protectedResource: true,
+                    status: "ok",
+                    state: "idle",
+                    lastSuccess:
+                        DateTimeOffset.Parse(
+                            "2026-10-08T13:00:00Z"
+                        ),
+                    name:
+                        "Tools",
+                    kind:
+                        "TEAM",
+                    internalId:
+                        "TEAM.22222222-2222-2222-2222-222222222222"
+                )
+            };
+
+        var entries =
+            _normalizer.Normalize(
+                resources
+            );
+
+        Assert.Equal(
+            2,
+            entries.Count
+        );
+
+        Assert.Contains(
+            entries,
+            entry =>
+                entry.ResourceName
+                == "Finance"
+        );
+
+        Assert.Contains(
+            entries,
+            entry =>
+                entry.ResourceName
+                == "Tools"
+        );
+    }
+
+    [Fact]
+    public void Normalize_TeamWithoutUsableInternalId_DoesNotCollapseGroup()
+    {
+        var resources =
+            new[]
+            {
+                CreateResource(
+                    protectedResource: true,
+                    status: "ok",
+                    state: "idle",
+                    lastSuccess:
+                        DateTimeOffset.Parse(
+                            "2026-10-08T12:00:00Z"
+                        ),
+                    name:
+                        "Same name",
+                    kind:
+                        "GROUP",
+                    internalId:
+                        null
+                ),
+
+                CreateResource(
+                    protectedResource: true,
+                    status: "ok",
+                    state: "idle",
+                    lastSuccess:
+                        DateTimeOffset.Parse(
+                            "2026-10-08T13:00:00Z"
+                        ),
+                    name:
+                        "Same name",
+                    kind:
+                        "TEAM",
+                    internalId:
+                        null
+                )
+            };
+
+        var entries =
+            _normalizer.Normalize(
+                resources
+            );
+
+        Assert.Equal(
+            2,
+            entries.Count
+        );
+    }
+
     private BackupReportEntry NormalizeOne(
         AcronisMicrosoft365ResourceDto resource)
     {
@@ -267,17 +500,39 @@ public class Microsoft365BackupResourceNormalizerTests
         string? status,
         string? state,
         DateTimeOffset? lastSuccess,
-        string? name = "Mailbox")
+        string? name = "Mailbox",
+        string? kind = "USER",
+        string? internalId = "USER.resource-1")
     {
         return new AcronisMicrosoft365ResourceDto
         {
-            Id = "resource-1",
-            Name = name,
-            HasProtections = protectedResource,
-            LastTaskStatus = status,
-            LastTaskState = state,
-            LastSuccessTime = lastSuccess,
-            LastFinishTime = lastSuccess
+            Id =
+                Guid.NewGuid()
+                    .ToString(),
+
+            InternalId =
+                internalId,
+
+            Name =
+                name,
+
+            Kind =
+                kind,
+
+            HasProtections =
+                protectedResource,
+
+            LastTaskStatus =
+                status,
+
+            LastTaskState =
+                state,
+
+            LastSuccessTime =
+                lastSuccess,
+
+            LastFinishTime =
+                lastSuccess
         };
     }
 }

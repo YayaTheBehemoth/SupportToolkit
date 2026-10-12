@@ -5,15 +5,310 @@ namespace SupportToolkit.Modules.BackupAggregator.Services;
 
 public sealed class Microsoft365BackupResourceNormalizer
 {
+    private const string TeamKind =
+        "TEAM";
+
+    private const string GroupKind =
+        "GROUP";
+
     public IReadOnlyList<BackupReportEntry> Normalize(
         IReadOnlyList<AcronisMicrosoft365ResourceDto> resources)
     {
-        return resources
-            .Select(
-                ToReportEntry
-            )
-            .ToList()
+        var teamKeys =
+            resources
+                .Where(
+                    resource =>
+                        IsKind(
+                            resource,
+                            TeamKind
+                        )
+                )
+                .Select(
+                    resource =>
+                        GetLogicalResourceKey(
+                            resource,
+                            TeamKind
+                        )
+                )
+                .Where(
+                    key =>
+                        key is not null
+                )
+                .Select(
+                    key =>
+                        key!
+                )
+                .ToHashSet(
+                    StringComparer.OrdinalIgnoreCase
+                );
+
+        var backingGroups =
+            resources
+                .Where(
+                    resource =>
+                        IsKind(
+                            resource,
+                            GroupKind
+                        )
+                )
+                .Select(
+                    resource =>
+                        new
+                        {
+                            Resource =
+                                resource,
+
+                            Key =
+                                GetLogicalResourceKey(
+                                    resource,
+                                    GroupKind
+                                )
+                        }
+                )
+                .Where(
+                    item =>
+                        item.Key is not null
+                        && teamKeys.Contains(
+                            item.Key
+                        )
+                )
+                .GroupBy(
+                    item =>
+                        item.Key!,
+                    StringComparer.OrdinalIgnoreCase
+                )
+                .ToDictionary(
+                    group =>
+                        group.Key,
+
+                    group =>
+                        group
+                            .Select(
+                                item =>
+                                    item.Resource
+                            )
+                            .ToList(),
+
+                    StringComparer.OrdinalIgnoreCase
+                );
+
+        var entries =
+            new List<BackupReportEntry>();
+
+        var processedTeamKeys =
+            new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase
+            );
+
+        foreach (var resource in resources)
+        {
+            if (IsKind(
+                    resource,
+                    GroupKind
+                ))
+            {
+                var groupKey =
+                    GetLogicalResourceKey(
+                        resource,
+                        GroupKind
+                    );
+
+                /*
+                 * Microsoft 365 Teams are represented by Acronis as both a
+                 * TEAM resource and the Microsoft 365 GROUP that backs it.
+                 *
+                 * When both resources share the same Acronis logical identity,
+                 * the GROUP belongs to the Teams workload and must not become a
+                 * second user-facing workload.
+                 *
+                 * Its health state is not discarded. It is merged into the
+                 * corresponding TEAM entry when that TEAM is processed.
+                 */
+                if (groupKey is not null
+                    && teamKeys.Contains(
+                        groupKey
+                    ))
+                {
+                    continue;
+                }
+            }
+
+            if (IsKind(
+                    resource,
+                    TeamKind
+                ))
+            {
+                var teamKey =
+                    GetLogicalResourceKey(
+                        resource,
+                        TeamKind
+                    );
+
+                if (teamKey is not null)
+                {
+                    if (!processedTeamKeys.Add(
+                            teamKey
+                        ))
+                    {
+                        /*
+                         * Multiple API representations of the same logical
+                         * Teams identity must produce only one report row.
+                         */
+                        continue;
+                    }
+
+                    if (backingGroups.TryGetValue(
+                            teamKey,
+                            out var groups))
+                    {
+                        entries.Add(
+                            CreateLogicalTeamEntry(
+                                resource,
+                                groups
+                            )
+                        );
+
+                        continue;
+                    }
+                }
+            }
+
+            entries.Add(
+                ToReportEntry(
+                    resource
+                )
+            );
+        }
+
+        return entries
             .AsReadOnly();
+    }
+
+    private static BackupReportEntry CreateLogicalTeamEntry(
+        AcronisMicrosoft365ResourceDto team,
+        IReadOnlyList<AcronisMicrosoft365ResourceDto> backingGroups)
+    {
+        var candidates =
+            new[]
+                {
+                    team
+                }
+                .Concat(
+                    backingGroups
+                )
+                .Select(
+                    ToReportEntry
+                )
+                .OrderByDescending(
+                    entry =>
+                        GetClassificationPriority(
+                            entry.Classification
+                        )
+                )
+                .ThenByDescending(
+                    entry =>
+                        entry.LastBackupRun
+                        ?? DateTimeOffset.MinValue
+                )
+                .ToList();
+
+        var selected =
+            candidates[0];
+
+        return new BackupReportEntry
+        {
+            ResourceName =
+                string.IsNullOrWhiteSpace(
+                    team.Name
+                )
+                    ? selected.ResourceName
+                    : team.Name,
+
+            LastResult =
+                selected.LastResult,
+
+            Classification =
+                selected.Classification,
+
+            LastBackupRun =
+                selected.LastBackupRun,
+
+            LastSuccessfulBackup =
+                selected.LastSuccessfulBackup,
+
+            PlanName =
+                selected.PlanName,
+
+            ResourceState =
+                selected.ResourceState
+        };
+    }
+
+    private static int GetClassificationPriority(
+        BackupReportEntryClassification classification)
+    {
+        return classification switch
+        {
+            BackupReportEntryClassification.NeedsReview =>
+                2,
+
+            BackupReportEntryClassification.Unknown =>
+                1,
+
+            BackupReportEntryClassification.Healthy =>
+                0,
+
+            _ =>
+                throw new ArgumentOutOfRangeException(
+                    nameof(classification),
+                    classification,
+                    "Unsupported backup report classification."
+                )
+        };
+    }
+
+    private static string? GetLogicalResourceKey(
+        AcronisMicrosoft365ResourceDto resource,
+        string expectedKind)
+    {
+        if (string.IsNullOrWhiteSpace(
+                resource.InternalId))
+        {
+            return null;
+        }
+
+        var prefix =
+            expectedKind
+            + ".";
+
+        if (!resource.InternalId.StartsWith(
+                prefix,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var key =
+            resource.InternalId[
+                prefix.Length..
+            ]
+            .Trim();
+
+        return string.IsNullOrWhiteSpace(
+                key)
+            ? null
+            : key;
+    }
+
+    private static bool IsKind(
+        AcronisMicrosoft365ResourceDto resource,
+        string kind)
+    {
+        return string.Equals(
+            resource.Kind,
+            kind,
+            StringComparison.OrdinalIgnoreCase
+        );
     }
 
     private static BackupReportEntry ToReportEntry(
