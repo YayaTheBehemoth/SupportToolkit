@@ -1,3 +1,4 @@
+
 using System.Net;
 using System.Net.Http.Json;
 using SupportToolkit.Core.Ticketing;
@@ -12,17 +13,36 @@ namespace SupportToolkit.Providers.Zendesk.Tickets;
 ///
 /// Zendesk-specific request and response models remain inside the provider
 /// boundary and are translated to and from SupportToolkit ticket models.
+///
+/// Every instance requires an explicitly configured destination group.
 /// </summary>
 public sealed class ZendeskTicketProvider
     : ITicketProvider
 {
     private readonly ZendeskApiClient _apiClient;
+    private readonly long _groupId;
 
     public ZendeskTicketProvider(
-        ZendeskApiClient apiClient)
+        ZendeskApiClient apiClient,
+        long groupId)
     {
         _apiClient =
-            apiClient;
+            apiClient
+            ?? throw new ArgumentNullException(
+                nameof(apiClient)
+            );
+
+        if (groupId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(groupId),
+                groupId,
+                "A positive Zendesk destination group ID is required."
+            );
+        }
+
+        _groupId =
+            groupId;
     }
 
     public async Task<CreatedTicket>
@@ -62,6 +82,9 @@ public sealed class ZendeskTicketProvider
                         Subject =
                             draft.Subject,
 
+                        GroupId =
+                            _groupId,
+
                         Comment =
                             new ZendeskTicketCommentDto
                             {
@@ -70,9 +93,10 @@ public sealed class ZendeskTicketProvider
 
                                 /*
                                  * SupportToolkit currently creates internal
-                                 * operational tickets only. Zendesk comments
-                                 * therefore default to private at the provider
-                                 * boundary.
+                                 * operational tickets only.
+                                 *
+                                 * Zendesk comments therefore remain private
+                                 * at the provider boundary.
                                  */
                                 Public =
                                     false

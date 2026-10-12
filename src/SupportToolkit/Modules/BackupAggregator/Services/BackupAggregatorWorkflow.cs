@@ -1,3 +1,5 @@
+
+using System.Globalization;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Modules.BackupAggregator.Fixtures;
 using SupportToolkit.Core.Logging;
@@ -221,6 +223,10 @@ public sealed class BackupAggregatorWorkflow
             TicketDraft draft,
             CancellationToken cancellationToken)
     {
+        /*
+         * Resolve the destination before creating the HTTP session.
+         * Missing or invalid routing configuration must fail locally.
+         */
         var resolvedConnection =
             await _configurationResolver
                 .GetZendeskConnectionAsync(
@@ -234,19 +240,37 @@ public sealed class BackupAggregatorWorkflow
                 resolvedConnection.ClientSecret
             );
 
+        /*
+         * Include the actual Zendesk instance and group in the retry
+         * identity, rather than the profile or destination display name.
+         *
+         * Renaming a profile must not alter ticket identity.
+         */
+        var destinationIdentity =
+            string.Join(
+                ':',
+                "zendesk",
+                resolvedConnection.Subdomain.ToLowerInvariant(),
+                resolvedConnection.GroupId.ToString(
+                    CultureInfo.InvariantCulture
+                )
+            );
+
+        var idempotencyKey =
+            TicketIdempotencyKeyFactory.Create(
+                "backup-review",
+                draft,
+                destinationIdentity
+            );
+
         var logger =
             OperationalLogger.FromEnvironment();
 
         using var session =
             TicketingProductionSession.Create(
                 zendeskOptions,
+                resolvedConnection.GroupId,
                 logger
-            );
-
-        var idempotencyKey =
-            TicketIdempotencyKeyFactory.Create(
-                "backup-review",
-                draft
             );
 
         return await session.TicketProvider

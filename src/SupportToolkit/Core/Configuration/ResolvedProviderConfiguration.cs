@@ -1,10 +1,8 @@
+
 namespace SupportToolkit.Core.Configuration;
 
 /// <summary>
 /// Fully resolved Acronis connection settings ready for runtime use.
-///
-/// These values may have come from persistent configuration, environment
-/// overrides, and the configured secret store.
 /// </summary>
 public sealed record ResolvedAcronisConnection(
     string DatacenterUrl,
@@ -13,13 +11,17 @@ public sealed record ResolvedAcronisConnection(
 );
 
 /// <summary>
-/// Fully resolved Zendesk connection settings ready for runtime use.
+/// Fully resolved Zendesk connection and ticket destination.
 ///
-/// These values may have come from persistent configuration, environment
-/// overrides, and the configured secret store.
+/// DestinationName and GroupId are resolved from the active profile
+/// and its named Zendesk connection.
+///
+/// They must be valid before any Zendesk API requests are attempted.
 /// </summary>
 public sealed record ResolvedZendeskConnection(
     string Subdomain,
     string ClientId,
-    string ClientSecret
+    string ClientSecret,
+    string DestinationName,
+    long GroupId
 );

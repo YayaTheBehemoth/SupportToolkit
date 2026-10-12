@@ -1,3 +1,4 @@
+
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Secrets;
 
@@ -123,8 +124,7 @@ public sealed partial class ConfigureCommand
                 profile.ZendeskConnection)
             || ReadConfirmation(
                 "Configure Zendesk ticket submission for this profile? [y/N]: ",
-                defaultValue:
-                    false
+                defaultValue: false
             ))
         {
             Console.WriteLine();
@@ -168,8 +168,7 @@ public sealed partial class ConfigureCommand
 
         if (!ReadConfirmation(
                 "Save configuration? [Y/n]: ",
-                defaultValue:
-                    true
+                defaultValue: true
             ))
         {
             Console.WriteLine(
@@ -274,8 +273,7 @@ public sealed partial class ConfigureCommand
 
         if (!ReadConfirmation(
                 "Continue? [y/N]: ",
-                defaultValue:
-                    false
+                defaultValue: false
             ))
         {
             Console.WriteLine();
@@ -366,8 +364,7 @@ public sealed partial class ConfigureCommand
 
             if (ReadConfirmation(
                     "Update connection metadata? [y/N]: ",
-                    defaultValue:
-                        false
+                    defaultValue: false
                 ))
             {
                 ConfigureAcronisMetadata(
@@ -444,36 +441,107 @@ public sealed partial class ConfigureCommand
             "------------------"
         );
 
-        var defaultConnectionName =
-            GetDefaultConnectionName(
-                profile.ZendeskConnection,
-                configuration.Connections
-                    .Zendesk.Keys
+        /*
+         * Selecting a connection and creating a new connection are
+         * deliberately different operations.
+         *
+         * A destination name must never accidentally become a new
+         * connection name.
+         */
+        var selection =
+            SelectZendeskConnection(
+                configuration,
+                profile
             );
 
         var connectionName =
-            SupportToolkitConfigurationNames
-                .NormalizeConnectionName(
-                    ReadRequiredWithDefault(
-                        "Connection name",
-                        defaultConnectionName
-                    )
-                );
+            selection.ConnectionName;
 
-        profile.ZendeskConnection =
-            connectionName;
+        var isNewConnection =
+            selection.IsNew;
 
-        var existingConnection =
+        var connection =
             FindZendeskConnection(
                 configuration,
                 connectionName
-            );
-
-        var connection =
-            existingConnection
+            )
             ?? new ZendeskConnectionConfiguration();
 
-        if (existingConnection is not null)
+        var previousSubdomain =
+            connection.Subdomain;
+
+        if (isNewConnection)
+        {
+            Console.WriteLine();
+
+            Console.WriteLine(
+                $"Creating Zendesk connection '{connectionName}'."
+            );
+
+            ConfigureZendeskMetadata(
+                connection
+            );
+
+            /*
+             * If this subdomain is already registered, the operator
+             * most likely wants another ticket destination, not another
+             * credential set.
+             */
+            var matchingConnection =
+                configuration.Connections.Zendesk
+                    .FirstOrDefault(
+                        pair =>
+                            string.Equals(
+                                pair.Value.Subdomain,
+                                connection.Subdomain,
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                    );
+
+            if (!string.IsNullOrWhiteSpace(
+                matchingConnection.Key))
+            {
+                Console.WriteLine();
+
+                Console.WriteLine(
+                    "WARNING: This Zendesk instance is already configured."
+                );
+
+                Console.WriteLine(
+                    $"Existing connection: {matchingConnection.Key}"
+                );
+
+                Console.WriteLine(
+                    "You can reuse that connection and select a different " +
+                    "ticket destination without entering credentials again."
+                );
+
+                if (!ReadConfirmation(
+                        "Create a separate connection anyway? [y/N]: ",
+                        defaultValue: false
+                    ))
+                {
+                    connectionName =
+                        matchingConnection.Key;
+
+                    connection =
+                        matchingConnection.Value;
+
+                    previousSubdomain =
+                        connection.Subdomain;
+
+                    isNewConnection =
+                        false;
+
+                    Console.WriteLine();
+
+                    Console.WriteLine(
+                        $"Reusing existing connection '{connectionName}'."
+                    );
+                }
+            }
+        }
+        else
         {
             Console.WriteLine();
 
@@ -493,8 +561,7 @@ public sealed partial class ConfigureCommand
 
             if (ReadConfirmation(
                     "Update connection metadata? [y/N]: ",
-                    defaultValue:
-                        false
+                    defaultValue: false
                 ))
             {
                 ConfigureZendeskMetadata(
@@ -502,18 +569,32 @@ public sealed partial class ConfigureCommand
                 );
             }
         }
-        else
+
+        /*
+         * Moving a profile to another connection requires the operator
+         * to select its destination again.
+         */
+        if (!string.Equals(
+                profile.ZendeskConnection,
+                connectionName,
+                StringComparison.OrdinalIgnoreCase))
         {
-            Console.WriteLine();
-
-            Console.WriteLine(
-                $"Creating Zendesk connection '{connectionName}'."
-            );
-
-            ConfigureZendeskMetadata(
-                connection
-            );
+            profile.ZendeskDestination = null;
         }
+
+        profile.ZendeskConnection =
+            connectionName;
+
+        InvalidateZendeskDestinationsIfInstanceChanged(
+            connection,
+            profile,
+            previousSubdomain
+        );
+
+        ConfigureZendeskDestinations(
+            connection,
+            profile
+        );
 
         UpsertZendeskConnection(
             configuration,
@@ -534,23 +615,41 @@ public sealed partial class ConfigureCommand
                 )
             );
 
-        var secret =
-            ReadSecret(
-                "Client secret",
-                secretConfigured
+        Console.WriteLine();
+
+        Console.WriteLine(
+            $"Client secret: {DisplaySecretStatus(secretConfigured)}"
+        );
+
+        /*
+         * Reusing an existing connection must not force the user to
+         * supply credentials again.
+         */
+        var updateSecret =
+            isNewConnection
+            || !secretConfigured
+            || ReadConfirmation(
+                "Update stored client secret? [y/N]: ",
+                defaultValue: false
             );
 
+        var secret =
+            updateSecret
+                ? ReadSecret(
+                    "Client secret",
+                    secretConfigured
+                )
+                : string.Empty;
+
         if (!secretConfigured
-            && string.IsNullOrEmpty(
-                secret))
+            && string.IsNullOrEmpty(secret))
         {
             Console.WriteLine(
                 "WARNING: Zendesk client secret is not configured."
             );
         }
 
-        return string.IsNullOrEmpty(
-                secret)
+        return string.IsNullOrEmpty(secret)
             ? null
             : new PendingSecret(
                 secretKey,

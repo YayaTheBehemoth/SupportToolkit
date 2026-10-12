@@ -1,3 +1,4 @@
+
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Secrets;
 
@@ -48,8 +49,7 @@ public sealed partial class ConfigureCommand
         {
             foreach (var pair in configuration.Profiles
                          .OrderBy(
-                             pair =>
-                                 pair.Key,
+                             pair => pair.Key,
                              StringComparer.OrdinalIgnoreCase
                          ))
             {
@@ -70,27 +70,32 @@ public sealed partial class ConfigureCommand
                 );
 
                 Console.WriteLine(
-                    $"    External writes:    " +
+                    $"    External writes:     " +
                     $"{FormatBoolean(profile.AllowWrites)}"
                 );
 
                 Console.WriteLine(
-                    $"    Acronis connection: " +
+                    $"    Acronis connection:  " +
                     $"{DisplayOptionalValue(profile.AcronisConnection)}"
                 );
 
                 Console.WriteLine(
-                    $"    Zendesk connection: " +
+                    $"    Zendesk connection:  " +
                     $"{DisplayOptionalValue(profile.ZendeskConnection)}"
                 );
 
                 Console.WriteLine(
-                    $"    Backup Aggregator:  " +
+                    $"    Zendesk destination: " +
+                    $"{DisplayOptionalValue(profile.ZendeskDestination)}"
+                );
+
+                Console.WriteLine(
+                    $"    Backup Aggregator:   " +
                     $"{FormatMode(GetConfiguredMode(profile, BackupAggregatorCommand))}"
                 );
 
                 Console.WriteLine(
-                    $"    Backup Health:      " +
+                    $"    Backup Health:       " +
                     $"{FormatMode(GetConfiguredMode(profile, BackupHealthCommand))}"
                 );
             }
@@ -117,8 +122,7 @@ public sealed partial class ConfigureCommand
             foreach (var pair in configuration.Connections
                          .Acronis
                          .OrderBy(
-                             pair =>
-                                 pair.Key,
+                             pair => pair.Key,
                              StringComparer.OrdinalIgnoreCase
                          ))
             {
@@ -171,11 +175,13 @@ public sealed partial class ConfigureCommand
             foreach (var pair in configuration.Connections
                          .Zendesk
                          .OrderBy(
-                             pair =>
-                                 pair.Key,
+                             pair => pair.Key,
                              StringComparer.OrdinalIgnoreCase
                          ))
             {
+                var connection =
+                    pair.Value;
+
                 var secretConfigured =
                     !string.IsNullOrWhiteSpace(
                         await _secretStore.GetSecretAsync(
@@ -191,16 +197,41 @@ public sealed partial class ConfigureCommand
                 );
 
                 Console.WriteLine(
-                    $"    Subdomain:     {DisplayValue(pair.Value.Subdomain)}"
+                    $"    Subdomain:     {DisplayValue(connection.Subdomain)}"
                 );
 
                 Console.WriteLine(
-                    $"    Client ID:     {DisplayValue(pair.Value.ClientId)}"
+                    $"    Client ID:     {DisplayValue(connection.ClientId)}"
                 );
 
                 Console.WriteLine(
                     $"    Client secret: {DisplaySecretStatus(secretConfigured)}"
                 );
+
+                if (connection.Destinations.Count == 0)
+                {
+                    Console.WriteLine(
+                        "    Destinations:  none"
+                    );
+
+                    continue;
+                }
+
+                Console.WriteLine(
+                    "    Destinations:"
+                );
+
+                foreach (var destination in connection.Destinations
+                             .OrderBy(
+                                 item => item.Key,
+                                 StringComparer.OrdinalIgnoreCase
+                             ))
+                {
+                    Console.WriteLine(
+                        $"      {destination.Key}: " +
+                        $"group {destination.Value.GroupId}"
+                    );
+                }
             }
         }
 

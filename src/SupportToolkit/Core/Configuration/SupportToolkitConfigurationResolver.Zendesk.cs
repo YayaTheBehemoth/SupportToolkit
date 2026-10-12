@@ -1,3 +1,4 @@
+
 using SupportToolkit.Core.Secrets;
 
 namespace SupportToolkit.Core.Configuration;
@@ -8,32 +9,12 @@ public sealed partial class SupportToolkitConfigurationResolver
         GetZendeskConnectionAsync(
             CancellationToken cancellationToken = default)
     {
-        var environmentSubdomain =
-            ReadEnvironmentValue(
-                "ZENDESK_SUBDOMAIN"
-            );
-
-        var environmentClientId =
-            ReadEnvironmentValue(
-                "ZENDESK_CLIENT_ID"
-            );
-
-        var environmentClientSecret =
-            ReadEnvironmentValue(
-                "ZENDESK_CLIENT_SECRET"
-            );
-
-        if (environmentSubdomain is not null
-            && environmentClientId is not null
-            && environmentClientSecret is not null)
-        {
-            return new ResolvedZendeskConnection(
-                environmentSubdomain,
-                environmentClientId,
-                environmentClientSecret
-            );
-        }
-
+        /*
+         * Ticket destinations always require an active profile.
+         *
+         * Environment credentials alone cannot bypass destination
+         * selection or silently change the Zendesk instance.
+         */
         var configuration =
             await _configurationStore.LoadAsync(
                 cancellationToken
@@ -45,13 +26,12 @@ public sealed partial class SupportToolkitConfigurationResolver
             );
 
         if (string.IsNullOrWhiteSpace(
-                active.Profile.ZendeskConnection))
+            active.Profile.ZendeskConnection))
         {
             throw new InvalidOperationException(
                 $"Active profile '{active.Name}' does not reference " +
                 "a Zendesk connection. Configure one with " +
-                $"SupportToolkit configure profile {active.Name}, or " +
-                "provide all ZENDESK_* environment variables."
+                $"SupportToolkit configure profile {active.Name}."
             );
         }
 
@@ -76,11 +56,89 @@ public sealed partial class SupportToolkitConfigurationResolver
             );
         }
 
-        var subdomain =
-            environmentSubdomain
-            ?? RequireConfiguredValue(
+        if (string.IsNullOrWhiteSpace(
+            active.Profile.ZendeskDestination))
+        {
+            throw new InvalidOperationException(
+                $"Active profile '{active.Name}' does not select " +
+                "a Zendesk destination. Ticket submission requires " +
+                "an explicitly configured destination."
+            );
+        }
+
+        var destinationName =
+            SupportToolkitConfigurationNames
+                .NormalizeConnectionName(
+                    active.Profile.ZendeskDestination
+                );
+
+        var destination =
+            connection.Destinations
+                .FirstOrDefault(
+                    pair =>
+                        string.Equals(
+                            pair.Key,
+                            destinationName,
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                )
+                .Value;
+
+        if (destination is null)
+        {
+            throw new InvalidOperationException(
+                $"Zendesk destination '{destinationName}' does not " +
+                $"exist on connection '{connectionName}'."
+            );
+        }
+
+        if (destination.GroupId <= 0)
+        {
+            throw new InvalidOperationException(
+                $"Zendesk destination '{destinationName}' has an " +
+                "invalid group ID. A positive group ID is required."
+            );
+        }
+
+        var configuredSubdomain =
+            RequireConfiguredValue(
                 connection.Subdomain,
                 $"Zendesk connection '{connectionName}' subdomain"
+            );
+
+        var environmentSubdomain =
+            ReadEnvironmentValue(
+                "ZENDESK_SUBDOMAIN"
+            );
+
+        /*
+         * A group ID belongs to a particular Zendesk instance.
+         *
+         * Allow credential overrides for that instance, but reject
+         * an environment override that redirects to another instance.
+         */
+        if (environmentSubdomain is not null
+            && !string.Equals(
+                environmentSubdomain,
+                configuredSubdomain,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "ZENDESK_SUBDOMAIN does not match the configured " +
+                $"Zendesk connection '{connectionName}'. " +
+                "Ticket routing cannot switch instances through " +
+                "an environment override."
+            );
+        }
+
+        var environmentClientId =
+            ReadEnvironmentValue(
+                "ZENDESK_CLIENT_ID"
+            );
+
+        var environmentClientSecret =
+            ReadEnvironmentValue(
+                "ZENDESK_CLIENT_SECRET"
             );
 
         var clientId =
@@ -101,7 +159,7 @@ public sealed partial class SupportToolkitConfigurationResolver
             );
 
         if (string.IsNullOrWhiteSpace(
-                clientSecret))
+            clientSecret))
         {
             throw new InvalidOperationException(
                 $"Zendesk client secret for connection " +
@@ -112,9 +170,11 @@ public sealed partial class SupportToolkitConfigurationResolver
         }
 
         return new ResolvedZendeskConnection(
-            subdomain,
+            configuredSubdomain,
             clientId,
-            clientSecret
+            clientSecret,
+            destinationName,
+            destination.GroupId
         );
     }
 }

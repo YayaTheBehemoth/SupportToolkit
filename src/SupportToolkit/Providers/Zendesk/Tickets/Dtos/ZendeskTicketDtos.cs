@@ -1,3 +1,4 @@
+
 using System.Text.Json.Serialization;
 
 namespace SupportToolkit.Providers.Zendesk.Tickets.Dtos;
@@ -12,6 +13,9 @@ internal sealed class ZendeskCreateTicketDto
 {
     [JsonPropertyName("subject")]
     public required string Subject { get; init; }
+
+    [JsonPropertyName("group_id")]
+    public required long GroupId { get; init; }
 
     [JsonPropertyName("comment")]
     public required ZendeskTicketCommentDto Comment { get; init; }
