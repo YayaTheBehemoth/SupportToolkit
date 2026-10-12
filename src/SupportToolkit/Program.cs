@@ -1,5 +1,4 @@
-﻿
-using SupportToolkit.Cli.Commands;
+﻿using SupportToolkit.Cli.Commands;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.ErrorHandling;
 using SupportToolkit.Core.Modules;
@@ -53,6 +52,7 @@ ISupportToolkitModule[] modules =
 var interactiveShell =
     new SupportToolkitInteractiveShell(
         configurationStore,
+        configureCommand,
         backupAggregatorWorkflow,
         backupHealthWorkflow
     );

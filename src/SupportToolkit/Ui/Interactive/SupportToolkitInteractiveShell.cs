@@ -1,3 +1,4 @@
+using SupportToolkit.Cli.Commands;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.ErrorHandling;
 using SupportToolkit.Core.Ticketing.Models;
@@ -22,8 +23,14 @@ namespace SupportToolkit.Ui.Interactive;
 /// </summary>
 public sealed partial class SupportToolkitInteractiveShell
 {
+    private const string DebugEnvironmentVariable =
+        "SUPPORTTOOLKIT_DEBUG";
+
     private readonly ISupportToolkitConfigurationStore
         _configurationStore;
+
+    private readonly ConfigureCommand
+        _configureCommand;
 
     private readonly BackupAggregatorWorkflow
         _backupAggregatorWorkflow;
@@ -42,6 +49,7 @@ public sealed partial class SupportToolkitInteractiveShell
 
     public SupportToolkitInteractiveShell(
         ISupportToolkitConfigurationStore configurationStore,
+        ConfigureCommand configureCommand,
         BackupAggregatorWorkflow backupAggregatorWorkflow,
         BackupHealthWorkflow backupHealthWorkflow)
     {
@@ -49,6 +57,12 @@ public sealed partial class SupportToolkitInteractiveShell
             configurationStore
             ?? throw new ArgumentNullException(
                 nameof(configurationStore)
+            );
+
+        _configureCommand =
+            configureCommand
+            ?? throw new ArgumentNullException(
+                nameof(configureCommand)
             );
 
         _backupAggregatorWorkflow =
@@ -87,8 +101,12 @@ public sealed partial class SupportToolkitInteractiveShell
                     cancellationToken
                 );
 
+            var debugEnabled =
+                IsDebugEnabled();
+
             WriteMainMenu(
-                activeProfile
+                activeProfile,
+                debugEnabled
             );
 
             var choice =
@@ -96,7 +114,7 @@ public sealed partial class SupportToolkitInteractiveShell
                     minimum:
                         1,
                     maximum:
-                        4
+                        6
                 );
 
             Console.WriteLine();
@@ -125,6 +143,16 @@ public sealed partial class SupportToolkitInteractiveShell
                     break;
 
                 case 4:
+                    await RunConfigurationWizardAsync();
+
+                    break;
+
+                case 5:
+                    ToggleDebugMode();
+
+                    break;
+
+                case 6:
                     Console.WriteLine(
                         "Goodbye."
                     );
@@ -132,6 +160,60 @@ public sealed partial class SupportToolkitInteractiveShell
                     return 0;
             }
         }
+    }
+
+    private async Task RunConfigurationWizardAsync()
+    {
+        try
+        {
+            await _configureCommand.RunAsync(
+                Array.Empty<string>()
+            );
+        }
+        catch (Exception exception)
+        {
+            WriteError(
+                exception
+            );
+        }
+
+        Console.WriteLine();
+
+        Pause();
+    }
+
+    private static void ToggleDebugMode()
+    {
+        var enableDebug =
+            !IsDebugEnabled();
+
+        Environment.SetEnvironmentVariable(
+            DebugEnvironmentVariable,
+            enableDebug
+                ? "true"
+                : null
+        );
+
+        Console.WriteLine(
+            enableDebug
+                ? "Debug logging enabled for this SupportToolkit session."
+                : "Debug logging disabled for this SupportToolkit session."
+        );
+
+        Console.WriteLine();
+
+        Pause();
+    }
+
+    private static bool IsDebugEnabled()
+    {
+        return string.Equals(
+            Environment.GetEnvironmentVariable(
+                DebugEnvironmentVariable
+            ),
+            "true",
+            StringComparison.OrdinalIgnoreCase
+        );
     }
 
     private static string FormatReviewState(
@@ -207,7 +289,8 @@ public sealed partial class SupportToolkitInteractiveShell
     }
 
     private static void WriteMainMenu(
-        string activeProfile)
+        string activeProfile,
+        bool debugEnabled)
     {
         Console.WriteLine();
 
@@ -225,6 +308,10 @@ public sealed partial class SupportToolkitInteractiveShell
             $"Active profile: {activeProfile}"
         );
 
+        Console.WriteLine(
+            $"Debug logging:  {(debugEnabled ? "enabled" : "disabled")}"
+        );
+
         Console.WriteLine();
 
         Console.WriteLine(
@@ -240,7 +327,17 @@ public sealed partial class SupportToolkitInteractiveShell
         );
 
         Console.WriteLine(
-            "4. Exit"
+            "4. Configuration wizard"
+        );
+
+        Console.WriteLine(
+            debugEnabled
+                ? "5. Disable debug logging"
+                : "5. Enable debug logging"
+        );
+
+        Console.WriteLine(
+            "6. Exit"
         );
 
         Console.WriteLine();
