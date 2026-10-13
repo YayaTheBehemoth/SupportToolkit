@@ -1,4 +1,3 @@
-
 using SupportToolkit.Modules.Compliance.Reporting;
 using SupportToolkit.Modules.Compliance.Services;
 using SupportToolkit.Providers.MicrosoftGraph.ManagedDevices;
@@ -6,231 +5,159 @@ using SupportToolkit.Providers.MicrosoftGraph.ComplianceSettings;
 
 namespace SupportToolkit.Tests.Modules.Compliance;
 
-public class ComplianceDeviceListReporterTests
+public class ComplianceInvestigationReporterTests
 {
     private static readonly DateTimeOffset ReportTime =
         new(2026, 10, 13, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void Render_ShowsFailedSettingForNoncompliantDevice()
+    public void Render_ShowsCompactDeviceSummary()
     {
-        var output = Render(
-            Entry(
-                "STALE-01",
-                "noncompliant",
-                ReportTime.AddDays(-73),
-                Setting("Device encryption required", "nonCompliant"),
-                Setting("Minimum OS version", "unknown")
-            )
-        );
+        var report = CreateReport(ReportTime.AddDays(-73), "noncompliant");
+        var output = new ComplianceInvestigationReporter().Render(report);
 
-        Assert.Contains(
-            "FAILED:   Device encryption required",
-            output
-        );
-
-        Assert.Contains(
-            "UNKNOWN:  Minimum OS version",
-            output
-        );
-
-        Assert.Contains("73d", output);
-        Assert.Contains("NONCOMPLIANT: 1", output);
+        Assert.Contains("SUPPORTTOOLKIT // COMPLIANCE", output);
+        Assert.Contains("DEV PROXY - SYNTHETIC DATA", output);
+        Assert.Contains("NONCOMPLIANT", output);
+        Assert.Contains("73 days ago", output);
+        Assert.Contains("SETTING EVIDENCE (0)", output);
+        Assert.Contains("ASSESSMENT", output);
+        Assert.Contains("DATA LIMITATIONS", output);
+        Assert.Contains("No staleness threshold has been applied", output);
     }
 
     [Fact]
-    public void Render_SuppressesReportedCompliantDevices()
+    public void Render_PrioritizesFailedAndUnknownSettings()
     {
-        var output = Render(
-            Entry(
-                "STALE-01",
-                "noncompliant",
-                null,
-                Setting("Encryption", "nonCompliant")
-            ),
-            Entry(
-                "HEALTHY-02",
-                "compliant",
-                ReportTime,
-                Setting("Encryption", "compliant")
-            ),
-            Entry("UNKNOWN-03", "unknown")
-        );
+        var report = CreateReport(
+            ReportTime.AddDays(-5),
+            "noncompliant",
+            Setting("Healthy setting", "compliant"),
+            Setting("Unknown setting", "unknown"),
+            Setting("Encryption failure", "nonCompliant"));
 
-        Assert.Contains("DEVICES: 3", output);
-        Assert.Contains("SHOWN: 2", output);
-        Assert.Contains("SUPPRESSED: 1", output);
+        var output = new ComplianceInvestigationReporter().Render(report);
 
-        Assert.Contains("STALE-01", output);
-        Assert.Contains("UNKNOWN-03", output);
-        Assert.DoesNotContain("HEALTHY-02", output);
-        Assert.Contains(
-            "All 3 device records accounted for",
-            output
-        );
+        var failed = output.IndexOf("[NONCOMPLIANT]", StringComparison.Ordinal);
+        var unknown = output.IndexOf("[UNKNOWN", StringComparison.Ordinal);
+        var compliant = output.IndexOf("[COMPLIANT", StringComparison.Ordinal);
+
+        Assert.True(failed >= 0);
+        Assert.True(unknown > failed);
+        Assert.True(compliant > unknown);
+        Assert.Contains("1 setting is reported noncompliant", output);
+        Assert.Contains("Unknown/missing setting states: 1", output);
+        Assert.Contains("candidate findings, not verified causes", output);
     }
 
     [Fact]
-    public void Render_UnknownDeviceDoesNotInventReason()
+    public void Render_CompliantSettingDoesNotProveOverallCompliance()
     {
-        var output = Render(
-            Entry("UNKNOWN-03", "unknown")
-        );
+        var report = CreateReport(
+            ReportTime.AddDays(-1), "compliant",
+            Setting("Device encryption", "compliant"));
 
-        Assert.Contains(
-            "REASON:   No matching setting evidence",
-            output
-        );
+        var output = new ComplianceInvestigationReporter().Render(report);
 
-        Assert.DoesNotContain("FAILED:", output);
+        Assert.Contains("No matched settings reported noncompliant", output);
+        Assert.Contains("This does not establish overall compliance", output);
     }
 
     [Fact]
-    public void Render_NoncompliantWithoutFailureKeepsReasonUnknown()
+    public void Render_NoMatchingSettingsRemainsUncertain()
     {
-        var output = Render(
-            Entry(
-                "STALE-01",
-                "noncompliant",
-                null,
-                Setting("Encryption", "compliant")
-            )
-        );
+        var output = new ComplianceInvestigationReporter()
+            .Render(CreateReport(ReportTime.AddDays(-2), "unknown"));
 
-        Assert.Contains(
-            "REASON:   No failed setting identified",
-            output
-        );
-
-        Assert.DoesNotContain("FAILED:", output);
+        Assert.Contains("NO MATCHING SETTING STATES", output);
+        Assert.Contains("Not evidence that policies passed", output);
+        Assert.Contains("No matching setting evidence; coverage unknown", output);
     }
 
     [Fact]
-    public void Render_ContradictoryEvidencePreventsSuppression()
+    public void Render_MissingCheckInDoesNotInventAge()
     {
-        var output = Render(
-            Entry(
-                "HEALTHY-02",
-                "compliant",
-                ReportTime,
-                Setting("Encryption", "nonCompliant")
-            )
-        );
+        var output = new ComplianceInvestigationReporter()
+            .Render(CreateReport(null, "unknown"));
 
-        Assert.Contains("SHOWN: 1", output);
-        Assert.Contains("SUPPRESSED: 0", output);
-        Assert.Contains("STATUS/SETTING CONFLICTS: 1", output);
-        Assert.Contains("HEALTHY-02", output);
-        Assert.Contains("CONFLICT:", output);
+        Assert.Contains("Last check-in", output);
+        Assert.Contains("Check-in age cannot be determined", output);
+        Assert.Contains("Last check-in timestamp not provided", output);
+        Assert.DoesNotContain("0 days ago", output);
     }
 
     [Fact]
-    public void Render_OrdersNoncompliantBeforeUnknown()
+    public void Render_FutureCheckInIsFlagged()
     {
-        var output = Render(
-            Entry("UNKNOWN-03", "unknown"),
-            Entry("STALE-01", "noncompliant")
-        );
+        var report = CreateReport(ReportTime.AddDays(1), "noncompliant");
+        Assert.Null(report.TimeSinceLastCheckIn);
 
-        var staleIndex = output.IndexOf(
-            "STALE-01",
-            StringComparison.Ordinal
-        );
+        var output = new ComplianceInvestigationReporter().Render(report);
 
-        var unknownIndex = output.IndexOf(
-            "UNKNOWN-03",
-            StringComparison.Ordinal
-        );
-
-        Assert.True(staleIndex >= 0);
-        Assert.True(unknownIndex > staleIndex);
+        Assert.Contains("age unavailable", output);
+        Assert.Contains("Check-in timestamp is in the future", output);
+        Assert.DoesNotContain("-1 days ago", output);
     }
 
     [Fact]
-    public void Render_UnexpectedSettingStateRemainsVisible()
+    public void Render_NotePreviewClearlyIndicatesDraft()
     {
-        var output = Render(
-            Entry(
-                "DEVICE-01",
-                "noncompliant",
-                null,
-                Setting("Security requirement", "error")
-            )
-        );
+        var report = CreateReport(
+            ReportTime.AddDays(-3), "noncompliant",
+            Setting("Encryption", "nonCompliant"));
 
-        Assert.Contains(
-            "OTHER:    Security requirement (error)",
-            output
-        );
+        var output = new ComplianceInvestigationReporter()
+            .Render(report, notePreview: true);
 
-        Assert.Contains(
-            "REASON:   No failed setting identified",
-            output
-        );
+        Assert.Contains("DRAFT INTERNAL NOTE", output);
+        Assert.Contains("SYNTHETIC TEST DATA", output);
+        Assert.Contains("Setting observations:", output);
+        Assert.Contains("Assessment:", output);
+        Assert.Contains("Evidence limitations:", output);
+        Assert.Contains("nothing submitted to Zendesk", output);
+        Assert.DoesNotContain("PASS:", output);
     }
 
     [Fact]
-    public void Render_EmptyListDoesNotClaimEverythingIsHealthy()
+    public void Render_DoesNotMakeCaseLifecycleDecision()
     {
-        var output = Render();
+        var report = CreateReport(
+            ReportTime.AddDays(-10), "noncompliant",
+            Setting("Encryption", "nonCompliant"));
 
-        Assert.Contains("DEVICES: 0", output);
-        Assert.Contains("No managed devices returned", output);
-        Assert.Contains("SUPPRESSED: 0", output);
+        var output = new ComplianceInvestigationReporter().Render(report);
+
+        Assert.Contains("No case action performed", output);
+        Assert.Contains("correlation unverified", output);
     }
 
-    private static string Render(
-        params ComplianceDeviceListEntry[] entries)
-    {
-        return new ComplianceDeviceListReporter().Render(
-            new ComplianceDeviceListResult(entries),
-            new FixedTimeProvider(ReportTime)
-        );
-    }
+    private static ComplianceSettingEvidence Setting(string name, string? state) =>
+        new("summary-001", name, "device-001", "STK-SYNTHETIC-STALE-01", state);
 
-    private static ComplianceDeviceListEntry Entry(
-        string name,
-        string state,
-        DateTimeOffset? checkIn = null,
+    private static ComplianceInvestigationReport CreateReport(
+        DateTimeOffset? lastSync,
+        string? complianceState,
         params ComplianceSettingEvidence[] settings)
     {
-        return new ComplianceDeviceListEntry(
-            new ManagedDevice
-            {
-                Id = name,
-                DeviceName = name,
-                ComplianceState = state,
-                LastSyncDateTime = checkIn
-            },
-            settings
-        );
-    }
+        var device = new ManagedDevice
+        {
+            Id = "device-001",
+            DeviceName = "STK-SYNTHETIC-STALE-01",
+            OperatingSystem = "Windows",
+            ComplianceState = complianceState,
+            LastSyncDateTime = lastSync
+        };
 
-    private static ComplianceSettingEvidence Setting(
-        string name,
-        string? state)
-    {
-        return new ComplianceSettingEvidence(
-            "summary-001",
-            name,
-            "synthetic-device",
-            "synthetic-name",
-            state
-        );
+        var investigation = new ComplianceEvidenceInvestigation(device, settings);
+
+        return new ComplianceInvestigationReportFactory(
+            new FixedTimeProvider(ReportTime)).Create(investigation);
     }
 
     private sealed class FixedTimeProvider : TimeProvider
     {
         private readonly DateTimeOffset _now;
-
-        public FixedTimeProvider(DateTimeOffset now)
-        {
-            _now = now;
-        }
-
-        public override DateTimeOffset GetUtcNow()
-        {
-            return _now;
-        }
+        public FixedTimeProvider(DateTimeOffset now) => _now = now;
+        public override DateTimeOffset GetUtcNow() => _now;
     }
 }

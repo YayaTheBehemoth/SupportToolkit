@@ -1,393 +1,266 @@
-
 using System.Globalization;
-using SupportToolkit.Modules.Compliance.Services;
 using SupportToolkit.Providers.MicrosoftGraph.ComplianceSettings;
 
 namespace SupportToolkit.Modules.Compliance.Reporting;
 
 /// <summary>
-/// Exception-first compliance inventory presentation.
-///
-/// Suppresses reported-compliant devices unless their
-/// matched setting evidence contradicts that status.
+/// Read-only presentation of a device investigation.
+/// Console mode is compact; note-preview mode is a draft only.
 /// </summary>
-public sealed class ComplianceDeviceListReporter
+public sealed class ComplianceInvestigationReporter
 {
-    private const int NameWidth = 32;
-    private const int StateWidth = 15;
-    private const int CheckInWidth = 16;
-    private const int AgeWidth = 6;
-
-    private const int TableWidth =
-        NameWidth + StateWidth + CheckInWidth + AgeWidth + 6;
-
     public string Render(
-        ComplianceDeviceListResult result,
-        TimeProvider? timeProvider = null)
+        ComplianceInvestigationReport report,
+        bool notePreview = false)
     {
-        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(report);
 
-        var now = (timeProvider ?? TimeProvider.System)
-            .GetUtcNow();
+        using var writer = new StringWriter(CultureInfo.InvariantCulture);
 
-        var entries = result.Entries;
-
-        var visible = entries
-            .Where(ShouldShow)
-            .OrderBy(entry => GetPriority(entry.Device.ComplianceState))
-            .ThenBy(
-                entry => entry.Device.DeviceName,
-                StringComparer.OrdinalIgnoreCase
-            )
-            .ThenBy(
-                entry => entry.Device.Id,
-                StringComparer.Ordinal
-            )
-            .ToList();
-
-        var suppressed = entries.Count - visible.Count;
-
-        var noncompliant = entries.Count(entry =>
-            GetPriority(entry.Device.ComplianceState) == 0
-        );
-
-        var unknown = entries.Count(entry =>
-            GetPriority(entry.Device.ComplianceState) == 1
-        );
-
-        var other = entries.Count(entry =>
-            GetPriority(entry.Device.ComplianceState) == 2
-        );
-
-        var conflicts = visible.Count(HasConflict);
-
-        using var writer = new StringWriter(
-            CultureInfo.InvariantCulture
-        );
-
-        writer.WriteLine(
-            "SUPPORTTOOLKIT // COMPLIANCE INVENTORY"
-        );
-        writer.WriteLine(
-            "===================================="
-        );
-        writer.WriteLine("DEV PROXY - SYNTHETIC DATA");
-        writer.WriteLine();
-
-        writer.WriteLine(
-            $"DEVICES: {entries.Count}   " +
-            $"SHOWN: {visible.Count}   " +
-            $"SUPPRESSED: {suppressed}"
-        );
-
-        writer.WriteLine(
-            $"NONCOMPLIANT: {noncompliant}   " +
-            $"UNKNOWN/MISSING: {unknown}   " +
-            $"OTHER: {other}"
-        );
-
-        if (conflicts > 0)
+        if (notePreview)
         {
-            writer.WriteLine(
-                $"STATUS/SETTING CONFLICTS: {conflicts}"
-            );
+            WriteNotePreview(writer, report);
         }
-
-        writer.WriteLine();
-
-        WriteHeader(writer);
-
-        var truncated = false;
-        var futureCheckIn = false;
-
-        foreach (var entry in visible)
+        else
         {
-            var device = entry.Device;
-
-            var name = Display(device.DeviceName);
-            var state = Display(device.ComplianceState)
-                .ToUpperInvariant();
-
-            if (name.Length > NameWidth ||
-                state.Length > StateWidth)
-            {
-                truncated = true;
-            }
-
-            if (device.LastSyncDateTime > now)
-            {
-                futureCheckIn = true;
-            }
-
-            writer.WriteLine(
-                $"{Fit(name, NameWidth),-NameWidth}  " +
-                $"{Fit(state, StateWidth),-StateWidth}  " +
-                $"{FormatCheckIn(device.LastSyncDateTime),-CheckInWidth}  " +
-                $"{FormatAge(device.LastSyncDateTime, now),-AgeWidth}"
-            );
-
-            WriteReasons(writer, entry);
-
-            writer.WriteLine();
+            WriteConsoleReport(writer, report);
         }
-
-        writer.WriteLine(new string('-', TableWidth));
-
-        if (visible.Count == 0)
-        {
-            writer.WriteLine(
-                entries.Count == 0
-                    ? "No managed devices returned."
-                    : "No device exceptions or evidence conflicts to display."
-            );
-        }
-
-        writer.WriteLine();
-
-        writer.WriteLine(
-            $"{suppressed} reported-compliant " +
-            (suppressed == 1 ? "device" : "devices") +
-            " suppressed."
-        );
-
-        writer.WriteLine(
-            $"All {entries.Count} device records accounted for."
-        );
-
-        writer.WriteLine();
-
-        writer.WriteLine(
-            "FAILED settings are candidate findings, not verified causes."
-        );
-
-        writer.WriteLine(
-            "Setting/device ID correlation remains unverified."
-        );
-
-        writer.WriteLine(
-            "No check-in staleness threshold has been applied."
-        );
-
-        if (truncated)
-        {
-            writer.WriteLine(
-                "Some table values were shortened."
-            );
-        }
-
-        if (futureCheckIn)
-        {
-            writer.WriteLine(
-                "FUTURE indicates a check-in after report time."
-            );
-        }
-
-        writer.WriteLine(
-            "Synthetic data; tenant and policy coverage unverified."
-        );
 
         return writer.ToString();
     }
 
-    private static void WriteHeader(TextWriter writer)
-    {
-        writer.WriteLine(
-            $"{"DEVICE",-NameWidth}  " +
-            $"{"STATUS",-StateWidth}  " +
-            $"{"LAST CHECK-IN",-CheckInWidth}  " +
-            $"{"AGE",-AgeWidth}"
-        );
-
-        writer.WriteLine(new string('-', TableWidth));
-    }
-
-    private static void WriteReasons(
+    private static void WriteConsoleReport(
         TextWriter writer,
-        ComplianceDeviceListEntry entry)
+        ComplianceInvestigationReport report)
     {
-        var settings = entry.Settings;
+        var device = report.Investigation.Device;
+        var settings = report.Investigation.MatchedSettings;
+        var deviceName = Display(device.DeviceName);
 
-        var failed = settings
-            .Where(IsFailure)
-            .OrderBy(setting => setting.SettingName)
-            .ToList();
+        writer.WriteLine("SUPPORTTOOLKIT // COMPLIANCE");
+        writer.WriteLine("===========================");
+        writer.WriteLine("DEV PROXY - SYNTHETIC DATA");
+        writer.WriteLine();
+        writer.WriteLine(deviceName);
+        writer.WriteLine(new string('-', Math.Min(deviceName.Length, 50)));
 
-        var unknown = settings
-            .Where(IsUnknown)
-            .OrderBy(setting => setting.SettingName)
-            .ToList();
+        WriteField(writer, "Compliance", Display(device.ComplianceState).ToUpperInvariant());
+        WriteField(writer, "Last check-in", FormatCheckIn(report));
+        WriteField(writer, "OS", Display(device.OperatingSystem));
+        WriteField(writer, "Graph ID", Display(device.Id));
 
-        var other = settings
-            .Where(setting =>
-                !IsFailure(setting)
-                && !IsUnknown(setting)
-                && !IsCompliant(setting))
-            .OrderBy(setting => setting.SettingName)
-            .ToList();
+        writer.WriteLine();
+        writer.WriteLine($"SETTING EVIDENCE ({settings.Count})");
+        writer.WriteLine("----------------------");
+        WriteSettings(writer, settings);
 
-        foreach (var setting in failed)
+        writer.WriteLine();
+        writer.WriteLine("ASSESSMENT");
+        writer.WriteLine("----------");
+        WriteAssessment(writer, report);
+
+        writer.WriteLine();
+        writer.WriteLine("DATA LIMITATIONS");
+        writer.WriteLine("----------------");
+        WriteLimitations(writer, report);
+
+        writer.WriteLine();
+        writer.WriteLine("Investigation only. No case action performed.");
+    }
+
+    private static void WriteNotePreview(
+        TextWriter writer,
+        ComplianceInvestigationReport report)
+    {
+        var device = report.Investigation.Device;
+
+        writer.WriteLine("COMPLIANCE INVESTIGATION - DRAFT INTERNAL NOTE");
+        writer.WriteLine("==============================================");
+        writer.WriteLine("SYNTHETIC TEST DATA - DO NOT POST TO CUSTOMER TICKETS");
+        writer.WriteLine();
+        writer.WriteLine($"Investigation time: {FormatDate(report.GeneratedAtUtc)}");
+        writer.WriteLine($"Device: {Display(device.DeviceName)}");
+        writer.WriteLine($"Device ID: {Display(device.Id)}");
+        writer.WriteLine($"Operating system: {Display(device.OperatingSystem)}");
+        writer.WriteLine($"Reported compliance: {Display(device.ComplianceState)}");
+        writer.WriteLine($"Last check-in: {FormatCheckIn(report)}");
+        writer.WriteLine();
+
+        writer.WriteLine("Setting observations:");
+        WriteSettings(writer, report.Investigation.MatchedSettings, noteMode: true);
+        writer.WriteLine();
+
+        writer.WriteLine("Assessment:");
+        WriteAssessment(writer, report, noteMode: true);
+        writer.WriteLine();
+
+        writer.WriteLine("Evidence limitations:");
+        WriteLimitations(writer, report, noteMode: true);
+        writer.WriteLine();
+
+        writer.WriteLine("No remediation, verification or case closure performed.");
+        writer.WriteLine("DRAFT ONLY - nothing submitted to Zendesk.");
+    }
+
+    private static void WriteSettings(
+        TextWriter writer,
+        IReadOnlyList<ComplianceSettingEvidence> settings,
+        bool noteMode = false)
+    {
+        if (settings.Count == 0)
         {
-            writer.WriteLine(
-                $"  FAILED:   {Display(setting.SettingName)}"
-            );
+            writer.WriteLine(noteMode
+                ? "- No matching setting states returned."
+                : "  NO MATCHING SETTING STATES");
+            writer.WriteLine(noteMode
+                ? "  This does not establish compliance."
+                : "  Not evidence that policies passed.");
+            return;
         }
 
-        foreach (var setting in unknown)
+        foreach (var setting in settings
+            .OrderBy(setting => StateOrder(setting.State))
+            .ThenBy(setting => setting.SettingName, StringComparer.OrdinalIgnoreCase))
         {
-            writer.WriteLine(
-                $"  UNKNOWN:  {Display(setting.SettingName)}"
-            );
-        }
-
-        foreach (var setting in other)
-        {
-            writer.WriteLine(
-                $"  OTHER:    {Display(setting.SettingName)} " +
-                $"({Display(setting.State)})"
-            );
-        }
-
-        if (failed.Count == 0)
-        {
-            writer.WriteLine(
-                settings.Count == 0
-                    ? "  REASON:   No matching setting evidence."
-                    : "  REASON:   No failed setting identified."
-            );
-        }
-
-        if (HasConflict(entry))
-        {
-            writer.WriteLine(
-                "  CONFLICT: Device reports compliant, " +
-                "but a setting reports noncompliant."
-            );
+            var state = FormatState(setting.State);
+            writer.WriteLine(noteMode
+                ? $"- {Display(setting.SettingName)}: {state}"
+                : $"  [{state,-12}] {Display(setting.SettingName)}");
         }
     }
 
-    private static bool ShouldShow(
-        ComplianceDeviceListEntry entry)
+    private static void WriteAssessment(
+        TextWriter writer,
+        ComplianceInvestigationReport report,
+        bool noteMode = false)
     {
-        return !IsReportedCompliant(entry.Device.ComplianceState)
-            || HasConflict(entry);
+        var failed = report.Investigation.MatchedSettings.Count(setting =>
+            string.Equals(setting.State, "nonCompliant", StringComparison.OrdinalIgnoreCase));
+
+        var prefix = noteMode ? "- " : "  ";
+
+        if (failed > 0)
+        {
+            writer.WriteLine(prefix + $"{failed} setting " +
+                (failed == 1 ? "is" : "are") + " reported noncompliant.");
+            writer.WriteLine(prefix + "These are candidate findings, not verified causes.");
+        }
+        else
+        {
+            writer.WriteLine(prefix + "No matched settings reported noncompliant.");
+            writer.WriteLine(prefix + "This does not establish overall compliance.");
+        }
+
+        if (report.TimeSinceLastCheckIn is TimeSpan age)
+        {
+            writer.WriteLine(prefix + $"Last check-in was {FormatAge(age)} ago.");
+            writer.WriteLine(prefix + "No staleness threshold has been applied.");
+        }
+        else
+        {
+            writer.WriteLine(prefix + "Check-in age cannot be determined.");
+        }
     }
 
-    private static bool HasConflict(
-        ComplianceDeviceListEntry entry)
+    private static void WriteLimitations(
+        TextWriter writer,
+        ComplianceInvestigationReport report,
+        bool noteMode = false)
     {
-        return IsReportedCompliant(entry.Device.ComplianceState)
-            && entry.Settings.Any(IsFailure);
+        var device = report.Investigation.Device;
+        var settings = report.Investigation.MatchedSettings;
+        var prefix = noteMode ? "- " : "  - ";
+
+        var unknownCount = settings.Count(setting =>
+            string.IsNullOrWhiteSpace(setting.State) ||
+            string.Equals(setting.State, "unknown", StringComparison.OrdinalIgnoreCase));
+
+        if (unknownCount > 0)
+        {
+            writer.WriteLine(prefix + $"Unknown/missing setting states: {unknownCount}.");
+        }
+
+        if (!device.LastSyncDateTime.HasValue)
+        {
+            writer.WriteLine(prefix + "Last check-in timestamp not provided.");
+        }
+        else if (device.LastSyncDateTime.Value > report.GeneratedAtUtc)
+        {
+            writer.WriteLine(prefix + "Check-in timestamp is in the future.");
+        }
+
+        if (settings.Count == 0)
+        {
+            writer.WriteLine(prefix + "No matching setting evidence; coverage unknown.");
+        }
+
+        writer.WriteLine(prefix + "Setting/device ID correlation unverified in Intune.");
+        writer.WriteLine(prefix + "Tenant context and policy coverage unverified.");
+        writer.WriteLine(prefix + "Synthetic responses; live Graph behavior unverified.");
     }
 
-    private static bool IsReportedCompliant(string? state)
+    private static void WriteField(TextWriter writer, string label, string value)
     {
-        return string.Equals(
-            state?.Trim(),
-            "compliant",
-            StringComparison.OrdinalIgnoreCase
-        );
+        writer.WriteLine($"  {label,-15} {value}");
     }
 
-    private static bool IsFailure(ComplianceSettingEvidence setting)
+    private static int StateOrder(string? state)
     {
-        return string.Equals(
-            setting.State?.Trim(),
-            "nonCompliant",
-            StringComparison.OrdinalIgnoreCase
-        );
-    }
-
-    private static bool IsUnknown(ComplianceSettingEvidence setting)
-    {
-        return string.IsNullOrWhiteSpace(setting.State)
-            || string.Equals(
-                setting.State.Trim(),
-                "unknown",
-                StringComparison.OrdinalIgnoreCase
-            );
-    }
-
-    private static bool IsCompliant(ComplianceSettingEvidence setting)
-    {
-        return string.Equals(
-            setting.State?.Trim(),
-            "compliant",
-            StringComparison.OrdinalIgnoreCase
-        );
-    }
-
-    private static int GetPriority(string? state)
-    {
-        if (string.Equals(
-            state?.Trim(),
-            "noncompliant",
-            StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(state, "nonCompliant", StringComparison.OrdinalIgnoreCase))
         {
             return 0;
         }
 
-        if (string.IsNullOrWhiteSpace(state)
-            || string.Equals(
-                state.Trim(),
-                "unknown",
-                StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(state) ||
+            string.Equals(state, "unknown", StringComparison.OrdinalIgnoreCase))
         {
             return 1;
         }
 
-        return IsReportedCompliant(state) ? 3 : 2;
+        return string.Equals(state, "compliant", StringComparison.OrdinalIgnoreCase) ? 3 : 2;
     }
 
-    private static string FormatCheckIn(DateTimeOffset? value)
+    private static string FormatState(string? state) =>
+        string.IsNullOrWhiteSpace(state) ? "NOT PROVIDED" : state.Trim().ToUpperInvariant();
+
+    private static string FormatCheckIn(ComplianceInvestigationReport report)
     {
-        return value.HasValue
-            ? value.Value.UtcDateTime.ToString(
-                "yyyy-MM-dd HH:mm",
-                CultureInfo.InvariantCulture
-            )
+        var timestamp = report.Investigation.Device.LastSyncDateTime;
+
+        if (!timestamp.HasValue)
+        {
+            return "not provided";
+        }
+
+        var date = FormatDate(timestamp);
+
+        return report.TimeSinceLastCheckIn is TimeSpan age
+            ? date + $" ({FormatAge(age)} ago)"
+            : date + " (age unavailable)";
+    }
+
+    private static string FormatDate(DateTimeOffset? value) =>
+        value.HasValue
+            ? value.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture)
             : "not provided";
-    }
 
-    private static string FormatAge(
-        DateTimeOffset? value,
-        DateTimeOffset now)
+    private static string FormatAge(TimeSpan age)
     {
-        if (!value.HasValue)
+        if (age.TotalDays >= 1)
         {
-            return "--";
+            var days = (int)Math.Floor(age.TotalDays);
+            return days == 1 ? "1 day" : $"{days} days";
         }
 
-        if (value.Value > now)
+        if (age.TotalHours >= 1)
         {
-            return "FUTURE";
+            var hours = (int)Math.Floor(age.TotalHours);
+            return hours == 1 ? "1 hour" : $"{hours} hours";
         }
 
-        var elapsed = now - value.Value;
-
-        if (elapsed.TotalDays >= 1)
-        {
-            return $"{(int)Math.Floor(elapsed.TotalDays)}d";
-        }
-
-        if (elapsed.TotalHours >= 1)
-        {
-            return $"{(int)Math.Floor(elapsed.TotalHours)}h";
-        }
-
-        return "<1h";
+        return "less than 1 hour";
     }
 
-    private static string Fit(string value, int width)
-    {
-        return value.Length <= width
-            ? value
-            : value[..(width - 3)] + "...";
-    }
-
-    private static string Display(string? value)
-    {
-        return string.IsNullOrWhiteSpace(value)
-            ? "not provided"
-            : value.Trim();
-    }
+    private static string Display(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "not provided" : value.Trim();
 }
