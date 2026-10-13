@@ -1,6 +1,7 @@
 
 using System.Net;
 using SupportToolkit.Core.Modules;
+using SupportToolkit.Modules.Compliance.Reporting;
 using SupportToolkit.Modules.Compliance.Services;
 using SupportToolkit.Providers.MicrosoftGraph.ManagedDevices;
 using SupportToolkit.Providers.MicrosoftGraph.ComplianceSettings;
@@ -8,10 +9,10 @@ using SupportToolkit.Providers.MicrosoftGraph.ComplianceSettings;
 namespace SupportToolkit.Modules.Compliance;
 
 /// <summary>
-/// Dev Proxy-only compliance investigation.
+/// Dev Proxy-only compliance investigation and inventory.
 ///
-/// No real Graph authentication, production connections,
-/// remediation or ticket writes are supported.
+/// No production Graph authentication, remediation,
+/// or ticket writes are supported.
 /// </summary>
 public sealed class ComplianceModule : ISupportToolkitModule
 {
@@ -20,7 +21,7 @@ public sealed class ComplianceModule : ISupportToolkitModule
     public string Command => ModuleCommand;
 
     public string Description =>
-        "Investigate synthetic Intune compliance evidence.";
+        "Review synthetic Intune compliance evidence.";
 
     public async Task<int> RunAsync(string[] args)
     {
@@ -31,19 +32,40 @@ public sealed class ComplianceModule : ISupportToolkitModule
             return 0;
         }
 
-        if (args.Length != 2
-            || !string.Equals(
+        var listCommand =
+            args.Length == 1
+            && string.Equals(
+                args[0],
+                "list",
+                StringComparison.OrdinalIgnoreCase
+            );
+
+        var investigateCommand =
+            args.Length is 2 or 3
+            && string.Equals(
                 args[0],
                 "investigate",
-                StringComparison.OrdinalIgnoreCase))
+                StringComparison.OrdinalIgnoreCase
+            );
+
+        var notePreview =
+            args.Length == 3
+            && string.Equals(
+                args[2],
+                "--note-preview",
+                StringComparison.OrdinalIgnoreCase
+            );
+
+        if (!listCommand
+            && (!investigateCommand
+                || (args.Length == 3 && !notePreview)))
         {
             PrintUsage();
             return 1;
         }
 
-        if (!args[1].StartsWith(
-            "STK-SYNTHETIC-",
-            StringComparison.OrdinalIgnoreCase))
+        if (investigateCommand
+            && !IsSyntheticName(args[1]))
         {
             throw new ArgumentException(
                 "This development command accepts " +
@@ -74,24 +96,26 @@ public sealed class ComplianceModule : ISupportToolkitModule
             httpClient
         );
 
+        if (listCommand)
+        {
+            return await RunListAsync(
+                deviceProvider,
+                settingProvider
+            );
+        }
+
         var workflow = new ComplianceEvidenceInvestigationService(
             new ComplianceInvestigationService(deviceProvider),
             settingProvider
         );
 
-        Console.WriteLine();
-        Console.WriteLine("Compliance investigation (Dev Proxy)");
-        Console.WriteLine(
-            "Source: synthetic Microsoft Graph responses"
-        );
-        Console.WriteLine();
-
-        var result = await workflow.InvestigateAsync(
+        var investigation = await workflow.InvestigateAsync(
             args[1]
         );
 
-        if (result is null)
+        if (investigation is null)
         {
+            Console.WriteLine();
             Console.WriteLine(
                 "Device not found in simulated inventory."
             );
@@ -101,93 +125,91 @@ public sealed class ComplianceModule : ISupportToolkitModule
             return 2;
         }
 
-        var device = result.Device;
+        ValidateSyntheticDevice(investigation.Device);
 
-        if (device.DeviceName is null
-            || !device.DeviceName.StartsWith(
-                "STK-SYNTHETIC-",
-                StringComparison.Ordinal))
-        {
-            throw new InvalidDataException(
-                "Expected synthetic device data."
-            );
-        }
+        var report = new ComplianceInvestigationReportFactory()
+            .Create(investigation);
 
-        Console.WriteLine(
-            $"Device:           {device.DeviceName}"
-        );
-        Console.WriteLine(
-            $"Graph device ID:  {device.Id}"
-        );
-        Console.WriteLine(
-            $"Operating system: {device.OperatingSystem ?? "not provided"}"
-        );
-        Console.WriteLine(
-            $"Compliance state: {device.ComplianceState ?? "not provided"}"
-        );
-        Console.WriteLine(
-            $"Last check-in:    {FormatDate(device.LastSyncDateTime)}"
-        );
+        var reporter = new ComplianceInvestigationReporter();
 
         Console.WriteLine();
-        Console.WriteLine("Candidate setting evidence:");
+        Console.Write(reporter.Render(report, notePreview));
+        Console.WriteLine();
 
-        if (result.MatchedSettings.Count == 0)
+        if (!notePreview)
         {
             Console.WriteLine(
-                "  No setting states matched the device ID."
-            );
-            Console.WriteLine(
-                "  Compliance cause remains unknown."
+                "PASS: synthetic investigation report generated."
             );
         }
-        else
-        {
-            foreach (var setting in result.MatchedSettings)
-            {
-                Console.WriteLine(
-                    $"  [{setting.State ?? "unknown"}] " +
-                    setting.SettingName
-                );
-            }
-        }
-
-        Console.WriteLine();
-        Console.WriteLine(
-            "Evidence correlation: SYNTHETIC / UNVERIFIED"
-        );
-        Console.WriteLine(
-            "Device-ID relationships require live validation."
-        );
-        Console.WriteLine(
-            "No remediation or case-status decision was made."
-        );
-        Console.WriteLine();
-        Console.WriteLine(
-            "PASS: synthetic evidence investigation completed."
-        );
 
         return 0;
     }
 
-    private static string FormatDate(DateTimeOffset? value)
+    private static async Task<int> RunListAsync(
+        IGraphManagedDeviceProvider deviceProvider,
+        IGraphComplianceSettingProvider settingProvider)
     {
-        return value.HasValue
-            ? value.Value.UtcDateTime.ToString(
-                "yyyy-MM-dd HH:mm:ss 'UTC'"
-            )
-            : "not provided";
+        var service = new ComplianceDeviceListService(
+            deviceProvider,
+            settingProvider
+        );
+
+        var result = await service.GetAsync();
+
+        // Reject unexpected data before displaying it.
+        foreach (var entry in result.Entries)
+        {
+            ValidateSyntheticDevice(entry.Device);
+        }
+
+        var reporter = new ComplianceDeviceListReporter();
+
+        Console.WriteLine();
+        Console.Write(reporter.Render(result));
+        Console.WriteLine();
+
+        return 0;
+    }
+
+    private static void ValidateSyntheticDevice(
+        ManagedDevice device)
+    {
+        if (!IsSyntheticName(device.DeviceName))
+        {
+            throw new InvalidDataException(
+                "Expected synthetic Dev Proxy device data."
+            );
+        }
+    }
+
+    private static bool IsSyntheticName(string? name)
+    {
+        return !string.IsNullOrWhiteSpace(name)
+            && name.StartsWith(
+                "STK-SYNTHETIC-",
+                StringComparison.OrdinalIgnoreCase
+            );
     }
 
     private static void PrintUsage()
     {
-        Console.WriteLine(
-            "Compliance (development only)"
-        );
+        Console.WriteLine("Compliance (development only)");
         Console.WriteLine();
 
+        Console.WriteLine("Device inventory:");
+        Console.WriteLine(
+            "  SupportToolkit compliance list"
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine("Device investigation:");
         Console.WriteLine(
             "  SupportToolkit compliance investigate <synthetic-device-name>"
+        );
+        Console.WriteLine(
+            "  SupportToolkit compliance investigate <synthetic-device-name> --note-preview"
         );
 
         Console.WriteLine();
@@ -195,7 +217,7 @@ public sealed class ComplianceModule : ISupportToolkitModule
             "Requires local Dev Proxy on 127.0.0.1:8000."
         );
         Console.WriteLine(
-            "No live Microsoft Graph authentication."
+            "No live Graph authentication or ticket writes."
         );
     }
 }
