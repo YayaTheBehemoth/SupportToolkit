@@ -1,4 +1,5 @@
-﻿using SupportToolkit.Cli.Commands;
+﻿
+using SupportToolkit.Cli.Commands;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.ErrorHandling;
 using SupportToolkit.Core.Modules;
@@ -7,6 +8,7 @@ using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Modules.BackupHealth;
 using SupportToolkit.Modules.BackupHealth.Services;
+using SupportToolkit.Modules.Compliance;
 using SupportToolkit.Ui.Interactive;
 
 var configurationStore =
@@ -46,7 +48,9 @@ ISupportToolkitModule[] modules =
 
     new BackupAggregatorModule(
         backupAggregatorWorkflow
-    )
+    ),
+
+    new ComplianceModule()
 ];
 
 var interactiveShell =
