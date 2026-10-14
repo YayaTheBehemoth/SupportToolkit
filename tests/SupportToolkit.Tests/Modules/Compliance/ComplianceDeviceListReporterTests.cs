@@ -64,6 +64,7 @@ public class ComplianceDeviceListReporterTests
         Assert.Contains("STALE-01", output);
         Assert.Contains("UNKNOWN-03", output);
         Assert.DoesNotContain("HEALTHY-02", output);
+
         Assert.Contains(
             "All 3 device records accounted for",
             output
@@ -119,7 +120,12 @@ public class ComplianceDeviceListReporterTests
 
         Assert.Contains("SHOWN: 1", output);
         Assert.Contains("SUPPRESSED: 0", output);
-        Assert.Contains("STATUS/SETTING CONFLICTS: 1", output);
+
+        Assert.Contains(
+            "STATUS/SETTING CONFLICTS: 1",
+            output
+        );
+
         Assert.Contains("HEALTHY-02", output);
         Assert.Contains("CONFLICT:", output);
     }
@@ -175,8 +181,150 @@ public class ComplianceDeviceListReporterTests
         var output = Render();
 
         Assert.Contains("DEVICES: 0", output);
-        Assert.Contains("No managed devices returned", output);
+
+        Assert.Contains(
+            "No managed devices returned",
+            output
+        );
+
         Assert.Contains("SUPPRESSED: 0", output);
+    }
+
+    [Fact]
+    public void Render_AllMatchedSettingsAreAccountedFor()
+    {
+        var output = Render(
+            Entry(
+                "STALE-01",
+                "noncompliant",
+                null,
+                Setting("Encryption", "nonCompliant"),
+                Setting("OS version", "unknown")
+            )
+        );
+
+        Assert.Contains(
+            "Retrieved: 2   Matched: 2   Unmatched: 0",
+            output
+        );
+
+        Assert.DoesNotContain(
+            "WARNING: Some setting states",
+            output
+        );
+    }
+
+    [Fact]
+    public void Render_UnmatchedStatesProduceCoverageWarning()
+    {
+        var result = new ComplianceDeviceListResult(
+        [
+            Entry(
+                "STALE-01",
+                "noncompliant",
+                null,
+                Setting("Encryption", "nonCompliant")
+            )
+        ])
+        {
+            UnmatchedSettings =
+            [
+                new ComplianceSettingEvidence(
+                    "summary-002",
+                    "OS version",
+                    "device-not-in-inventory",
+                    "OTHER-DEVICE",
+                    "nonCompliant"
+                ),
+                new ComplianceSettingEvidence(
+                    "summary-003",
+                    "Unknown association",
+                    null,
+                    null,
+                    "unknown"
+                )
+            ]
+        };
+
+        var output = new ComplianceDeviceListReporter()
+            .Render(
+                result,
+                new FixedTimeProvider(ReportTime)
+            );
+
+        Assert.Contains(
+            "Retrieved: 3   Matched: 1   Unmatched: 2",
+            output
+        );
+
+        Assert.Contains(
+            "WARNING: Some setting states",
+            output
+        );
+
+        Assert.Contains(
+            "Missing device ID: 1",
+            output
+        );
+
+        Assert.Contains(
+            "Device ID absent from inventory: 1",
+            output
+        );
+
+        Assert.Contains(
+            "Unmatched states were not assigned",
+            output
+        );
+
+        Assert.Contains(
+            "does not establish device removal or recovery",
+            output
+        );
+
+        // Never invent an inventory device from an orphaned
+        // setting-state record.
+        Assert.DoesNotContain(
+            "OTHER-DEVICE",
+            output
+        );
+    }
+
+    [Fact]
+    public void Render_EmptyInventoryCanStillHaveUnmatchedEvidence()
+    {
+        var result = new ComplianceDeviceListResult([])
+        {
+            UnmatchedSettings =
+            [
+                new ComplianceSettingEvidence(
+                    "summary-001",
+                    "Encryption",
+                    "orphan-device",
+                    null,
+                    "nonCompliant"
+                )
+            ]
+        };
+
+        var output = new ComplianceDeviceListReporter()
+            .Render(
+                result,
+                new FixedTimeProvider(ReportTime)
+            );
+
+        Assert.Contains("DEVICES: 0", output);
+        Assert.Contains("No managed devices returned", output);
+
+        Assert.Contains(
+            "Retrieved: 1   Matched: 0   Unmatched: 1",
+            output
+        );
+
+        Assert.Contains(
+            "Device ID absent from inventory: 1",
+            output
+        );
     }
 
     private static string Render(

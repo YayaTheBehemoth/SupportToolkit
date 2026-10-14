@@ -1,3 +1,4 @@
+
 using System.Net;
 using System.Text.Json;
 using SupportToolkit.Core.ErrorHandling;
@@ -7,90 +8,80 @@ namespace SupportToolkit.Tests.Core.ErrorHandling;
 public class ConsoleErrorFormatterTests
 {
     [Fact]
-    public void Format_Unauthorized_ReturnsAuthenticationMessage()
+    public void Format_AcronisUnauthorized_PreservesAuthenticationMessage()
     {
-        var exception = new HttpRequestException(
-            "Unauthorized",
-            null,
-            HttpStatusCode.Unauthorized
+        var message = FormatHttp(
+            HttpStatusCode.Unauthorized,
+            HttpErrorContext.Acronis
         );
-
-        var message =
-            ConsoleErrorFormatter.Format(exception);
 
         Assert.Contains(
-            "authentication failed",
-            message,
-            StringComparison.OrdinalIgnoreCase
+            "Acronis authentication failed",
+            message
         );
-    }
-
-    [Fact]
-    public void Format_Forbidden_ReturnsPermissionMessage()
-    {
-        var exception = new HttpRequestException(
-            "Forbidden",
-            null,
-            HttpStatusCode.Forbidden
-        );
-
-        var message =
-            ConsoleErrorFormatter.Format(exception);
 
         Assert.Contains(
-            "required permissions",
-            message,
-            StringComparison.OrdinalIgnoreCase
-        );
-    }
-
-    [Fact]
-    public void Format_RateLimited_ReturnsRateLimitMessage()
-    {
-        var exception = new HttpRequestException(
-            "Too many requests",
-            null,
-            HttpStatusCode.TooManyRequests
-        );
-
-        var message =
-            ConsoleErrorFormatter.Format(exception);
-
-        Assert.Contains(
-            "rate limit",
-            message,
-            StringComparison.OrdinalIgnoreCase
-        );
-    }
-
-    [Fact]
-    public void Format_ServerError_ReturnsServerErrorMessage()
-    {
-        var exception = new HttpRequestException(
-            "Server error",
-            null,
-            HttpStatusCode.InternalServerError
-        );
-
-        var message =
-            ConsoleErrorFormatter.Format(exception);
-
-        Assert.Contains(
-            "HTTP 500",
+            "API client ID and secret",
             message
         );
     }
 
     [Fact]
-    public void Format_NetworkFailure_ReturnsConnectivityMessage()
+    public void Format_AcronisForbidden_PreservesPermissionMessage()
     {
-        var exception =
-            new HttpRequestException(
-                "Connection failed"
-            );
+        var message = FormatHttp(
+            HttpStatusCode.Forbidden,
+            HttpErrorContext.Acronis
+        );
 
-        var message =
-            ConsoleErrorFormatter.Format(exception);
+        Assert.Contains(
+            "Acronis rejected the request",
+            message
+        );
+
+        Assert.Contains(
+            "required permissions",
+            message
+        );
+    }
+
+    [Fact]
+    public void Format_AcronisRateLimited_PreservesRateLimitMessage()
+    {
+        var message = FormatHttp(
+            HttpStatusCode.TooManyRequests,
+            HttpErrorContext.Acronis
+        );
+
+        Assert.Contains(
+            "Acronis rate limit reached",
+            message
+        );
+    }
+
+    [Fact]
+    public void Format_AcronisServerError_PreservesStatusCode()
+    {
+        var message = FormatHttp(
+            HttpStatusCode.InternalServerError,
+            HttpErrorContext.Acronis
+        );
+
+        Assert.Contains(
+            "Acronis returned a server error",
+            message
+        );
+
+        Assert.Contains("HTTP 500", message);
+    }
+
+    [Fact]
+    public void Format_AcronisNetworkFailure_PreservesMessage()
+    {
+        var message = ConsoleErrorFormatter.Format(
+            new HttpRequestException("Connection failed"),
+            HttpErrorContext.Acronis
+        );
 
         Assert.Contains(
             "Could not reach Acronis",
@@ -99,37 +90,228 @@ public class ConsoleErrorFormatterTests
     }
 
     [Fact]
-    public void Format_InvalidOperation_PreservesUsefulMessage()
+    public void Format_ComplianceNetworkFailure_PointsToDevProxy()
     {
-        var exception =
-            new InvalidOperationException(
-                "Required environment variable " +
-                "'ACRONIS_CLIENT_ID' is not configured."
-            );
+        var message = ConsoleErrorFormatter.Format(
+            new HttpRequestException("Connection failed"),
+            HttpErrorContext.ComplianceDevProxy
+        );
 
-        var message =
-            ConsoleErrorFormatter.Format(exception);
+        Assert.Contains("Compliance request", message);
+        Assert.Contains("127.0.0.1:8000", message);
+        Assert.Contains("Graph mocks", message);
 
-        Assert.Equal(
-            exception.Message,
+        Assert.DoesNotContain("Acronis", message);
+    }
+
+    [Fact]
+    public void Format_ComplianceUnauthorized_DoesNotBlameAcronis()
+    {
+        var message = FormatHttp(
+            HttpStatusCode.Unauthorized,
+            HttpErrorContext.ComplianceDevProxy
+        );
+
+        Assert.Contains("HTTP 401", message);
+        Assert.Contains("Dev Proxy", message);
+        Assert.Contains("Graph mock", message);
+
+        Assert.DoesNotContain("Acronis", message);
+        Assert.DoesNotContain("client ID and secret", message);
+    }
+
+    [Fact]
+    public void Format_ComplianceForbidden_DoesNotAssertLiveGraphPermissions()
+    {
+        var message = FormatHttp(
+            HttpStatusCode.Forbidden,
+            HttpErrorContext.ComplianceDevProxy
+        );
+
+        Assert.Contains("HTTP 403", message);
+        Assert.Contains("not been validated", message);
+
+        Assert.DoesNotContain("Acronis", message);
+    }
+
+    [Fact]
+    public void Format_ComplianceRateLimited_PreservesStatusCode()
+    {
+        var message = FormatHttp(
+            HttpStatusCode.TooManyRequests,
+            HttpErrorContext.ComplianceDevProxy
+        );
+
+        Assert.Contains("HTTP 429", message);
+        Assert.Contains("Dev Proxy", message);
+    }
+
+    [Fact]
+    public void Format_ComplianceServerError_PreservesStatusCode()
+    {
+        var message = FormatHttp(
+            HttpStatusCode.InternalServerError,
+            HttpErrorContext.ComplianceDevProxy
+        );
+
+        Assert.Contains("HTTP 500", message);
+        Assert.Contains("Dev Proxy logs", message);
+    }
+
+    [Fact]
+    public void Format_ComplianceOtherStatus_PreservesStatusCode()
+    {
+        var message = FormatHttp(
+            HttpStatusCode.NotFound,
+            HttpErrorContext.ComplianceDevProxy
+        );
+
+        Assert.Contains("HTTP 404", message);
+        Assert.DoesNotContain("Acronis", message);
+    }
+
+    [Fact]
+    public void Format_GenericNetworkFailure_DoesNotNameProvider()
+    {
+        var message = ConsoleErrorFormatter.Format(
+            new HttpRequestException("Connection failed")
+        );
+
+        Assert.Contains(
+            "HTTP request failed",
             message
         );
+
+        Assert.DoesNotContain("Acronis", message);
+        Assert.DoesNotContain("Zendesk", message);
+    }
+
+    [Fact]
+    public void Format_GenericUnauthorized_DoesNotNameProvider()
+    {
+        var message = FormatHttp(
+            HttpStatusCode.Unauthorized,
+            HttpErrorContext.Generic
+        );
+
+        Assert.Contains("401", message);
+
+        Assert.DoesNotContain("Acronis", message);
+        Assert.DoesNotContain("Zendesk", message);
+    }
+
+    [Fact]
+    public void Format_GenericForbidden_ProvidesPermissionMessage()
+    {
+        var message = FormatHttp(
+            HttpStatusCode.Forbidden,
+            HttpErrorContext.Generic
+        );
+
+        Assert.Contains("403", message);
+        Assert.Contains("permissions", message);
+    }
+
+    [Fact]
+    public void Format_GenericServerError_PreservesStatusCode()
+    {
+        var message = FormatHttp(
+            HttpStatusCode.InternalServerError,
+            HttpErrorContext.Generic
+        );
+
+        Assert.Contains("HTTP 500", message);
+        Assert.DoesNotContain("Acronis", message);
+    }
+
+    [Fact]
+    public void Format_InvalidData_PreservesCollectionError()
+    {
+        var exception = new InvalidDataException(
+            "Duplicate managed-device ID returned. " +
+            "Compliance inventory review aborted."
+        );
+
+        var message = ConsoleErrorFormatter.Format(
+            exception,
+            HttpErrorContext.ComplianceDevProxy
+        );
+
+        Assert.Equal(exception.Message, message);
+    }
+
+    [Fact]
+    public void Format_InvalidOperation_PreservesUsefulMessage()
+    {
+        var exception = new InvalidOperationException(
+            "Required environment variable " +
+            "'ACRONIS_CLIENT_ID' is not configured."
+        );
+
+        var message = ConsoleErrorFormatter.Format(
+            exception
+        );
+
+        Assert.Equal(exception.Message, message);
     }
 
     [Fact]
     public void Format_JsonException_ReturnsContractMessage()
     {
-        var exception =
-            new JsonException(
-                "Bad JSON"
-            );
-
-        var message =
-            ConsoleErrorFormatter.Format(exception);
+        var message = ConsoleErrorFormatter.Format(
+            new JsonException("Bad JSON")
+        );
 
         Assert.Contains(
             "expected API contract",
             message
+        );
+    }
+
+    [Fact]
+    public void Format_TaskCanceled_ReturnsTimeoutMessage()
+    {
+        var message = ConsoleErrorFormatter.Format(
+            new TaskCanceledException("Request canceled")
+        );
+
+        Assert.Contains(
+            "timed out or was canceled",
+            message
+        );
+    }
+
+    [Fact]
+    public void Format_UnexpectedException_DoesNotExposeDetails()
+    {
+        var message = ConsoleErrorFormatter.Format(
+            new Exception("Sensitive implementation detail")
+        );
+
+        Assert.Contains(
+            "unexpected error",
+            message
+        );
+
+        Assert.DoesNotContain(
+            "Sensitive implementation detail",
+            message
+        );
+    }
+
+    private static string FormatHttp(
+        HttpStatusCode status,
+        HttpErrorContext context)
+    {
+        var exception = new HttpRequestException(
+            "Synthetic HTTP failure",
+            null,
+            status
+        );
+
+        return ConsoleErrorFormatter.Format(
+            exception,
+            context
         );
     }
 }

@@ -10,6 +10,8 @@ namespace SupportToolkit.Modules.Compliance.Reporting;
 ///
 /// Suppresses reported-compliant devices unless their
 /// matched setting evidence contradicts that status.
+///
+/// Preserves review-level setting evidence diagnostics.
 /// </summary>
 public sealed class ComplianceDeviceListReporter
 {
@@ -34,7 +36,8 @@ public sealed class ComplianceDeviceListReporter
 
         var visible = entries
             .Where(ShouldShow)
-            .OrderBy(entry => GetPriority(entry.Device.ComplianceState))
+            .OrderBy(entry =>
+                GetPriority(entry.Device.ComplianceState))
             .ThenBy(
                 entry => entry.Device.DeviceName,
                 StringComparer.OrdinalIgnoreCase
@@ -94,7 +97,6 @@ public sealed class ComplianceDeviceListReporter
         }
 
         writer.WriteLine();
-
         WriteHeader(writer);
 
         var truncated = false;
@@ -108,8 +110,8 @@ public sealed class ComplianceDeviceListReporter
             var state = Display(device.ComplianceState)
                 .ToUpperInvariant();
 
-            if (name.Length > NameWidth ||
-                state.Length > StateWidth)
+            if (name.Length > NameWidth
+                || state.Length > StateWidth)
             {
                 truncated = true;
             }
@@ -127,7 +129,6 @@ public sealed class ComplianceDeviceListReporter
             );
 
             WriteReasons(writer, entry);
-
             writer.WriteLine();
         }
 
@@ -138,7 +139,8 @@ public sealed class ComplianceDeviceListReporter
             writer.WriteLine(
                 entries.Count == 0
                     ? "No managed devices returned."
-                    : "No device exceptions or evidence conflicts to display."
+                    : "No device exceptions or evidence " +
+                      "conflicts to display."
             );
         }
 
@@ -156,8 +158,13 @@ public sealed class ComplianceDeviceListReporter
 
         writer.WriteLine();
 
+        WriteEvidenceCoverage(writer, result);
+
+        writer.WriteLine();
+
         writer.WriteLine(
-            "FAILED settings are candidate findings, not verified causes."
+            "FAILED settings are candidate findings, " +
+            "not verified causes."
         );
 
         writer.WriteLine(
@@ -187,6 +194,64 @@ public sealed class ComplianceDeviceListReporter
         );
 
         return writer.ToString();
+    }
+
+    private static void WriteEvidenceCoverage(
+        TextWriter writer,
+        ComplianceDeviceListResult result)
+    {
+        var unmatched = result.UnmatchedSettings;
+
+        var missingIds = unmatched.Count(setting =>
+            string.IsNullOrWhiteSpace(setting.DeviceId)
+        );
+
+        var unknownIds = unmatched.Count - missingIds;
+
+        writer.WriteLine("SETTING EVIDENCE COVERAGE");
+        writer.WriteLine("-------------------------");
+
+        writer.WriteLine(
+            $"Retrieved: {result.RetrievedSettingCount}   " +
+            $"Matched: {result.MatchedSettingCount}   " +
+            $"Unmatched: {unmatched.Count}"
+        );
+
+        if (unmatched.Count == 0)
+        {
+            return;
+        }
+
+        writer.WriteLine();
+
+        writer.WriteLine(
+            "WARNING: Some setting states could not " +
+            "be correlated to inventory devices."
+        );
+
+        if (missingIds > 0)
+        {
+            writer.WriteLine(
+                $"  Missing device ID: {missingIds}"
+            );
+        }
+
+        if (unknownIds > 0)
+        {
+            writer.WriteLine(
+                $"  Device ID absent from inventory: {unknownIds}"
+            );
+        }
+
+        writer.WriteLine(
+            "  Unmatched states were not assigned " +
+            "to any device."
+        );
+
+        writer.WriteLine(
+            "  This does not establish device " +
+            "removal or recovery."
+        );
     }
 
     private static void WriteHeader(TextWriter writer)
@@ -268,14 +333,16 @@ public sealed class ComplianceDeviceListReporter
     private static bool ShouldShow(
         ComplianceDeviceListEntry entry)
     {
-        return !IsReportedCompliant(entry.Device.ComplianceState)
+        return !IsReportedCompliant(
+            entry.Device.ComplianceState)
             || HasConflict(entry);
     }
 
     private static bool HasConflict(
         ComplianceDeviceListEntry entry)
     {
-        return IsReportedCompliant(entry.Device.ComplianceState)
+        return IsReportedCompliant(
+            entry.Device.ComplianceState)
             && entry.Settings.Any(IsFailure);
     }
 
@@ -288,7 +355,8 @@ public sealed class ComplianceDeviceListReporter
         );
     }
 
-    private static bool IsFailure(ComplianceSettingEvidence setting)
+    private static bool IsFailure(
+        ComplianceSettingEvidence setting)
     {
         return string.Equals(
             setting.State?.Trim(),
@@ -297,7 +365,8 @@ public sealed class ComplianceDeviceListReporter
         );
     }
 
-    private static bool IsUnknown(ComplianceSettingEvidence setting)
+    private static bool IsUnknown(
+        ComplianceSettingEvidence setting)
     {
         return string.IsNullOrWhiteSpace(setting.State)
             || string.Equals(
@@ -307,7 +376,8 @@ public sealed class ComplianceDeviceListReporter
             );
     }
 
-    private static bool IsCompliant(ComplianceSettingEvidence setting)
+    private static bool IsCompliant(
+        ComplianceSettingEvidence setting)
     {
         return string.Equals(
             setting.State?.Trim(),
