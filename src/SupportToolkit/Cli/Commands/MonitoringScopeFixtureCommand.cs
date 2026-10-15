@@ -6,10 +6,10 @@ using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 namespace SupportToolkit.Cli.Commands;
 
 /// <summary>
-/// Fixture-only investigation report for normalized
-/// SMARTsubscription monitoring entitlement evidence.
+/// Fixture-only investigation report for monitoring entitlement
+/// and hypothetical Acronis tenant selection.
 ///
-/// No external provider access or operational scope filtering.
+/// No external provider access, production filtering or ticketing.
 /// </summary>
 public sealed class MonitoringScopeFixtureCommand
 {
@@ -101,12 +101,8 @@ public sealed class MonitoringScopeFixtureCommand
         );
 
         output.WriteLine();
-        output.WriteLine(
-            "EVIDENCE SUMMARY"
-        );
-        output.WriteLine(
-            "----------------"
-        );
+        output.WriteLine("EVIDENCE SUMMARY");
+        output.WriteLine("----------------");
 
         output.WriteLine(
             $"Subscription headers: {fixture.Headers.Count}"
@@ -135,12 +131,8 @@ public sealed class MonitoringScopeFixtureCommand
         );
 
         output.WriteLine();
-        output.WriteLine(
-            "ACTIVE MONITORING CANDIDATES"
-        );
-        output.WriteLine(
-            "----------------------------"
-        );
+        output.WriteLine("ACTIVE MONITORING CANDIDATES");
+        output.WriteLine("----------------------------");
 
         WriteObservations(
             output,
@@ -148,12 +140,8 @@ public sealed class MonitoringScopeFixtureCommand
         );
 
         output.WriteLine();
-        output.WriteLine(
-            "REQUIRES INVESTIGATION"
-        );
-        output.WriteLine(
-            "----------------------"
-        );
+        output.WriteLine("REQUIRES INVESTIGATION");
+        output.WriteLine("----------------------");
 
         WriteObservations(
             output,
@@ -161,18 +149,12 @@ public sealed class MonitoringScopeFixtureCommand
         );
 
         output.WriteLine();
-        output.WriteLine(
-            "HEADERS WITHOUT MONITORING EVIDENCE"
-        );
-        output.WriteLine(
-            "-----------------------------------"
-        );
+        output.WriteLine("HEADERS WITHOUT MONITORING EVIDENCE");
+        output.WriteLine("-----------------------------------");
 
         if (headersWithoutMonitoringLine.Count == 0)
         {
-            output.WriteLine(
-                "  None."
-            );
+            output.WriteLine("  None.");
         }
         else
         {
@@ -189,13 +171,102 @@ public sealed class MonitoringScopeFixtureCommand
             }
         }
 
+        /*
+         * Tenant-selection simulation:
+         * the identities below are entirely synthetic.
+         *
+         * This does not modify any BackupAggregator inventory
+         * collection or production tenant-selection logic.
+         */
+        var acronisFixture =
+            MonitoringTenantSelectionFixtureFactory.Create();
+
+        var selection =
+            new MonitoringTenantSelector()
+                .Select(
+                    acronisFixture.Tenants,
+                    observations,
+                    acronisFixture.Identities
+                );
+
         output.WriteLine();
         output.WriteLine(
-            "IMPORTANT"
+            "TENANT SELECTION - SYNTHETIC SIMULATION"
         );
         output.WriteLine(
-            "---------"
+            "---------------------------------------"
         );
+
+        output.WriteLine(
+            $"Acronis customer tenants: {selection.Tenants.Count}"
+        );
+
+        output.WriteLine(
+            $"Inventory candidates: {selection.InventoryCandidates.Count}"
+        );
+
+        output.WriteLine(
+            $"Needs review: {selection.NeedsReviewCount}"
+        );
+
+        output.WriteLine(
+            $"Unclassified: {selection.UnclassifiedCount}"
+        );
+
+        output.WriteLine(
+            $"Unmatched BC observations: {selection.UnmatchedEvidence.Count}"
+        );
+
+        output.WriteLine();
+        output.WriteLine("CANDIDATES FOR INVENTORY");
+        output.WriteLine("------------------------");
+
+        foreach (var tenant in selection.InventoryCandidates)
+        {
+            output.WriteLine(
+                $"  {tenant.Name}"
+            );
+        }
+
+        output.WriteLine();
+        output.WriteLine("TENANTS REQUIRING SCOPE RESOLUTION");
+        output.WriteLine("----------------------------------");
+
+        foreach (var finding in selection.Tenants
+            .Where(
+                finding =>
+                    finding.Status
+                    != MonitoringTenantSelectionStatus.CandidateForInventory
+            ))
+        {
+            output.WriteLine(
+                $"  {finding.Tenant.Name} | " +
+                $"{finding.Status} | {finding.Reason}"
+            );
+        }
+
+        if (selection.UnmatchedEvidence.Count > 0)
+        {
+            output.WriteLine();
+            output.WriteLine(
+                "BC OBSERVATIONS WITHOUT A MATCHED ACRONIS TENANT"
+            );
+            output.WriteLine(
+                "-----------------------------------------------"
+            );
+
+            foreach (var observation in selection.UnmatchedEvidence)
+            {
+                output.WriteLine(
+                    $"  {observation.SubscriptionNumber} | " +
+                    $"{observation.Reason}"
+                );
+            }
+        }
+
+        output.WriteLine();
+        output.WriteLine("IMPORTANT");
+        output.WriteLine("---------");
 
         output.WriteLine(
             "Active candidates are not confirmed monitoring assignments."
@@ -206,7 +277,11 @@ public sealed class MonitoringScopeFixtureCommand
         );
 
         output.WriteLine(
-            "No BC-to-Acronis identity reconciliation has been performed."
+            "BC-to-Acronis relationships in this simulation are fictional."
+        );
+
+        output.WriteLine(
+            "No production BC-to-Acronis identity reconciliation exists."
         );
 
         output.WriteLine(
@@ -224,10 +299,7 @@ public sealed class MonitoringScopeFixtureCommand
     {
         if (observations.Count == 0)
         {
-            output.WriteLine(
-                "  None."
-            );
-
+            output.WriteLine("  None.");
             return;
         }
 
@@ -252,6 +324,7 @@ public sealed class MonitoringScopeFixtureCommand
                     : observation.CustomerNumber;
 
             output.WriteLine();
+
             output.WriteLine(
                 $"  Subscription: {subscription}"
             );

@@ -154,7 +154,12 @@ public class MonitoringScopeFixtureCommandTests
         );
 
         Assert.Contains(
-            "No BC-to-Acronis identity reconciliation has been performed.",
+            "BC-to-Acronis relationships in this simulation are fictional.",
+            report
+        );
+
+        Assert.Contains(
+            "No production BC-to-Acronis identity reconciliation exists.",
             report
         );
     }
