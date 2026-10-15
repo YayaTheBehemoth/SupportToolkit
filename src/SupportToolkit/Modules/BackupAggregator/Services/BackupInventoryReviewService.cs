@@ -1,7 +1,9 @@
+
 using System.Diagnostics;
 using System.Net;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Modules.BackupAggregator.Models;
+using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Providers.Acronis.Devices;
 using SupportToolkit.Providers.Acronis.Devices.Dtos;
 using SupportToolkit.Providers.Acronis.Microsoft365;
@@ -86,9 +88,9 @@ public sealed class BackupInventoryReviewService
             new AggregatedBackupReport
             {
                 Tenants =
-                    [
-                        result.Report
-                    ]
+                [
+                    result.Report
+                ]
             };
 
         _logger?.Info(
@@ -101,12 +103,14 @@ public sealed class BackupInventoryReviewService
         return report;
     }
 
+    /// <summary>
+    /// Preserves the existing unscoped all-tenant behavior.
+    ///
+    /// Monitoring entitlement is not applied to this operation.
+    /// </summary>
     public async Task<AggregatedBackupReport> ReviewAllTenantsAsync(
         CancellationToken cancellationToken = default)
     {
-        var stopwatch =
-            Stopwatch.StartNew();
-
         _logger?.Info(
             "Starting all-tenant backup inventory review."
         );
@@ -120,20 +124,79 @@ public sealed class BackupInventoryReviewService
             $"Customer tenants selected: {tenants.Count}."
         );
 
+        return await ReviewTenantsAsync(
+            tenants,
+            cancellationToken
+        );
+    }
+
+    /// <summary>
+    /// Reviews only tenants explicitly selected as inventory candidates.
+    ///
+    /// The selection is supplied by the caller; this method does not
+    /// discover or infer Business Central customer identities.
+    ///
+    /// Non-selected tenants and unmatched entitlement evidence remain
+    /// available through the returned selection result.
+    ///
+    /// This entry point is not yet connected to production workflow
+    /// orchestration.
+    /// </summary>
+    public async Task<ScopedBackupInventoryReviewResult>
+        ReviewSelectedTenantsAsync(
+            MonitoringTenantSelectionResult selection,
+            CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+
+        var candidates =
+            selection.InventoryCandidates;
+
+        ValidateCandidates(candidates);
+
+        _logger?.Info(
+            $"Starting scoped backup inventory review: " +
+            $"{candidates.Count} candidates."
+        );
+
+        var inventory =
+            await ReviewTenantsAsync(
+                candidates,
+                cancellationToken
+            );
+
+        return new ScopedBackupInventoryReviewResult(
+            selection,
+            inventory
+        );
+    }
+
+    /// <summary>
+    /// Shared inventory execution mechanism.
+    ///
+    /// This method receives a preselected tenant set and never attempts
+    /// to determine commercial monitoring entitlement.
+    ///
+    /// Tenant reviews remain internally sequential, while independent
+    /// tenants may run concurrently.
+    /// </summary>
+    private async Task<AggregatedBackupReport> ReviewTenantsAsync(
+        IReadOnlyList<TenantDto> tenants,
+        CancellationToken cancellationToken)
+    {
+        var stopwatch =
+            Stopwatch.StartNew();
+
         _logger?.Info(
             $"Tenant review concurrency limit: " +
             $"{_maxConcurrentTenants}."
         );
 
         /*
-         * Each tenant remains internally sequential.
+         * Outcomes are stored by their original tenant index.
          *
-         * Only independent tenant reviews are allowed to overlap. This keeps
-         * pagination and provider behavior unchanged while removing the
-         * all-tenant scan's strictly sequential scaling ceiling.
-         *
-         * Outcomes are stored by original tenant index so final reporting
-         * remains deterministic even though tenant completion order is not.
+         * Parallel completion order therefore never changes the order
+         * of tenants in the resulting report.
          */
         var outcomes =
             new TenantReviewOutcome?[tenants.Count];
@@ -221,7 +284,7 @@ public sealed class BackupInventoryReviewService
         stopwatch.Stop();
 
         _logger?.Info(
-            $"All-tenant backup review complete: " +
+            $"Backup inventory review complete: " +
             $"{report.TenantsAttempted} attempted, " +
             $"{report.TenantCount} reviewed, " +
             $"{report.FailedTenantCount} failed, " +
@@ -230,6 +293,48 @@ public sealed class BackupInventoryReviewService
         );
 
         return report;
+    }
+
+    private static void ValidateCandidates(
+        IReadOnlyList<TenantDto> candidates)
+    {
+        var ids =
+            new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase
+            );
+
+        foreach (var tenant in candidates)
+        {
+            if (!string.Equals(
+                tenant.Kind,
+                "customer",
+                StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException(
+                    "Scoped inventory candidates must be Acronis customer tenants.",
+                    nameof(candidates)
+                );
+            }
+
+            if (!Guid.TryParse(
+                tenant.Id,
+                out var parsedId))
+            {
+                throw new ArgumentException(
+                    "Scoped inventory candidate has no valid Acronis tenant UUID.",
+                    nameof(candidates)
+                );
+            }
+
+            if (!ids.Add(
+                parsedId.ToString("D")))
+            {
+                throw new ArgumentException(
+                    "Scoped inventory candidates contain duplicate tenant UUIDs.",
+                    nameof(candidates)
+                );
+            }
+        }
     }
 
     private async Task<TenantReviewOutcome>
@@ -338,5 +443,4 @@ public sealed class BackupInventoryReviewService
         TenantBackupReport? Report,
         TenantBackupReviewFailure? Failure
     );
-
 }

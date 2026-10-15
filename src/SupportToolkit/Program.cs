@@ -85,10 +85,9 @@ try
     }
 
     /*
-     * Temporary fixture-only monitoring-scope investigation.
+     * Fixture-only monitoring-scope investigation.
      *
-     * This command intentionally bypasses operational module dispatch.
-     * It does not read configuration or access external providers.
+     * No external providers are accessed.
      */
     if (args.Length >= 2
         && string.Equals(
@@ -111,6 +110,40 @@ try
 
         return new MonitoringScopeFixtureCommand()
             .Run(
+                Console.Out,
+                DateOnly.FromDateTime(
+                    DateTime.Today
+                )
+            );
+    }
+
+    /*
+     * Fixture-only scoped BackupAggregator execution.
+     *
+     * Uses synthetic tenant selection and in-memory inventory
+     * providers. Does not affect production module dispatch.
+     */
+    if (args.Length >= 2
+        && string.Equals(
+            args[0],
+            "dev",
+            StringComparison.OrdinalIgnoreCase)
+        && string.Equals(
+            args[1],
+            "scoped-backup-review",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        if (args.Length != 2)
+        {
+            Console.Error.WriteLine(
+                "Usage: SupportToolkit dev scoped-backup-review"
+            );
+
+            return 1;
+        }
+
+        return await new ScopedBackupReviewFixtureCommand()
+            .RunAsync(
                 Console.Out,
                 DateOnly.FromDateTime(
                     DateTime.Today
