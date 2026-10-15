@@ -10,7 +10,39 @@ public class SmartSubscriptionEntitlementEvaluatorTests
         new(2026, 10, 15);
 
     private readonly SmartSubscriptionEntitlementEvaluator
-        _evaluator = new();
+        _evaluator = new(
+            SmartSubscriptionFixtureFactory.FixtureMonitoringItemNumber
+        );
+
+    [Fact]
+    public void StandardFixture_HasThreeActiveCandidates()
+    {
+        var fixture =
+            SmartSubscriptionFixtureFactory.Create();
+
+        var results =
+            _evaluator.Evaluate(
+                fixture.Headers,
+                fixture.Lines,
+                EvaluationDate
+            );
+
+        Assert.Equal(
+            3,
+            results.Count(
+                result =>
+                    result.Assessment
+                    == MonitoringEntitlementAssessment.ActiveCandidate
+            )
+        );
+
+        Assert.Single(
+            results,
+            result =>
+                result.Assessment
+                == MonitoringEntitlementAssessment.NeedsReview
+        );
+    }
 
     [Fact]
     public void ActiveMonitoringSubscription_IsCandidate()
@@ -29,8 +61,7 @@ public class SmartSubscriptionEntitlementEvaluatorTests
             Assert.Single(
                 results,
                 result =>
-                    result.SubscriptionNumber
-                    == "SUB-NORTHWIND"
+                    result.SubscriptionNumber == "SUB-NORTHWIND"
             );
 
         Assert.Equal(
@@ -45,7 +76,7 @@ public class SmartSubscriptionEntitlementEvaluatorTests
     }
 
     [Fact]
-    public void BlockedSubscription_RequiresReview_EvenWithoutEndDate()
+    public void BlockedSubscription_RequiresReview()
     {
         var fixture =
             SmartSubscriptionFixtureFactory.Create();
@@ -61,8 +92,7 @@ public class SmartSubscriptionEntitlementEvaluatorTests
             Assert.Single(
                 results,
                 result =>
-                    result.SubscriptionNumber
-                    == "SUB-CONTOSO"
+                    result.SubscriptionNumber == "SUB-CONTOSO"
             );
 
         Assert.Equal(
@@ -98,105 +128,87 @@ public class SmartSubscriptionEntitlementEvaluatorTests
     }
 
     [Fact]
-    public void PlannedMonitoringSubscription_RequiresReview()
+    public void PlannedSubscription_RequiresReview()
     {
-        var fixture =
-            SmartSubscriptionFixtureFactory.Create();
-
-        var results =
-            _evaluator.Evaluate(
-                fixture.Headers,
-                fixture.Lines,
-                EvaluationDate
-            );
-
-        var fabrikam =
+        var result =
             Assert.Single(
-                results,
-                result =>
-                    result.SubscriptionNumber
-                    == "SUB-FABRIKAM"
+                EvaluateSingle(
+                    status: "Planlægges",
+                    startDate: new DateOnly(2026, 11, 1)
+                )
             );
 
         Assert.Equal(
             MonitoringEntitlementAssessment.NeedsReview,
-            fabrikam.Assessment
+            result.Assessment
         );
     }
 
     [Fact]
-    public void ExpiredMonitoringSubscription_RequiresReview()
+    public void ExpiredSubscription_RequiresReview()
     {
-        var fixture =
-            SmartSubscriptionFixtureFactory.Create();
-
-        var results =
-            _evaluator.Evaluate(
-                fixture.Headers,
-                fixture.Lines,
-                EvaluationDate
-            );
-
-        var adventureWorks =
+        var result =
             Assert.Single(
-                results,
-                result =>
-                    result.SubscriptionNumber
-                    == "SUB-ADVENTURE"
+                EvaluateSingle(
+                    startDate: new DateOnly(2025, 1, 1),
+                    endDate: new DateOnly(2026, 9, 30)
+                )
             );
 
         Assert.Equal(
             MonitoringEntitlementAssessment.NeedsReview,
-            adventureWorks.Assessment
+            result.Assessment
         );
 
         Assert.Contains(
             "end date has passed",
-            adventureWorks.Reason
+            result.Reason
         );
     }
 
     [Fact]
     public void MissingSubscriptionHeader_RemainsVisible()
     {
-        var fixture =
-            SmartSubscriptionFixtureFactory.Create();
+        IReadOnlyList<SmartSubscriptionHeader> headers =
+            [];
 
-        var results =
-            _evaluator.Evaluate(
-                fixture.Headers,
-                fixture.Lines,
-                EvaluationDate
-            );
+        IReadOnlyList<SmartSubscriptionLine> lines =
+        [
+            new(
+                "SUB-ORPHAN",
+                SmartSubscriptionFixtureFactory.FixtureMonitoringItemNumber
+            )
+        ];
 
-        var orphan =
+        var result =
             Assert.Single(
-                results,
-                result =>
-                    result.SubscriptionNumber
-                    == "SUB-ORPHAN"
+                _evaluator.Evaluate(
+                    headers,
+                    lines,
+                    EvaluationDate
+                )
             );
 
         Assert.Null(
-            orphan.CustomerNumber
+            result.CustomerNumber
         );
 
         Assert.Equal(
             MonitoringEntitlementAssessment.NeedsReview,
-            orphan.Assessment
+            result.Assessment
         );
     }
 
     [Fact]
     public void MissingCustomerReference_RequiresReview()
     {
-        var results =
-            EvaluateSingle(
-                customerNumber: null
-            );
-
         var result =
-            Assert.Single(results);
+            Assert.Single(
+                EvaluateSingle(
+                    startDate: new DateOnly(2026, 1, 1),
+                    customerNumber: null
+                )
+            );
 
         Assert.Equal(
             MonitoringEntitlementAssessment.NeedsReview,
@@ -205,15 +217,12 @@ public class SmartSubscriptionEntitlementEvaluatorTests
     }
 
     [Fact]
-    public void ActiveSubscriptionWithoutStartDate_RequiresReview()
+    public void MissingStartDate_RequiresReview()
     {
-        var results =
-            EvaluateSingle(
-                startDate: null
-            );
-
         var result =
-            Assert.Single(results);
+            Assert.Single(
+                EvaluateSingle()
+            );
 
         Assert.Equal(
             MonitoringEntitlementAssessment.NeedsReview,
@@ -222,15 +231,14 @@ public class SmartSubscriptionEntitlementEvaluatorTests
     }
 
     [Fact]
-    public void ActiveSubscriptionWithFutureStart_RequiresReview()
+    public void FutureStartDate_RequiresReview()
     {
-        var results =
-            EvaluateSingle(
-                startDate: new DateOnly(2026, 12, 1)
-            );
-
         var result =
-            Assert.Single(results);
+            Assert.Single(
+                EvaluateSingle(
+                    startDate: new DateOnly(2026, 12, 1)
+                )
+            );
 
         Assert.Equal(
             MonitoringEntitlementAssessment.NeedsReview,
@@ -241,16 +249,50 @@ public class SmartSubscriptionEntitlementEvaluatorTests
     [Fact]
     public void UnknownStatus_RequiresReview()
     {
-        var results =
-            EvaluateSingle(
-                status: "Unrecognized"
-            );
-
         var result =
-            Assert.Single(results);
+            Assert.Single(
+                EvaluateSingle(
+                    status: "Unrecognized",
+                    startDate: new DateOnly(2026, 1, 1)
+                )
+            );
 
         Assert.Equal(
             MonitoringEntitlementAssessment.NeedsReview,
+            result.Assessment
+        );
+    }
+
+    [Fact]
+    public void StatusMatching_IsCaseInsensitive()
+    {
+        var result =
+            Assert.Single(
+                EvaluateSingle(
+                    status: "aktiv",
+                    startDate: new DateOnly(2026, 1, 1)
+                )
+            );
+
+        Assert.Equal(
+            MonitoringEntitlementAssessment.ActiveCandidate,
+            result.Assessment
+        );
+    }
+
+    [Fact]
+    public void EndDateOnEvaluationDay_IsStillApplicable()
+    {
+        var result =
+            Assert.Single(
+                EvaluateSingle(
+                    startDate: new DateOnly(2026, 1, 1),
+                    endDate: EvaluationDate
+                )
+            );
+
+        Assert.Equal(
+            MonitoringEntitlementAssessment.ActiveCandidate,
             result.Assessment
         );
     }
@@ -271,19 +313,24 @@ public class SmartSubscriptionEntitlementEvaluatorTests
 
         IReadOnlyList<SmartSubscriptionLine> lines =
         [
-            new("SUB-001", "BAASOVERVÅG"),
-            new("SUB-001", "BAASOVERVÅG")
+            new(
+                "SUB-001",
+                SmartSubscriptionFixtureFactory.FixtureMonitoringItemNumber
+            ),
+            new(
+                "SUB-001",
+                SmartSubscriptionFixtureFactory.FixtureMonitoringItemNumber
+            )
         ];
 
-        var results =
-            _evaluator.Evaluate(
-                headers,
-                lines,
-                EvaluationDate
-            );
-
         var result =
-            Assert.Single(results);
+            Assert.Single(
+                _evaluator.Evaluate(
+                    headers,
+                    lines,
+                    EvaluationDate
+                )
+            );
 
         Assert.Equal(
             MonitoringEntitlementAssessment.NeedsReview,
@@ -303,7 +350,6 @@ public class SmartSubscriptionEntitlementEvaluatorTests
                 new DateOnly(2026, 1, 1),
                 null
             ),
-
             new(
                 "SUB-001",
                 "BC-002",
@@ -315,18 +361,20 @@ public class SmartSubscriptionEntitlementEvaluatorTests
 
         IReadOnlyList<SmartSubscriptionLine> lines =
         [
-            new("SUB-001", "BAASOVERVÅG")
+            new(
+                "SUB-001",
+                SmartSubscriptionFixtureFactory.FixtureMonitoringItemNumber
+            )
         ];
 
-        var results =
-            _evaluator.Evaluate(
-                headers,
-                lines,
-                EvaluationDate
-            );
-
         var result =
-            Assert.Single(results);
+            Assert.Single(
+                _evaluator.Evaluate(
+                    headers,
+                    lines,
+                    EvaluationDate
+                )
+            );
 
         Assert.Equal(
             MonitoringEntitlementAssessment.NeedsReview,
@@ -338,10 +386,51 @@ public class SmartSubscriptionEntitlementEvaluatorTests
         );
     }
 
+    [Fact]
+    public void ItemIdentifier_IsNotHardcodedInEvaluator()
+    {
+        var customEvaluator =
+            new SmartSubscriptionEntitlementEvaluator(
+                "CUSTOM-MONITORING-ITEM"
+            );
+
+        IReadOnlyList<SmartSubscriptionHeader> headers =
+        [
+            new(
+                "SUB-001",
+                "BC-001",
+                "Aktiv",
+                new DateOnly(2026, 1, 1),
+                null
+            )
+        ];
+
+        IReadOnlyList<SmartSubscriptionLine> lines =
+        [
+            new("SUB-001", "OTHER-ITEM"),
+            new("SUB-001", "CUSTOM-MONITORING-ITEM")
+        ];
+
+        var result =
+            Assert.Single(
+                customEvaluator.Evaluate(
+                    headers,
+                    lines,
+                    EvaluationDate
+                )
+            );
+
+        Assert.Equal(
+            MonitoringEntitlementAssessment.ActiveCandidate,
+            result.Assessment
+        );
+    }
+
     private IReadOnlyList<MonitoringEntitlementObservation>
         EvaluateSingle(
             string status = "Aktiv",
             DateOnly? startDate = null,
+            DateOnly? endDate = null,
             string? customerNumber = "BC-001")
     {
         IReadOnlyList<SmartSubscriptionHeader> headers =
@@ -351,7 +440,7 @@ public class SmartSubscriptionEntitlementEvaluatorTests
                 customerNumber,
                 status,
                 startDate,
-                null
+                endDate
             )
         ];
 
@@ -359,7 +448,7 @@ public class SmartSubscriptionEntitlementEvaluatorTests
         [
             new(
                 "SUB-001",
-                "BAASOVERVÅG"
+                SmartSubscriptionFixtureFactory.FixtureMonitoringItemNumber
             )
         ];
 

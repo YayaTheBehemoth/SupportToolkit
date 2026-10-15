@@ -2,17 +2,26 @@
 namespace SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 
 /// <summary>
-/// Evaluates synthetic or normalized SMARTsubscription evidence.
+/// Evaluates normalized SMARTsubscription evidence.
 ///
-/// The evaluator identifies candidate monitoring entitlements,
-/// but does not make final operational scope decisions.
-///
-/// Missing and contradictory evidence remains visible.
+/// The monitoring item identifier is supplied by the caller.
+/// This evaluator does not make final operational scope decisions
+/// or reconcile Business Central customers with Acronis tenants.
 /// </summary>
 public sealed class SmartSubscriptionEntitlementEvaluator
 {
-    public const string MonitoringItemNumber =
-        "BAASOVERVÅG";
+    public string MonitoringItemNumber { get; }
+
+    public SmartSubscriptionEntitlementEvaluator(
+        string monitoringItemNumber)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(
+            monitoringItemNumber
+        );
+
+        MonitoringItemNumber =
+            monitoringItemNumber.Trim();
+    }
 
     public IReadOnlyList<MonitoringEntitlementObservation> Evaluate(
         IReadOnlyList<SmartSubscriptionHeader> headers,
@@ -141,23 +150,26 @@ public sealed class SmartSubscriptionEntitlementEvaluator
                 continue;
             }
 
+            var status =
+                header.Status?.Trim();
+
             if (!string.Equals(
-                header.Status?.Trim(),
+                status,
                 "Aktiv",
                 StringComparison.OrdinalIgnoreCase))
             {
                 var reason =
-                    header.Status?.Trim() switch
-                    {
-                        "Spærret" =>
-                            "Subscription is blocked; monitoring responsibility is unverified.",
-
-                        "Planlægges" =>
-                            "Subscription is planned, not confirmed active.",
-
-                        _ =>
-                            "Subscription status is not confirmed active."
-                    };
+                    string.Equals(
+                        status,
+                        "Spærret",
+                        StringComparison.OrdinalIgnoreCase)
+                        ? "Subscription is blocked; monitoring responsibility is unverified."
+                        : string.Equals(
+                            status,
+                            "Planlægges",
+                            StringComparison.OrdinalIgnoreCase)
+                            ? "Subscription is planned, not confirmed active."
+                            : "Subscription status is not confirmed active.";
 
                 observations.Add(
                     Review(

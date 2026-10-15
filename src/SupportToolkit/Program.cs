@@ -1,4 +1,5 @@
-﻿using SupportToolkit.Cli.Commands;
+﻿
+using SupportToolkit.Cli.Commands;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.ErrorHandling;
 using SupportToolkit.Core.Modules;
@@ -81,6 +82,40 @@ try
         );
 
         return 0;
+    }
+
+    /*
+     * Temporary fixture-only monitoring-scope investigation.
+     *
+     * This command intentionally bypasses operational module dispatch.
+     * It does not read configuration or access external providers.
+     */
+    if (args.Length >= 2
+        && string.Equals(
+            args[0],
+            "dev",
+            StringComparison.OrdinalIgnoreCase)
+        && string.Equals(
+            args[1],
+            "monitoring-scope",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        if (args.Length != 2)
+        {
+            Console.Error.WriteLine(
+                "Usage: SupportToolkit dev monitoring-scope"
+            );
+
+            return 1;
+        }
+
+        return new MonitoringScopeFixtureCommand()
+            .Run(
+                Console.Out,
+                DateOnly.FromDateTime(
+                    DateTime.Today
+                )
+            );
     }
 
     /*

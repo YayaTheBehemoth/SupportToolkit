@@ -4,16 +4,21 @@ using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 namespace SupportToolkit.Modules.BackupAggregator.Fixtures;
 
 /// <summary>
-/// Synthetic SMARTsubscription discovery scenarios.
+/// Synthetic SMARTsubscription records for normal development output.
 ///
-/// Customer labels correspond conceptually to existing
-/// BackupAggregator fixture tenants.
+/// These fictional customers correspond conceptually to existing
+/// BackupAggregator fixtures but do not establish identity mappings.
 ///
-/// No live Business Central data or real customer identifiers.
-/// No BC-to-Acronis identity mapping is implied.
+/// Exceptional data-quality scenarios are covered by focused tests.
 /// </summary>
 public static class SmartSubscriptionFixtureFactory
 {
+    public const string FixtureMonitoringItemNumber =
+        "MONITORING-SERVICE";
+
+    private const string FixtureBackupItemNumber =
+        "BACKUP-SERVICE";
+
     public static (
         IReadOnlyList<SmartSubscriptionHeader> Headers,
         IReadOnlyList<SmartSubscriptionLine> Lines
@@ -21,7 +26,7 @@ public static class SmartSubscriptionFixtureFactory
     {
         IReadOnlyList<SmartSubscriptionHeader> headers =
         [
-            // Northwind: active monitoring.
+            // Normal monitoring entitlement candidate.
             new(
                 "SUB-NORTHWIND",
                 "BC-NORTHWIND",
@@ -30,7 +35,7 @@ public static class SmartSubscriptionFixtureFactory
                 null
             ),
 
-            // Contoso: monitoring line remains after blocking.
+            // Operational exception: blocked subscription.
             new(
                 "SUB-CONTOSO",
                 "BC-CONTOSO",
@@ -39,7 +44,7 @@ public static class SmartSubscriptionFixtureFactory
                 null
             ),
 
-            // Alpine: backup service, but no monitoring line.
+            // Backup service exists, but monitoring is not evidenced.
             new(
                 "SUB-ALPINE",
                 "BC-ALPINE",
@@ -48,22 +53,22 @@ public static class SmartSubscriptionFixtureFactory
                 null
             ),
 
-            // Fabrikam: future planned monitoring.
+            // Normal monitoring entitlement candidate.
             new(
                 "SUB-FABRIKAM",
                 "BC-FABRIKAM",
-                "Planlægges",
-                new DateOnly(2026, 11, 1),
+                "Aktiv",
+                new DateOnly(2026, 1, 1),
                 null
             ),
 
-            // Adventure Works: expired date despite active status.
+            // Normal monitoring entitlement candidate.
             new(
                 "SUB-ADVENTURE",
                 "BC-ADVENTURE",
                 "Aktiv",
-                new DateOnly(2025, 1, 1),
-                new DateOnly(2026, 9, 30)
+                new DateOnly(2026, 1, 1),
+                null
             )
         ];
 
@@ -71,38 +76,32 @@ public static class SmartSubscriptionFixtureFactory
         [
             new(
                 "SUB-NORTHWIND",
-                "BAASOVERVÅG"
+                FixtureMonitoringItemNumber
             ),
 
             new(
                 "SUB-NORTHWIND",
-                "BAAS"
+                FixtureBackupItemNumber
             ),
 
             new(
                 "SUB-CONTOSO",
-                "BAASOVERVÅG"
+                FixtureMonitoringItemNumber
             ),
 
             new(
                 "SUB-ALPINE",
-                "BAAS"
+                FixtureBackupItemNumber
             ),
 
             new(
                 "SUB-FABRIKAM",
-                "BAASOVERVÅG"
+                FixtureMonitoringItemNumber
             ),
 
             new(
                 "SUB-ADVENTURE",
-                "BAASOVERVÅG"
-            ),
-
-            // Monitoring line with an unavailable header.
-            new(
-                "SUB-ORPHAN",
-                "BAASOVERVÅG"
+                FixtureMonitoringItemNumber
             )
         ];
 
