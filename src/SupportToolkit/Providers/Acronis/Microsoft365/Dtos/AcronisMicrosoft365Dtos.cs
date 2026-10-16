@@ -1,3 +1,4 @@
+
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -35,14 +36,8 @@ public sealed class AcronisMicrosoft365GroupsDto
             }
 
             return source
-                .Where(
-                    group =>
-                        group is not null
-                )
-                .Select(
-                    group =>
-                        group!
-                )
+                .Where(group => group is not null)
+                .Select(group => group!)
                 .ToList()
                 .AsReadOnly();
         }
@@ -136,6 +131,16 @@ public sealed class AcronisMicrosoft365ResourceDto
 
     [JsonPropertyName("resourceType")]
     public string? ResourceType { get; init; }
+
+    /*
+     * Observed in production on Microsoft 365 GROUP resources.
+     * Identifies the associated Team displayed in Acronis's Team column.
+     *
+     * An association does not, by itself, establish that the GROUP and TEAM
+     * are duplicate protected workloads.
+     */
+    [JsonPropertyName("teamName")]
+    public string? TeamName { get; init; }
 
     [JsonPropertyName("basicKinds")]
     public IReadOnlyList<AcronisMicrosoft365BasicKindDto?>? BasicKinds

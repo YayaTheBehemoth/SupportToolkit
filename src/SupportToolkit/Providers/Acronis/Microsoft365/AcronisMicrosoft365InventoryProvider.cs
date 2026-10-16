@@ -1,3 +1,4 @@
+
 using System.Net.Http.Json;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Providers.Acronis.Microsoft365.Dtos;
@@ -9,7 +10,7 @@ namespace SupportToolkit.Providers.Acronis.Microsoft365;
 /// Reads the Microsoft 365 backup inventory exposed by Acronis Resource Manager.
 ///
 /// A tenant that does not have Microsoft 365 configured is represented as a
-/// valid empty Microsoft 365 inventory rather than as a failed tenant review.
+/// valid empty Microsoft 365 inventory rather than a failed tenant review.
 ///
 /// The provider discovers queryable leaf groups, follows resource pagination,
 /// and removes duplicate resource identities caused by overlapping groups.
