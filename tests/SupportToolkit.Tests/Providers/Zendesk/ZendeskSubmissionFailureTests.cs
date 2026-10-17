@@ -1,6 +1,5 @@
 
 using System.Net;
-using System.Text;
 using SupportToolkit.Core.Ticketing.Models;
 using SupportToolkit.Providers.Zendesk.Tickets;
 using SupportToolkit.Providers.Zendesk.Transport;
@@ -42,8 +41,7 @@ public class ZendeskSubmissionFailureTests
     public async Task AuthenticationFailure_IdentifiesZendesk()
     {
         using var client =
-            new HttpClient(
-                new StubHandler(request =>
+            ZendeskTestHttpSupport.CreateClient(request =>
                 {
                     Assert.Equal(
                         "/oauth/tokens",
@@ -52,7 +50,7 @@ public class ZendeskSubmissionFailureTests
                     return Task.FromResult(
                         new HttpResponseMessage(
                             HttpStatusCode.Unauthorized));
-                }));
+                });
 
         var exception =
             await Assert.ThrowsAsync<InvalidOperationException>(
@@ -71,7 +69,7 @@ public class ZendeskSubmissionFailureTests
     public async Task CreatedResponseWithoutTicketId_IsNotReportedAsSuccess()
     {
         using var client = CreateClient(
-            ticketResponse: JsonResponse(
+            ticketResponse: ZendeskTestHttpSupport.JsonResponse(
                 HttpStatusCode.Created,
                 """
                 {
@@ -100,7 +98,7 @@ public class ZendeskSubmissionFailureTests
     public async Task MalformedCreatedResponse_IsNotReportedAsSuccess()
     {
         using var client = CreateClient(
-            ticketResponse: JsonResponse(
+            ticketResponse: ZendeskTestHttpSupport.JsonResponse(
                 HttpStatusCode.Created,
                 "{ malformed json"));
 
@@ -146,8 +144,7 @@ public class ZendeskSubmissionFailureTests
     private static HttpClient CreateClient(
         HttpResponseMessage ticketResponse)
     {
-        return new HttpClient(
-            new StubHandler(request =>
+        return ZendeskTestHttpSupport.CreateClient(request =>
             {
                 var path =
                     request.RequestUri?.AbsolutePath;
@@ -155,7 +152,7 @@ public class ZendeskSubmissionFailureTests
                 if (path == "/oauth/tokens")
                 {
                     return Task.FromResult(
-                        JsonResponse(
+                        ZendeskTestHttpSupport.JsonResponse(
                             HttpStatusCode.OK,
                             """
                             {
@@ -174,41 +171,7 @@ public class ZendeskSubmissionFailureTests
                     request.Headers.Contains("Idempotency-Key"));
 
                 return Task.FromResult(ticketResponse);
-            }));
+            });
     }
 
-    private static HttpResponseMessage JsonResponse(
-        HttpStatusCode status,
-        string json)
-    {
-        return new HttpResponseMessage(status)
-        {
-            Content = new StringContent(
-                json,
-                Encoding.UTF8,
-                "application/json")
-        };
-    }
-
-    private sealed class StubHandler : HttpMessageHandler
-    {
-        private readonly Func<
-            HttpRequestMessage,
-            Task<HttpResponseMessage>> _handle;
-
-        public StubHandler(
-            Func<
-                HttpRequestMessage,
-                Task<HttpResponseMessage>> handle)
-        {
-            _handle = handle;
-        }
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
-        {
-            return _handle(request);
-        }
-    }
 }

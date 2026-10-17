@@ -1,6 +1,5 @@
 
 using System.Net;
-using System.Text;
 using System.Text.Json;
 using SupportToolkit.Providers.Acronis.Tenants;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
@@ -142,29 +141,16 @@ public class AcronisLegacyHierarchyContractSafetyTests
     ) CreateProvider(string childrenJson)
     {
         var client =
-            new HttpClient(
-                new StubHttpMessageHandler(
+            AcronisProviderTestSupport.CreateClient(
                     request =>
                     {
                         var path =
                             request.RequestUri?.AbsolutePath
                             ?? string.Empty;
 
-                        if (path == "/api/2/idp/token")
-                        {
-                            return JsonResponse(
-                                """
-                                {
-                                  "access_token": "fixture-token",
-                                  "token_type": "bearer",
-                                  "expires_on": 4102444800
-                                }
-                                """);
-                        }
-
                         if (path == "/api/2/clients/fixture-client")
                         {
-                            return JsonResponse(
+                            return AcronisProviderTestSupport.JsonResponse(
                                 $$"""
                                 {
                                   "tenant_id": "{{RootUuid}}",
@@ -175,7 +161,7 @@ public class AcronisLegacyHierarchyContractSafetyTests
 
                         if (path == $"/api/1/groups/{RootUuid}")
                         {
-                            return JsonResponse(
+                            return AcronisProviderTestSupport.JsonResponse(
                                 $$"""
                                 {
                                   "id": 9000,
@@ -186,57 +172,16 @@ public class AcronisLegacyHierarchyContractSafetyTests
 
                         if (path == "/api/1/groups/9000/children")
                         {
-                            return JsonResponse(childrenJson);
+                            return AcronisProviderTestSupport.JsonResponse(childrenJson);
                         }
 
                         return new HttpResponseMessage(
                             HttpStatusCode.NotFound);
-                    }));
+                    });
 
-        var provider =
-            new AcronisTenantProvider(
-                new AcronisApiClient(
-                    client,
-                    new AcronisOptions
-                    {
-                        DatacenterUrl =
-                            "https://fixture.acronis.invalid",
-                        ClientId = "fixture-client",
-                        ClientSecret = "fixture-secret"
-                    }));
+        var provider = AcronisProviderTestSupport.CreateTenantProvider(client);
 
         return (provider, client);
     }
 
-    private static HttpResponseMessage JsonResponse(
-        string json)
-    {
-        return new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content =
-                new StringContent(
-                    json,
-                    Encoding.UTF8,
-                    "application/json")
-        };
-    }
-
-    private sealed class StubHttpMessageHandler : HttpMessageHandler
-    {
-        private readonly Func<HttpRequestMessage, HttpResponseMessage>
-            _handler;
-
-        public StubHttpMessageHandler(
-            Func<HttpRequestMessage, HttpResponseMessage> handler)
-        {
-            _handler = handler;
-        }
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
-        {
-            return Task.FromResult(_handler(request));
-        }
-    }
 }

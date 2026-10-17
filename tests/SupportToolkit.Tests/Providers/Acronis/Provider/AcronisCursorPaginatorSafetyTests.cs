@@ -1,6 +1,5 @@
 
 using System.Net;
-using System.Text;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 using SupportToolkit.Providers.Acronis.Transport;
 
@@ -149,43 +148,17 @@ public class AcronisCursorPaginatorSafetyTests
     private static AcronisCursorPaginator CreatePaginator(
         HttpClient client)
     {
-        var apiClient =
-            new AcronisApiClient(
-                client,
-                new AcronisOptions
-                {
-                    DatacenterUrl =
-                        "https://fixture.acronis.invalid",
-                    ClientId = "fixture-client",
-                    ClientSecret = "fixture-secret"
-                }
-            );
-
-        return new AcronisCursorPaginator(apiClient);
+        return AcronisProviderTestSupport.CreatePaginator(client);
     }
 
     private static HttpClient CreateClient(
         Func<HttpResponseMessage> nextPage)
     {
-        return new HttpClient(
-            new StubHttpMessageHandler(
+        return AcronisProviderTestSupport.CreateClient(
                 request =>
                 {
                     var path =
                         request.RequestUri?.AbsolutePath;
-
-                    if (path == "/api/2/idp/token")
-                    {
-                        return JsonResponse(
-                            """
-                            {
-                              "access_token": "fixture-token",
-                              "token_type": "bearer",
-                              "expires_on": 4102444800
-                            }
-                            """
-                        );
-                    }
 
                     if (path == "/api/2/tenants")
                     {
@@ -196,8 +169,7 @@ public class AcronisCursorPaginatorSafetyTests
                         HttpStatusCode.NotFound
                     );
                 }
-            )
-        );
+            );
     }
 
     private static HttpResponseMessage Page(
@@ -213,7 +185,7 @@ public class AcronisCursorPaginatorSafetyTests
                   }
                   """;
 
-        return JsonResponse(
+        return AcronisProviderTestSupport.JsonResponse(
             $$"""
             {
               "paging": {
@@ -231,39 +203,4 @@ public class AcronisCursorPaginatorSafetyTests
         );
     }
 
-    private static HttpResponseMessage JsonResponse(
-        string json)
-    {
-        return new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content =
-                new StringContent(
-                    json,
-                    Encoding.UTF8,
-                    "application/json"
-                )
-        };
-    }
-
-    private sealed class StubHttpMessageHandler
-        : HttpMessageHandler
-    {
-        private readonly Func<HttpRequestMessage, HttpResponseMessage>
-            _handler;
-
-        public StubHttpMessageHandler(
-            Func<HttpRequestMessage, HttpResponseMessage> handler)
-        {
-            _handler = handler;
-        }
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
-        {
-            return Task.FromResult(
-                _handler(request)
-            );
-        }
-    }
 }

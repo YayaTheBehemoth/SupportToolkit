@@ -1,6 +1,5 @@
 
 using System.Net;
-using System.Text;
 using SupportToolkit.Core.Ticketing.Models;
 using SupportToolkit.Core.Ticketing.Reporting;
 using SupportToolkit.Providers.Zendesk.Tickets;
@@ -22,14 +21,13 @@ public class ZendeskIdempotentReplayTests
         var ticketRequests = 0;
 
         using var httpClient =
-            new HttpClient(
-                new StubHandler(request =>
+            ZendeskTestHttpSupport.CreateClient(request =>
                 {
                     if (request.RequestUri?.AbsolutePath
                         == "/oauth/tokens")
                     {
                         return Task.FromResult(
-                            JsonResponse(
+                            ZendeskTestHttpSupport.JsonResponse(
                                 HttpStatusCode.OK,
                                 """
                                 {
@@ -51,7 +49,7 @@ public class ZendeskIdempotentReplayTests
                             "Idempotency-Key"));
 
                     var response =
-                        JsonResponse(
+                        ZendeskTestHttpSupport.JsonResponse(
                             HttpStatusCode.Created,
                             """
                             {
@@ -71,7 +69,7 @@ public class ZendeskIdempotentReplayTests
                     }
 
                     return Task.FromResult(response);
-                }));
+                });
 
         var apiClient =
             new ZendeskApiClient(
@@ -218,39 +216,4 @@ public class ZendeskIdempotentReplayTests
             text);
     }
 
-    private static HttpResponseMessage JsonResponse(
-        HttpStatusCode status,
-        string json)
-    {
-        return new HttpResponseMessage(status)
-        {
-            Content =
-                new StringContent(
-                    json,
-                    Encoding.UTF8,
-                    "application/json")
-        };
-    }
-
-    private sealed class StubHandler : HttpMessageHandler
-    {
-        private readonly Func<
-            HttpRequestMessage,
-            Task<HttpResponseMessage>> _handler;
-
-        public StubHandler(
-            Func<
-                HttpRequestMessage,
-                Task<HttpResponseMessage>> handler)
-        {
-            _handler = handler;
-        }
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
-        {
-            return _handler(request);
-        }
-    }
 }

@@ -1,6 +1,5 @@
 
 using System.Net;
-using System.Text;
 using System.Text.Json;
 using SupportToolkit.Core.Ticketing.Models;
 using SupportToolkit.Providers.Zendesk.Tickets;
@@ -18,8 +17,7 @@ public class ZendeskTicketProviderTests
         var tokenRequests = 0;
         var ticketRequests = 0;
 
-        var handler =
-            new StubHttpMessageHandler(
+        using var httpClient = ZendeskTestHttpSupport.CreateClient(
                 async request =>
                 {
                     if (request.RequestUri?.AbsolutePath
@@ -67,7 +65,7 @@ public class ZendeskTicketProviderTests
                                 .GetString()
                         );
 
-                        return JsonResponse(
+                        return ZendeskTestHttpSupport.JsonResponse(
                             HttpStatusCode.OK,
                             """
                             {
@@ -156,7 +154,7 @@ public class ZendeskTicketProviderTests
                         );
 
                         var response =
-                            JsonResponse(
+                            ZendeskTestHttpSupport.JsonResponse(
                                 HttpStatusCode.Created,
                                 """
                                 {
@@ -182,9 +180,6 @@ public class ZendeskTicketProviderTests
                     );
                 }
             );
-
-        using var httpClient =
-            new HttpClient(handler);
 
         var apiClient =
             new ZendeskApiClient(
@@ -235,14 +230,13 @@ public class ZendeskTicketProviderTests
     {
         var ticketRequests = 0;
 
-        var handler =
-            new StubHttpMessageHandler(
+        using var httpClient = ZendeskTestHttpSupport.CreateClient(
                 async request =>
                 {
                     if (request.RequestUri?.AbsolutePath
                         == "/oauth/tokens")
                     {
-                        return JsonResponse(
+                        return ZendeskTestHttpSupport.JsonResponse(
                             HttpStatusCode.OK,
                             """
                             {
@@ -275,7 +269,7 @@ public class ZendeskTicketProviderTests
                                 .GetInt64()
                         );
 
-                        return JsonResponse(
+                        return ZendeskTestHttpSupport.JsonResponse(
                             HttpStatusCode.Created,
                             """
                             {
@@ -293,9 +287,6 @@ public class ZendeskTicketProviderTests
                     );
                 }
             );
-
-        using var httpClient =
-            new HttpClient(handler);
 
         var provider =
             new ZendeskTicketProvider(
@@ -328,8 +319,7 @@ public class ZendeskTicketProviderTests
     {
         var requestCount = 0;
 
-        var handler =
-            new StubHttpMessageHandler(
+        using var httpClient = ZendeskTestHttpSupport.CreateClient(
                 request =>
                 {
                     requestCount++;
@@ -341,9 +331,6 @@ public class ZendeskTicketProviderTests
                     );
                 }
             );
-
-        using var httpClient =
-            new HttpClient(handler);
 
         var apiClient =
             new ZendeskApiClient(
@@ -371,47 +358,4 @@ public class ZendeskTicketProviderTests
         };
     }
 
-    private static HttpResponseMessage JsonResponse(
-        HttpStatusCode statusCode,
-        string json)
-    {
-        return new HttpResponseMessage(
-            statusCode
-        )
-        {
-            Content =
-                new StringContent(
-                    json,
-                    Encoding.UTF8,
-                    "application/json"
-                )
-        };
-    }
-
-    private sealed class StubHttpMessageHandler
-        : HttpMessageHandler
-    {
-        private readonly Func<
-            HttpRequestMessage,
-            Task<HttpResponseMessage>>
-            _handler;
-
-        public StubHttpMessageHandler(
-            Func<
-                HttpRequestMessage,
-                Task<HttpResponseMessage>>
-                handler)
-        {
-            _handler =
-                handler;
-        }
-
-        protected override Task<HttpResponseMessage>
-            SendAsync(
-                HttpRequestMessage request,
-                CancellationToken cancellationToken)
-        {
-            return _handler(request);
-        }
-    }
 }
