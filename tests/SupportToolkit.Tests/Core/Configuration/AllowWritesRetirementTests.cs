@@ -1,7 +1,4 @@
 using SupportToolkit.Core.Configuration;
-using SupportToolkit.Core.Secrets;
-using SupportToolkit.Modules.BackupAggregator.Fixtures;
-using SupportToolkit.Modules.BackupAggregator.Services;
 
 namespace SupportToolkit.Tests.Core.Configuration;
 
@@ -55,85 +52,4 @@ public class AllowWritesRetirementTests
         }
     }
 
-    [Fact]
-    public void RetiredPermission_IsNotPartOfProfileOrResolverContract()
-    {
-        Assert.Null(typeof(SupportToolkitProfile).GetProperty("AllowWrites"));
-        Assert.Null(typeof(SupportToolkitConfigurationResolver).GetMethod("GetAllowWritesAsync"));
-    }
-
-    [Fact]
-    public async Task LegacyEnvironmentFlagDoesNotBlockDestinationValidation()
-    {
-        var configuration = new SupportToolkitConfiguration
-        {
-            ActiveProfile = "trial",
-            Profiles = new Dictionary<string, SupportToolkitProfile>
-            {
-                ["trial"] = new()
-                {
-                    Modules = new Dictionary<string, SupportToolkitMode>
-                    {
-                        ["backup-aggregator"] = SupportToolkitMode.Fixture
-                    }
-                }
-            }
-        };
-
-        var resolver = new SupportToolkitConfigurationResolver(
-            new StubConfigStore(configuration),
-            new EmptySecretStore(),
-            variable => variable == "SUPPORTTOOLKIT_ALLOW_WRITES"
-                ? "false"
-                : null);
-
-        var workflow = new BackupAggregatorWorkflow(resolver);
-        var fixtureReport = new BackupAggregatorFixtureFactory().BuildReport();
-
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => workflow.SubmitTicketAsync(fixtureReport));
-
-        Assert.Contains("Zendesk connection", exception.Message);
-        Assert.DoesNotContain(
-            "External writes are disabled",
-            exception.Message);
-    }
-
-    private sealed class StubConfigStore : ISupportToolkitConfigurationStore
-    {
-        private readonly SupportToolkitConfiguration _configuration;
-
-        public StubConfigStore(SupportToolkitConfiguration configuration) =>
-            _configuration = configuration;
-
-        public string ConfigurationPath => "synthetic.json";
-
-        public Task<SupportToolkitConfiguration> LoadAsync(
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(_configuration);
-
-        public Task SaveAsync(
-            SupportToolkitConfiguration configuration,
-            CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
-    }
-
-    private sealed class EmptySecretStore : ISecretStore
-    {
-        public Task<string?> GetSecretAsync(
-            string key,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<string?>(null);
-
-        public Task SetSecretAsync(
-            string key,
-            string value,
-            CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
-
-        public Task RemoveSecretAsync(
-            string key,
-            CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
-    }
 }

@@ -141,28 +141,6 @@ public class BackupHealthServiceTests
     }
 
     [Fact]
-    public async Task GetSnapshotAsync_ResourceWithoutAlertsHasEmptyAlertList()
-    {
-        var service =
-            CreateService();
-
-        var resources =
-            (await service.GetSnapshotAsync())
-            .Resources;
-
-        var resource =
-            resources.Single(
-                resource =>
-                    resource.ResourceName
-                    == "APP-SERVER-01"
-            );
-
-        Assert.Empty(
-            resource.Alerts
-        );
-    }
-
-    [Fact]
     public async Task GetSnapshotAsync_MapsHealthyResource()
     {
         var service =

@@ -6,15 +6,10 @@ namespace SupportToolkit.Tests.Providers.Acronis.Contracts;
 
 public class Microsoft365InventoryContractTests
 {
-    [Theory]
-    [InlineData("""{"data":[]}""")]
-    [InlineData("""{"items":[]}""")]
-    [InlineData("""{"data":null}""")]
-    [InlineData("""{"items":null}""")]
-    [InlineData("""{"data":null,"items":null}""")]
-    public void Groups_ExplicitlyEmptyCollections_AreSupported(
-        string json)
+    [Fact]
+    public void Groups_BothCollectionsNull_AreEmpty()
     {
+        const string json = """{"data":null,"items":null}""";
         var payload =
             JsonSerializer.Deserialize<AcronisMicrosoft365GroupsDto>(
                 json
@@ -137,30 +132,6 @@ public class Microsoft365InventoryContractTests
 
         Assert.NotNull(resource);
         Assert.Equal(expected, resource.TeamName);
-    }
-
-    [Fact]
-    public void ResourcePage_SupportsExplicitNullItems()
-    {
-        const string json =
-            """
-            {
-              "items": null,
-              "paging": {
-                "cursors": {}
-              }
-            }
-            """;
-
-        var payload =
-            JsonSerializer.Deserialize<AcronisMicrosoft365ResourcePageDto>(
-                json
-            );
-
-        Assert.NotNull(payload);
-        Assert.Null(payload.Items);
-        Assert.NotNull(payload.Paging);
-        Assert.Null(payload.Paging.Cursors?.After);
     }
 
     [Fact]

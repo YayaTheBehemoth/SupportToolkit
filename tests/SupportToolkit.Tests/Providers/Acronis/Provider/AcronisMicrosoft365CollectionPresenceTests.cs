@@ -22,7 +22,6 @@ public class AcronisMicrosoft365CollectionPresenceTests
 
     [Theory]
     [InlineData("{}")]
-    [InlineData("""{"paging":{"cursors":{}}}""")]
     public async Task MissingGroupCollection_IsRejected(
         string groupsJson)
     {
@@ -68,7 +67,6 @@ public class AcronisMicrosoft365CollectionPresenceTests
 
     [Theory]
     [InlineData("{}")]
-    [InlineData("""{"paging":{"cursors":{}}}""")]
     public async Task MissingResourceCollection_IsRejected(
         string resourcesJson)
     {

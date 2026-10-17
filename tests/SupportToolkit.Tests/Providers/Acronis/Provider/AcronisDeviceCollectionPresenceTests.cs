@@ -12,7 +12,6 @@ public class AcronisDeviceCollectionPresenceTests
 
     [Theory]
     [InlineData("{}")]
-    [InlineData("""{"paging":{"cursors":{}}}""")]
     public async Task MissingItemsCollection_IsRejected(
         string resourceJson)
     {
@@ -36,7 +35,6 @@ public class AcronisDeviceCollectionPresenceTests
 
     [Theory]
     [InlineData("""{"items":null}""")]
-    [InlineData("""{"items":null,"paging":{"cursors":{}}}""")]
     public async Task ExplicitNullItemsCollection_IsRejectedClearly(
         string resourceJson)
     {

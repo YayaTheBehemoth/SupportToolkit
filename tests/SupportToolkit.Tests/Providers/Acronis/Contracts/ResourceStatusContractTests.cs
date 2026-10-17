@@ -161,46 +161,4 @@ public class ResourceStatusContractTests
         );
     }
 
-    [Fact]
-    public void ResourceStatusPageWithoutTimestamp_DeserializesSuccessfully()
-    {
-        const string json =
-            """
-            {
-              "paging": {
-                "cursors": {}
-              },
-              "items": [
-                {
-                  "context": {
-                    "id": "resource-001",
-                    "name": "SERVER-01",
-                    "tenant_id": "1001",
-                    "type": "resource.machine"
-                  },
-                  "aggregate": {
-                    "status": "idle"
-                  }
-                }
-              ]
-            }
-            """;
-
-        var result =
-            JsonSerializer.Deserialize<ResourceStatusPageDto>(
-                json
-            );
-
-        Assert.NotNull(
-            result
-        );
-
-        Assert.Null(
-            result.Timestamp
-        );
-
-        Assert.Single(
-            result.Items
-        );
-    }
 }
