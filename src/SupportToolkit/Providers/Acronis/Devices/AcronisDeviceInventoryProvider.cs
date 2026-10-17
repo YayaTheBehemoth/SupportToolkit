@@ -1,3 +1,4 @@
+
 using System.Net.Http.Json;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Providers.Acronis.Devices.Dtos;
@@ -29,7 +30,9 @@ public sealed class AcronisDeviceInventoryProvider
         AcronisApiClient apiClient,
         OperationalLogger? logger = null)
     {
-        _apiClient = apiClient;
+        _apiClient =
+            apiClient ?? throw new ArgumentNullException(nameof(apiClient));
+
         _logger = logger;
     }
 
@@ -77,6 +80,18 @@ public sealed class AcronisDeviceInventoryProvider
         var resources =
             new List<AcronisDeviceResourceDto>();
 
+        /*
+         * Continuation cursors are opaque and case-sensitive.
+         *
+         * A repeated cursor indicates pagination is not making
+         * forward progress. Fail the review instead of returning
+         * incomplete inventory.
+         *
+         * Never include actual cursor values in diagnostics.
+         */
+        var seenAfterCursors =
+            new HashSet<string>(StringComparer.Ordinal);
+
         string? requestPath =
             BuildInitialResourcePath();
 
@@ -103,14 +118,37 @@ public sealed class AcronisDeviceInventoryProvider
             var page =
                 await response.Content
                     .ReadFromJsonAsync<AcronisDeviceResourcePageDto>(
-                        cancellationToken:
-                            cancellationToken
+                        cancellationToken: cancellationToken
                     )
                 ?? throw new InvalidOperationException(
                     "Acronis returned an empty device resource response."
                 );
 
-            resources.AddRange(page.Items);
+            /*
+             * Missing or null collections are incomplete responses,
+             * not successful empty inventories.
+             *
+             * An explicitly empty array remains valid.
+             */
+            if (!page.HasItemsProperty)
+            {
+                throw new InvalidOperationException(
+                    "Acronis device resource response did not include " +
+                    "an 'items' collection."
+                );
+            }
+
+            var pageItems = page.Items;
+
+            if (pageItems is null)
+            {
+                throw new InvalidOperationException(
+                    "Acronis device resource response contained " +
+                    "a null 'items' collection."
+                );
+            }
+
+            resources.AddRange(pageItems);
 
             if (resources.Count > MaxResources)
             {
@@ -121,16 +159,42 @@ public sealed class AcronisDeviceInventoryProvider
 
             _logger?.Debug(
                 $"Device resource page {pageNumber}: " +
-                $"{page.Items.Count} item(s)."
+                $"{pageItems.Count} item(s)."
             );
 
+            /*
+             * Preserve existing terminal-page behavior.
+             *
+             * Multi-page device continuation remains fixture-tested,
+             * not production-verified.
+             */
             var after =
                 page.Paging.Cursors.After;
 
-            requestPath =
-                string.IsNullOrWhiteSpace(after)
-                    ? null
-                    : BuildNextResourcePath(after);
+            if (string.IsNullOrWhiteSpace(after))
+            {
+                requestPath = null;
+            }
+            else
+            {
+                /*
+                 * Detect immediate repetitions and longer cursor
+                 * cycles such as A -> B -> A.
+                 */
+                if (!seenAfterCursors.Add(after))
+                {
+                    throw new InvalidOperationException(
+                        "Acronis device resource pagination " +
+                        "returned a repeated continuation cursor."
+                    );
+                }
+
+                /*
+                 * Preserve the existing after-only continuation query.
+                 */
+                requestPath =
+                    BuildNextResourcePath(after);
+            }
 
             pageNumber++;
         }

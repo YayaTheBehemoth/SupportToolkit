@@ -1,3 +1,4 @@
+
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -5,9 +6,33 @@ namespace SupportToolkit.Providers.Acronis.Devices.Dtos;
 
 public sealed class AcronisDeviceResourcePageDto
 {
-    [JsonPropertyName("items")]
-    public IReadOnlyList<AcronisDeviceResourceDto> Items { get; init; } = [];
+    private IReadOnlyList<AcronisDeviceResourceDto>? _items;
 
+    /*
+     * Distinguish a missing items property from an explicitly
+     * empty collection.
+     *
+     * A null collection is represented accurately at the DTO
+     * boundary. The provider decides whether to accept it.
+     */
+    [JsonPropertyName("items")]
+    public IReadOnlyList<AcronisDeviceResourceDto>? Items
+    {
+        get => _items;
+        init
+        {
+            _items = value;
+            HasItemsProperty = true;
+        }
+    }
+
+    [JsonIgnore]
+    public bool HasItemsProperty { get; private set; }
+
+    /*
+     * Preserve existing paging behavior until the device
+     * endpoint's terminal-page contract has been verified.
+     */
     [JsonPropertyName("paging")]
     public AcronisDevicePagingDto Paging { get; init; } = new();
 }
@@ -48,7 +73,11 @@ public sealed class AcronisDeviceResourceDto
     public AcronisDeviceAgentDto? Agent { get; init; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalProperties { get; init; } = [];
+    public Dictionary<string, JsonElement> AdditionalProperties
+    {
+        get;
+        init;
+    } = [];
 }
 
 public sealed class AcronisDeviceResourceStatusDto
@@ -81,7 +110,11 @@ public sealed class AcronisDeviceResourceStatusDto
     public string? NextBackupPolicy { get; init; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalProperties { get; init; } = [];
+    public Dictionary<string, JsonElement> AdditionalProperties
+    {
+        get;
+        init;
+    } = [];
 }
 
 public sealed class AcronisDeviceAgentDto
