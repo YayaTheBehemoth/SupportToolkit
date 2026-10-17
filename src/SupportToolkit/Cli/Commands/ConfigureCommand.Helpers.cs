@@ -434,14 +434,6 @@ public sealed partial class ConfigureCommand
             : "missing";
     }
 
-    private static string FormatBoolean(
-        bool value)
-    {
-        return value
-            ? "enabled"
-            : "disabled";
-    }
-
     private static string FormatMode(
         SupportToolkitMode mode)
     {

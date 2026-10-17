@@ -1,11 +1,10 @@
+
 using System.Diagnostics;
 using System.Net;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Providers.Acronis.Devices;
-using SupportToolkit.Providers.Acronis.Devices.Dtos;
 using SupportToolkit.Providers.Acronis.Microsoft365;
-using SupportToolkit.Providers.Acronis.Microsoft365.Dtos;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 
 namespace SupportToolkit.Modules.BackupAggregator.Services;
@@ -15,11 +14,8 @@ public sealed class BackupInventoryReviewService
     private const int DefaultMaxConcurrentTenants = 3;
 
     private readonly AcronisTenantResolver _tenantResolver;
-
     private readonly TenantInventoryReviewService _tenantReviewer;
-
     private readonly OperationalLogger? _logger;
-
     private readonly int _maxConcurrentTenants;
 
     public BackupInventoryReviewService(
@@ -86,9 +82,9 @@ public sealed class BackupInventoryReviewService
             new AggregatedBackupReport
             {
                 Tenants =
-                    [
-                        result.Report
-                    ]
+                [
+                    result.Report
+                ]
             };
 
         _logger?.Info(
@@ -120,6 +116,26 @@ public sealed class BackupInventoryReviewService
             $"Customer tenants selected: {tenants.Count}."
         );
 
+        /*
+         * An empty customer population is not a successful backup review.
+         *
+         * It may indicate lost API visibility, an unexpected tenant-kind
+         * change, incorrect scoping, or a legitimately empty hierarchy.
+         *
+         * Regardless of cause, SupportToolkit cannot claim that the
+         * customer estate was reviewed when no customers were discovered.
+         *
+         * Fail before any backup-resource requests are made.
+         */
+        if (tenants.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Acronis tenant discovery returned zero customer tenants. " +
+                "The all-tenant backup review cannot be considered complete. " +
+                "Verify the configured Acronis connection and tenant scope."
+            );
+        }
+
         _logger?.Info(
             $"Tenant review concurrency limit: " +
             $"{_maxConcurrentTenants}."
@@ -128,12 +144,8 @@ public sealed class BackupInventoryReviewService
         /*
          * Each tenant remains internally sequential.
          *
-         * Only independent tenant reviews are allowed to overlap. This keeps
-         * pagination and provider behavior unchanged while removing the
-         * all-tenant scan's strictly sequential scaling ceiling.
-         *
-         * Outcomes are stored by original tenant index so final reporting
-         * remains deterministic even though tenant completion order is not.
+         * Only independent tenant reviews overlap. Outcomes are stored
+         * by original tenant index so reporting order remains stable.
          */
         var outcomes =
             new TenantReviewOutcome?[tenants.Count];
@@ -338,5 +350,4 @@ public sealed class BackupInventoryReviewService
         TenantBackupReport? Report,
         TenantBackupReviewFailure? Failure
     );
-
 }

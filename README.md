@@ -442,7 +442,7 @@ scripts/
 
 - **Acronis:** API communication uses a restricted HTTP transport permitting approved read operations and required authentication requests.
 - **Credentials:** Authentication secrets are stored using Windows Credential Manager rather than plain-text configuration files.
-- **External writes:** Disabled by default and explicitly required for Zendesk ticket submission.
+- **Zendesk ticket submission:** Requires an explicitly configured Zendesk connection and destination, plus an operator-initiated ticket submission.
 - **Test data:** Fixture data supports local development and testing without accessing production customer environments.
 
 Production credentials and unsanitized customer data should not be committed to the repository.

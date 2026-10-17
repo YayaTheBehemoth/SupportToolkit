@@ -83,24 +83,6 @@ public sealed partial class ConfigureCommand
                 )
             );
 
-        Console.WriteLine();
-
-        Console.WriteLine(
-            "External writes"
-        );
-
-        Console.WriteLine(
-            "---------------"
-        );
-
-        profile.AllowWrites =
-            ReadConfirmation(
-                profile.AllowWrites
-                    ? "Allow external writes for this profile? [Y/n]: "
-                    : "Allow external writes for this profile? [y/N]: ",
-                profile.AllowWrites
-            );
-
         if (RequiresAcronisConnection(
                 profile))
         {
@@ -141,18 +123,6 @@ public sealed partial class ConfigureCommand
                     pendingSecret
                 );
             }
-        }
-
-        if (profile.AllowWrites
-            && string.IsNullOrWhiteSpace(
-                profile.ZendeskConnection))
-        {
-            Console.WriteLine();
-
-            Console.WriteLine(
-                "WARNING: external writes are enabled, but this profile " +
-                "does not reference a Zendesk connection."
-            );
         }
 
         UpsertProfile(

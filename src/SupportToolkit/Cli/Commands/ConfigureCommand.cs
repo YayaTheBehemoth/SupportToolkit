@@ -149,8 +149,8 @@ public sealed partial class ConfigureCommand
         Console.WriteLine();
 
         Console.WriteLine(
-            "Profiles define runtime behavior, external write permission, " +
-            "and reusable provider connections."
+            "Profiles define runtime behavior and reusable " +
+            "provider connections."
         );
 
         Console.WriteLine(

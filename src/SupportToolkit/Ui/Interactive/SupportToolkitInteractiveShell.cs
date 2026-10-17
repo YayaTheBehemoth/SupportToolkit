@@ -1,3 +1,4 @@
+
 using SupportToolkit.Cli.Commands;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.ErrorHandling;
@@ -29,14 +30,9 @@ public sealed partial class SupportToolkitInteractiveShell
     private readonly ISupportToolkitConfigurationStore
         _configurationStore;
 
-    private readonly ConfigureCommand
-        _configureCommand;
-
-    private readonly BackupAggregatorWorkflow
-        _backupAggregatorWorkflow;
-
-    private readonly BackupHealthWorkflow
-        _backupHealthWorkflow;
+    private readonly ConfigureCommand _configureCommand;
+    private readonly BackupAggregatorWorkflow _backupAggregatorWorkflow;
+    private readonly BackupHealthWorkflow _backupHealthWorkflow;
 
     private readonly ConsoleBackupAggregatorReporter
         _backupAggregatorReporter;
@@ -56,26 +52,22 @@ public sealed partial class SupportToolkitInteractiveShell
         _configurationStore =
             configurationStore
             ?? throw new ArgumentNullException(
-                nameof(configurationStore)
-            );
+                nameof(configurationStore));
 
         _configureCommand =
             configureCommand
             ?? throw new ArgumentNullException(
-                nameof(configureCommand)
-            );
+                nameof(configureCommand));
 
         _backupAggregatorWorkflow =
             backupAggregatorWorkflow
             ?? throw new ArgumentNullException(
-                nameof(backupAggregatorWorkflow)
-            );
+                nameof(backupAggregatorWorkflow));
 
         _backupHealthWorkflow =
             backupHealthWorkflow
             ?? throw new ArgumentNullException(
-                nameof(backupHealthWorkflow)
-            );
+                nameof(backupHealthWorkflow));
 
         _backupAggregatorReporter =
             new ConsoleBackupAggregatorReporter();
@@ -98,24 +90,19 @@ public sealed partial class SupportToolkitInteractiveShell
 
             var activeProfile =
                 await GetActiveProfileNameAsync(
-                    cancellationToken
-                );
+                    cancellationToken);
 
             var debugEnabled =
                 IsDebugEnabled();
 
             WriteMainMenu(
                 activeProfile,
-                debugEnabled
-            );
+                debugEnabled);
 
             var choice =
                 ReadMenuChoice(
-                    minimum:
-                        1,
-                    maximum:
-                        6
-                );
+                    minimum: 1,
+                    maximum: 6);
 
             Console.WriteLine();
 
@@ -123,40 +110,29 @@ public sealed partial class SupportToolkitInteractiveShell
             {
                 case 1:
                     await RunBackupAggregatorMenuAsync(
-                        cancellationToken
-                    );
-
+                        cancellationToken);
                     break;
 
                 case 2:
                     await RunBackupHealthMenuAsync(
-                        cancellationToken
-                    );
-
+                        cancellationToken);
                     break;
 
                 case 3:
                     await ChangeProfileAsync(
-                        cancellationToken
-                    );
-
+                        cancellationToken);
                     break;
 
                 case 4:
                     await RunConfigurationWizardAsync();
-
                     break;
 
                 case 5:
                     ToggleDebugMode();
-
                     break;
 
                 case 6:
-                    Console.WriteLine(
-                        "Goodbye."
-                    );
-
+                    Console.WriteLine("Goodbye.");
                     return 0;
             }
         }
@@ -167,14 +143,11 @@ public sealed partial class SupportToolkitInteractiveShell
         try
         {
             await _configureCommand.RunAsync(
-                Array.Empty<string>()
-            );
+                Array.Empty<string>());
         }
         catch (Exception exception)
         {
-            WriteError(
-                exception
-            );
+            WriteError(exception);
         }
 
         Console.WriteLine();
@@ -189,16 +162,12 @@ public sealed partial class SupportToolkitInteractiveShell
 
         Environment.SetEnvironmentVariable(
             DebugEnvironmentVariable,
-            enableDebug
-                ? "true"
-                : null
-        );
+            enableDebug ? "true" : null);
 
         Console.WriteLine(
             enableDebug
                 ? "Debug logging enabled for this SupportToolkit session."
-                : "Debug logging disabled for this SupportToolkit session."
-        );
+                : "Debug logging disabled for this SupportToolkit session.");
 
         Console.WriteLine();
 
@@ -209,11 +178,9 @@ public sealed partial class SupportToolkitInteractiveShell
     {
         return string.Equals(
             Environment.GetEnvironmentVariable(
-                DebugEnvironmentVariable
-            ),
+                DebugEnvironmentVariable),
             "true",
-            StringComparison.OrdinalIgnoreCase
-        );
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private static string FormatReviewState(
@@ -232,14 +199,13 @@ public sealed partial class SupportToolkitInteractiveShell
     private static void WriteFullReviewRequired()
     {
         Console.WriteLine(
-            "A full tenant review is required first."
-        );
+            "A full tenant review is required first.");
 
         Console.WriteLine();
 
         Console.WriteLine(
-            "Run 'Review all tenants' before previewing or submitting a ticket."
-        );
+            "Run 'Review all tenants' before previewing " +
+            "or submitting a ticket.");
 
         Console.WriteLine();
     }
@@ -247,43 +213,22 @@ public sealed partial class SupportToolkitInteractiveShell
     private static void WriteCreatedTicket(
         CreatedTicket ticket)
     {
-        Console.WriteLine(
-            "Ticket request completed successfully."
-        );
-
-        Console.WriteLine();
-
-        Console.WriteLine(
-            $"Ticket ID: {ticket.Id}"
-        );
-
-        if (!string.IsNullOrWhiteSpace(
-                ticket.Url))
-        {
-            Console.WriteLine(
-                $"API URL:   {ticket.Url}"
-            );
-        }
-
-        Console.WriteLine();
+        ConsoleCreatedTicketReporter.Write(
+            Console.Out,
+            ticket);
     }
 
-    private static void WriteProgress(
-        string message)
+    private static void WriteProgress(string message)
     {
-        Console.WriteLine(
-            message
-        );
+        Console.WriteLine(message);
     }
 
-    private static void WriteError(
-        Exception exception)
+    private static void WriteError(Exception exception)
     {
         Console.Error.WriteLine();
 
         Console.Error.WriteLine(
-            $"ERROR: {ConsoleErrorFormatter.Format(exception)}"
-        );
+            $"ERROR: {ConsoleErrorFormatter.Format(exception)}");
 
         Console.Error.WriteLine();
     }
@@ -294,52 +239,30 @@ public sealed partial class SupportToolkitInteractiveShell
     {
         Console.WriteLine();
 
-        Console.WriteLine(
-            "SupportToolkit"
-        );
-
-        Console.WriteLine(
-            "=============="
-        );
-
+        Console.WriteLine("SupportToolkit");
+        Console.WriteLine("===============");
         Console.WriteLine();
 
         Console.WriteLine(
-            $"Active profile: {activeProfile}"
-        );
+            $"Active profile: {activeProfile}");
 
         Console.WriteLine(
-            $"Debug logging:  {(debugEnabled ? "enabled" : "disabled")}"
-        );
+            $"Debug logging:  " +
+            $"{(debugEnabled ? "enabled" : "disabled")}");
 
         Console.WriteLine();
 
-        Console.WriteLine(
-            "1. Backup Aggregator"
-        );
-
-        Console.WriteLine(
-            "2. Backup Health"
-        );
-
-        Console.WriteLine(
-            "3. Change profile"
-        );
-
-        Console.WriteLine(
-            "4. Configuration wizard"
-        );
+        Console.WriteLine("1. Backup Aggregator");
+        Console.WriteLine("2. Backup Health");
+        Console.WriteLine("3. Change profile");
+        Console.WriteLine("4. Configuration wizard");
 
         Console.WriteLine(
             debugEnabled
                 ? "5. Disable debug logging"
-                : "5. Enable debug logging"
-        );
+                : "5. Enable debug logging");
 
-        Console.WriteLine(
-            "6. Exit"
-        );
-
+        Console.WriteLine("6. Exit");
         Console.WriteLine();
     }
 
@@ -349,16 +272,12 @@ public sealed partial class SupportToolkitInteractiveShell
     {
         while (true)
         {
-            Console.Write(
-                "> "
-            );
+            Console.Write("> ");
 
             var input =
                 Console.ReadLine();
 
-            if (int.TryParse(
-                    input,
-                    out var choice)
+            if (int.TryParse(input, out var choice)
                 && choice >= minimum
                 && choice <= maximum)
             {
@@ -366,8 +285,7 @@ public sealed partial class SupportToolkitInteractiveShell
             }
 
             Console.WriteLine(
-                $"Enter a number from {minimum} to {maximum}."
-            );
+                $"Enter a number from {minimum} to {maximum}.");
         }
     }
 
@@ -377,15 +295,12 @@ public sealed partial class SupportToolkitInteractiveShell
     {
         while (true)
         {
-            Console.Write(
-                prompt
-            );
+            Console.Write(prompt);
 
             var value =
                 Console.ReadLine();
 
-            if (string.IsNullOrWhiteSpace(
-                    value))
+            if (string.IsNullOrWhiteSpace(value))
             {
                 return defaultValue;
             }
@@ -410,9 +325,7 @@ public sealed partial class SupportToolkitInteractiveShell
                 return false;
             }
 
-            Console.WriteLine(
-                "Expected 'y' or 'n'."
-            );
+            Console.WriteLine("Expected 'y' or 'n'.");
         }
     }
 
@@ -426,12 +339,8 @@ public sealed partial class SupportToolkitInteractiveShell
 
     private static void Pause()
     {
-        Console.WriteLine(
-            "Press Enter to continue..."
-        );
-
+        Console.WriteLine("Press Enter to continue...");
         Console.ReadLine();
-
         Console.WriteLine();
     }
 
@@ -440,9 +349,8 @@ public sealed partial class SupportToolkitInteractiveShell
         if (Console.IsInputRedirected)
         {
             throw new InvalidOperationException(
-                "The interactive SupportToolkit shell requires an " +
-                "interactive console."
-            );
+                "The interactive SupportToolkit shell requires " +
+                "an interactive console.");
         }
     }
 }
