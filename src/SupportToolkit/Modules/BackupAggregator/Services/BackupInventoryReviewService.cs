@@ -124,6 +124,15 @@ public sealed class BackupInventoryReviewService
             $"Customer tenants selected: {tenants.Count}."
         );
 
+        /* A zero-tenant discovery is not a successful full backup review. */
+        if (tenants.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Acronis tenant discovery returned zero customer tenants. " +
+                "The all-tenant backup review cannot be considered complete. " +
+                "Verify the configured Acronis connection and tenant scope.");
+        }
+
         return await ReviewTenantsAsync(
             tenants,
             cancellationToken
@@ -349,13 +358,11 @@ public sealed class BackupInventoryReviewService
             var result =
                 await _tenantReviewer.ReviewResolvedTenantAsync(
                     tenant,
-                    cancellationToken
-                );
+                    cancellationToken);
 
             return new TenantReviewOutcome(
                 result.Report,
-                null
-            );
+                null);
         }
         catch (OperationCanceledException)
             when (cancellationToken.IsCancellationRequested)
@@ -364,12 +371,22 @@ public sealed class BackupInventoryReviewService
         }
         catch (TenantReviewStageException exception)
         {
+            var underlyingException =
+                exception.InnerException ?? exception;
+
+            /*
+             * Never log raw exception messages here.
+             *
+             * HTTP and vendor exception messages can contain
+             * URLs, cursor tokens, request identifiers, or other
+             * values not handled by UUID redaction.
+             *
+             * Preserve the stage, exception type, and HTTP status.
+             */
             _logger?.Debug(
                 $"Tenant review {tenantNumber}/{tenantCount} " +
                 $"failed during {exception.Stage}: " +
-                $"{exception.InnerException?.GetType().Name ?? exception.GetType().Name}: " +
-                $"{exception.InnerException?.Message ?? exception.Message}"
-            );
+                $"{DescribeFailure(underlyingException)}.");
 
             return new TenantReviewOutcome(
                 null,
@@ -383,20 +400,15 @@ public sealed class BackupInventoryReviewService
 
                     Reason =
                         GetSafeFailureReason(
-                            exception.InnerException
-                            ?? exception
-                        )
-                }
-            );
+                            underlyingException)
+                });
         }
         catch (Exception exception)
         {
             _logger?.Debug(
                 $"Tenant review {tenantNumber}/{tenantCount} " +
                 $"failed unexpectedly: " +
-                $"{exception.GetType().Name}: " +
-                $"{exception.Message}"
-            );
+                $"{DescribeFailure(exception)}.");
 
             return new TenantReviewOutcome(
                 null,
@@ -409,12 +421,32 @@ public sealed class BackupInventoryReviewService
                         "Unexpected error",
 
                     Reason =
-                        GetSafeFailureReason(
-                            exception
-                        )
-                }
-            );
+                        GetSafeFailureReason(exception)
+                });
         }
+    }
+
+    /// <summary>
+    /// Structured diagnostic information derived only from
+    /// exception type and HTTP status.
+    ///
+    /// Does not include Exception.Message, request URLs,
+    /// response bodies, or exception ToString() output.
+    /// </summary>
+    private static string DescribeFailure(
+        Exception exception)
+    {
+        var typeName =
+            exception.GetType().Name;
+
+        if (exception is HttpRequestException httpException
+            && httpException.StatusCode is HttpStatusCode statusCode)
+        {
+            return
+                $"{typeName} (HTTP {(int)statusCode})";
+        }
+
+        return typeName;
     }
 
     private static string GetSafeFailureReason(

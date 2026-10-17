@@ -49,8 +49,6 @@ public sealed class SupportToolkitConnections
 ///
 /// ZendeskDestination selects an explicitly configured group within
 /// the profile's Zendesk connection.
-///
-/// External writes remain disabled unless explicitly enabled.
 /// </summary>
 public sealed class SupportToolkitProfile
 {
@@ -59,8 +57,6 @@ public sealed class SupportToolkitProfile
     public string? ZendeskConnection { get; set; }
 
     public string? ZendeskDestination { get; set; }
-
-    public bool AllowWrites { get; set; } = false;
 
     public Dictionary<string, SupportToolkitMode> Modules
     {

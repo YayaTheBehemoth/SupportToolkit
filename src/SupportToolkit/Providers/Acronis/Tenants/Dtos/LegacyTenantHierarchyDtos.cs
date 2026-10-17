@@ -1,12 +1,13 @@
+
 using System.Text.Json.Serialization;
 
 namespace SupportToolkit.Providers.Acronis.Tenants.Dtos;
 
 /// <summary>
-/// Represents one tenant/group returned by the legacy Account Management API.
+/// Represents the legacy Account Management root group.
 ///
-/// The legacy endpoint exposes both the historical numeric ID and the UUID
-/// used by Account Management v2.
+/// The legacy endpoint exposes both the historical numeric ID
+/// and the UUID used by Account Management v2.
 /// </summary>
 public sealed class LegacyTenantGroupDto
 {
@@ -18,16 +19,22 @@ public sealed class LegacyTenantGroupDto
 }
 
 /// <summary>
-/// Represents the response returned by the legacy hierarchy children endpoint.
+/// Represents a legacy hierarchy children response.
 /// </summary>
 public sealed class LegacyTenantChildrenPageDto
 {
+    /*
+     * Required causes missing 'items' to fail deserialization.
+     *
+     * Explicit null is rejected by the provider.
+     * An empty array is valid.
+     */
     [JsonPropertyName("items")]
     public required List<LegacyTenantChildDto> Items { get; init; }
 }
 
 /// <summary>
-/// Represents one child node in the legacy Acronis tenant hierarchy.
+/// Represents a child of a legacy Acronis group.
 /// </summary>
 public sealed class LegacyTenantChildDto
 {
@@ -38,8 +45,16 @@ public sealed class LegacyTenantChildDto
     public string? Uuid { get; init; }
 
     /*
-     * The legacy API represents this as 0/1 in its documented examples.
+     * Production observation:
+     * All 39 inspected hierarchy children provided this field
+     * as a JSON number with value zero.
+     *
+     * JsonRequired prevents a missing property from silently
+     * becoming zero during deserialization.
+     *
+     * A null or structurally incompatible value fails decoding.
      */
+    [JsonRequired]
     [JsonPropertyName("has_children")]
     public int HasChildren { get; init; }
 }

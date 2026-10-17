@@ -272,10 +272,40 @@ public sealed partial class SupportToolkitInteractiveShell
             return;
         }
 
-        Console.WriteLine(
-            "This will submit a ticket based on the current full review."
-        );
+        ZendeskTicketDestinationPreview destination;
 
+        try
+        {
+            // Fail before prompting if the report is incomplete or the
+            // selected Zendesk destination/credentials are invalid.
+            _backupAggregatorWorkflow.CreateTicketDraft(currentFullReview);
+
+            destination =
+                await _backupAggregatorWorkflow.GetTicketSubmissionTargetAsync(
+                    cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            WriteError(exception);
+            Pause();
+            return;
+        }
+
+        Console.WriteLine("Confirm ticket submission");
+        Console.WriteLine("-------------------------");
+        Console.WriteLine();
+        Console.WriteLine($"Zendesk instance: https://{destination.InstanceHost}");
+        Console.WriteLine($"Destination alias: {destination.DestinationName}");
+        Console.WriteLine($"Zendesk group ID: {destination.GroupId}");
+        Console.WriteLine(
+            $"Review: {currentFullReview.TenantCount}/" +
+            $"{currentFullReview.TenantsAttempted} tenants, " +
+            $"{currentFullReview.FindingsCount} findings, " +
+            $"{currentFullReview.UnknownRowsCount} unclassified");
         Console.WriteLine();
 
         if (!ReadConfirmation(
@@ -307,8 +337,9 @@ public sealed partial class SupportToolkitInteractiveShell
         {
             var ticket =
                 await _backupAggregatorWorkflow
-                    .SubmitTicketAsync(
+                    .SubmitTicketToConfirmedDestinationAsync(
                         currentFullReview,
+                        destination,
                         cancellationToken
                     );
 

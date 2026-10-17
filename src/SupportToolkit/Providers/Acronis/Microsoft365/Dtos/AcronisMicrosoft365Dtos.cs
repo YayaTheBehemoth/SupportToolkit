@@ -1,3 +1,4 @@
+
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -5,18 +6,39 @@ namespace SupportToolkit.Providers.Acronis.Microsoft365.Dtos;
 
 public sealed class AcronisMicrosoft365GroupsDto
 {
+    private IReadOnlyList<AcronisMicrosoft365GroupDto?>? _data;
+    private IReadOnlyList<AcronisMicrosoft365GroupDto?>? _items;
+
     /*
-     * Acronis can explicitly return null for these collections when a tenant
-     * has no Microsoft 365 workload configured.
+     * An explicitly null collection is different from a missing property.
      *
-     * They are therefore nullable at the transport boundary even though the
-     * provider exposes an empty inventory to the rest of SupportToolkit.
+     * Acronis has been observed returning null for an unconfigured
+     * Microsoft 365 inventory, so retain that supported behavior.
      */
     [JsonPropertyName("data")]
-    public IReadOnlyList<AcronisMicrosoft365GroupDto?>? Data { get; init; }
+    public IReadOnlyList<AcronisMicrosoft365GroupDto?>? Data
+    {
+        get => _data;
+        init
+        {
+            _data = value;
+            HasCollectionProperty = true;
+        }
+    }
 
     [JsonPropertyName("items")]
-    public IReadOnlyList<AcronisMicrosoft365GroupDto?>? Items { get; init; }
+    public IReadOnlyList<AcronisMicrosoft365GroupDto?>? Items
+    {
+        get => _items;
+        init
+        {
+            _items = value;
+            HasCollectionProperty = true;
+        }
+    }
+
+    [JsonIgnore]
+    public bool HasCollectionProperty { get; private set; }
 
     [JsonIgnore]
     public IReadOnlyList<AcronisMicrosoft365GroupDto> Groups
@@ -28,21 +50,14 @@ public sealed class AcronisMicrosoft365GroupsDto
                     ? Data
                     : Items;
 
-            if (source is null
-                || source.Count == 0)
+            if (source is null || source.Count == 0)
             {
                 return [];
             }
 
             return source
-                .Where(
-                    group =>
-                        group is not null
-                )
-                .Select(
-                    group =>
-                        group!
-                )
+                .Where(group => group is not null)
+                .Select(group => group!)
                 .ToList()
                 .AsReadOnly();
         }
@@ -91,12 +106,25 @@ public sealed class AcronisMicrosoft365GroupDto
 
 public sealed class AcronisMicrosoft365ResourcePageDto
 {
+    private IReadOnlyList<AcronisMicrosoft365ResourceDto?>? _items;
+
     /*
-     * Empty Microsoft 365 resource collections may also be represented by an
-     * explicit JSON null. The provider normalizes that to an empty page.
+     * Explicit null and empty arrays are supported.
+     * A missing items property is instead an incomplete response.
      */
     [JsonPropertyName("items")]
-    public IReadOnlyList<AcronisMicrosoft365ResourceDto?>? Items { get; init; }
+    public IReadOnlyList<AcronisMicrosoft365ResourceDto?>? Items
+    {
+        get => _items;
+        init
+        {
+            _items = value;
+            HasItemsProperty = true;
+        }
+    }
+
+    [JsonIgnore]
+    public bool HasItemsProperty { get; private set; }
 
     [JsonPropertyName("paging")]
     public AcronisMicrosoft365PagingDto? Paging { get; init; }
@@ -136,6 +164,15 @@ public sealed class AcronisMicrosoft365ResourceDto
 
     [JsonPropertyName("resourceType")]
     public string? ResourceType { get; init; }
+
+    /*
+     * Observed in production on Microsoft 365 GROUP resources.
+     * Identifies the associated Team displayed in Acronis's Team column.
+     *
+     * Association alone does not establish workload duplication.
+     */
+    [JsonPropertyName("teamName")]
+    public string? TeamName { get; init; }
 
     [JsonPropertyName("basicKinds")]
     public IReadOnlyList<AcronisMicrosoft365BasicKindDto?>? BasicKinds

@@ -158,9 +158,8 @@ public sealed class BackupAggregatorWorkflow
     /// <summary>
     /// Submits a ticket representing an already completed full review.
     ///
-    /// Write permission is checked independently from the BackupAggregator
-    /// runtime mode. Fixture reviews may therefore be submitted to a configured
-    /// Zendesk connection when the active profile explicitly permits writes.
+    /// Ticket submission requires a configured Zendesk connection and destination.
+    /// Fixture reports may be submitted through an explicit ticket-submit action.
     /// </summary>
     public async Task<CreatedTicket>
         SubmitTicketAsync(
@@ -170,21 +169,6 @@ public sealed class BackupAggregatorWorkflow
         ArgumentNullException.ThrowIfNull(
             report
         );
-
-        var allowWrites =
-            await _configurationResolver
-                .GetAllowWritesAsync(
-                    cancellationToken
-                );
-
-        if (!allowWrites)
-        {
-            throw new InvalidOperationException(
-                "External writes are disabled for the active profile. " +
-                "Enable writes for that profile or set " +
-                "SUPPORTTOOLKIT_ALLOW_WRITES=true explicitly."
-            );
-        }
 
         var draft =
             CreateTicketDraft(
@@ -218,10 +202,56 @@ public sealed class BackupAggregatorWorkflow
         );
     }
 
+    /// <summary>
+    /// Resolve and validate the currently selected Zendesk destination
+    /// without calling the external API or exposing credentials to the UI.
+    /// </summary>
+    public async Task<ZendeskTicketDestinationPreview>
+        GetTicketSubmissionTargetAsync(
+            CancellationToken cancellationToken = default)
+    {
+        var connection =
+            await _configurationResolver.GetZendeskConnectionAsync(
+                cancellationToken);
+
+        var options = ZendeskOptions.Create(
+            connection.Subdomain,
+            connection.ClientId,
+            connection.ClientSecret);
+
+        return new ZendeskTicketDestinationPreview(
+            options.BaseUri.Host,
+            connection.DestinationName,
+            connection.GroupId);
+    }
+
+    /// <summary>
+    /// Interactive submission only: fail closed if the destination selected
+    /// for the confirmation prompt has changed before the HTTP POST.
+    /// Raw CLI submission keeps using the existing SubmitTicketAsync overload.
+    /// </summary>
+    public async Task<CreatedTicket>
+        SubmitTicketToConfirmedDestinationAsync(
+            AggregatedBackupReport report,
+            ZendeskTicketDestinationPreview confirmedDestination,
+            CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+        ArgumentNullException.ThrowIfNull(confirmedDestination);
+
+        var draft = CreateTicketDraft(report);
+
+        return await SubmitTicketDraftAsync(
+            draft,
+            cancellationToken,
+            confirmedDestination);
+    }
+
     private async Task<CreatedTicket>
         SubmitTicketDraftAsync(
             TicketDraft draft,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            ZendeskTicketDestinationPreview? confirmedDestination = null)
     {
         /*
          * Resolve the destination before creating the HTTP session.
@@ -239,6 +269,21 @@ public sealed class BackupAggregatorWorkflow
                 resolvedConnection.ClientId,
                 resolvedConnection.ClientSecret
             );
+
+        if (confirmedDestination is not null)
+        {
+            var currentDestination = new ZendeskTicketDestinationPreview(
+                zendeskOptions.BaseUri.Host,
+                resolvedConnection.DestinationName,
+                resolvedConnection.GroupId);
+
+            if (!currentDestination.IsSameAs(confirmedDestination))
+            {
+                throw new InvalidOperationException(
+                    "The Zendesk destination changed since confirmation. " +
+                    "No ticket was submitted. Review the destination and try again.");
+            }
+        }
 
         /*
          * Include the actual Zendesk instance and group in the retry

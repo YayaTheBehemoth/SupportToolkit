@@ -1,3 +1,4 @@
+
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Modules;
 using SupportToolkit.Core.Ticketing.Models;
@@ -11,14 +12,11 @@ namespace SupportToolkit.Modules.BackupAggregator;
 public sealed class BackupAggregatorModule
     : ISupportToolkitModule
 {
-    public const string ModuleCommand =
-        "backup-aggregator";
+    public const string ModuleCommand = "backup-aggregator";
 
-    private readonly BackupAggregatorWorkflow
-        _workflow;
+    private readonly BackupAggregatorWorkflow _workflow;
 
-    public string Command =>
-        ModuleCommand;
+    public string Command => ModuleCommand;
 
     public string Description =>
         "Review Acronis backup inventory and surface only exceptions.";
@@ -28,30 +26,24 @@ public sealed class BackupAggregatorModule
     {
         _workflow =
             workflow
-            ?? throw new ArgumentNullException(
-                nameof(workflow)
-            );
+            ?? throw new ArgumentNullException(nameof(workflow));
     }
 
-    public async Task<int> RunAsync(
-        string[] args)
+    public async Task<int> RunAsync(string[] args)
     {
         if (args.Length > 0
             && args[0] is "--help" or "-h")
         {
             PrintUsage();
-
             return 0;
         }
 
-        if (IsTicketPreviewCommand(
-                args))
+        if (IsTicketPreviewCommand(args))
         {
             return await RunTicketPreviewAsync();
         }
 
-        if (IsTicketSubmitCommand(
-                args))
+        if (IsTicketSubmitCommand(args))
         {
             return await RunTicketSubmitAsync();
         }
@@ -69,72 +61,48 @@ public sealed class BackupAggregatorModule
             var mode =
                 await _workflow.GetModeAsync();
 
-            if (mode
-                != SupportToolkitMode.Fixture)
+            if (mode != SupportToolkitMode.Fixture)
             {
                 PrintUsage();
-
                 return 1;
             }
 
             var fixtureReport =
-                await _workflow
-                    .ReviewAllTenantsAsync();
+                await _workflow.ReviewAllTenantsAsync();
 
-            WriteReport(
-                fixtureReport
-            );
-
-            return GetExitCode(
-                fixtureReport
-            );
+            WriteReport(fixtureReport);
+            return GetExitCode(fixtureReport);
         }
 
-        if (!IsInventoryReviewCommand(
-                args))
+        if (!IsInventoryReviewCommand(args))
         {
             PrintUsage();
-
             return 1;
         }
 
         /*
          * Runtime configuration decides where data comes from.
-         *
          * CLI arguments decide what should be reviewed.
          */
         var report =
             string.Equals(
                 args[1],
                 "--all",
-                StringComparison.OrdinalIgnoreCase
-            )
-                ? await _workflow
-                    .ReviewAllTenantsAsync()
+                StringComparison.OrdinalIgnoreCase)
+                ? await _workflow.ReviewAllTenantsAsync()
+                : await _workflow.ReviewTenantAsync(args[1]);
 
-                : await _workflow
-                    .ReviewTenantAsync(
-                        args[1]
-                    );
+        WriteReport(report);
 
-        WriteReport(
-            report
-        );
-
-        return GetExitCode(
-            report
-        );
+        return GetExitCode(report);
     }
 
     private async Task<int> RunTicketPreviewAsync()
     {
         var draft =
-            await _workflow
-                .CreateTicketDraftAsync();
+            await _workflow.CreateTicketDraftAsync();
 
-        WriteTicketPreview(
-            draft
-        );
+        WriteTicketPreview(draft);
 
         return 0;
     }
@@ -142,12 +110,9 @@ public sealed class BackupAggregatorModule
     private async Task<int> RunTicketSubmitAsync()
     {
         var ticket =
-            await _workflow
-                .SubmitTicketAsync();
+            await _workflow.SubmitTicketAsync();
 
-        WriteCreatedTicket(
-            ticket
-        );
+        WriteCreatedTicket(ticket);
 
         return 0;
     }
@@ -156,53 +121,27 @@ public sealed class BackupAggregatorModule
         AggregatedBackupReport report)
     {
         new ConsoleBackupAggregatorReporter()
-            .Write(
-                report
-            );
+            .Write(report);
     }
 
     private static void WriteTicketPreview(
         TicketDraft draft)
     {
         new ConsoleTicketDraftPreviewer()
-            .Write(
-                draft
-            );
+            .Write(draft);
     }
 
     private static void WriteCreatedTicket(
         CreatedTicket ticket)
     {
-        Console.WriteLine();
-
-        Console.WriteLine(
-            "Ticket submitted successfully."
-        );
-
-        Console.WriteLine(
-            $"Ticket ID: {ticket.Id}"
-        );
-
-        if (!string.IsNullOrWhiteSpace(
-                ticket.Url))
-        {
-            Console.WriteLine(
-                $"API URL:   {ticket.Url}"
-            );
-        }
-
-        Console.WriteLine();
+        ConsoleCreatedTicketReporter.Write(
+            Console.Out,
+            ticket);
     }
 
     private static int GetExitCode(
         AggregatedBackupReport report)
     {
-        /*
-         * Findings are legitimate report output.
-         *
-         * Failed tenant reviews indicate incomplete execution and therefore
-         * retain the existing non-zero exit behavior.
-         */
         return report.FailedTenantCount > 0
             ? 2
             : 0;
@@ -215,8 +154,7 @@ public sealed class BackupAggregatorModule
             && string.Equals(
                 args[0],
                 "inventory-review",
-                StringComparison.OrdinalIgnoreCase
-            );
+                StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsTicketPreviewCommand(
@@ -226,13 +164,11 @@ public sealed class BackupAggregatorModule
             && string.Equals(
                 args[0],
                 "ticket",
-                StringComparison.OrdinalIgnoreCase
-            )
+                StringComparison.OrdinalIgnoreCase)
             && string.Equals(
                 args[1],
                 "preview",
-                StringComparison.OrdinalIgnoreCase
-            );
+                StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsTicketSubmitCommand(
@@ -242,92 +178,67 @@ public sealed class BackupAggregatorModule
             && string.Equals(
                 args[0],
                 "ticket",
-                StringComparison.OrdinalIgnoreCase
-            )
+                StringComparison.OrdinalIgnoreCase)
             && string.Equals(
                 args[1],
                 "submit",
-                StringComparison.OrdinalIgnoreCase
-            );
+                StringComparison.OrdinalIgnoreCase);
     }
 
     private static void PrintUsage()
     {
-        Console.WriteLine(
-            "Backup Aggregator"
-        );
-
+        Console.WriteLine("Backup Aggregator");
         Console.WriteLine();
 
-        Console.WriteLine(
-            "Inventory review:"
-        );
+        Console.WriteLine("Inventory review:");
 
         Console.WriteLine(
             "  SupportToolkit backup-aggregator " +
-            "inventory-review <tenant-name>"
-        );
+            "inventory-review <tenant-name>");
 
         Console.WriteLine(
             "  SupportToolkit backup-aggregator " +
-            "inventory-review --all"
-        );
+            "inventory-review --all");
 
         Console.WriteLine();
 
-        Console.WriteLine(
-            "Ticket workflow:"
-        );
+        Console.WriteLine("Ticket workflow:");
 
         Console.WriteLine(
-            "  SupportToolkit backup-aggregator ticket preview"
-        );
+            "  SupportToolkit backup-aggregator ticket preview");
 
         Console.WriteLine(
-            "  SupportToolkit backup-aggregator ticket submit"
-        );
+            "  SupportToolkit backup-aggregator ticket submit");
 
         Console.WriteLine();
 
         Console.WriteLine(
             "Ticket preview uses the same BackupAggregator runtime mode " +
-            "as the inventory review."
-        );
+            "as the inventory review.");
 
         Console.WriteLine(
-            "Ticket submission additionally requires a configured Zendesk " +
-            "connection and SUPPORTTOOLKIT_ALLOW_WRITES=true."
-        );
+            "Ticket submission requires a configured Zendesk connection " +
+            "and an explicitly selected destination.");
 
         Console.WriteLine();
 
         Console.WriteLine(
             "The active SupportToolkit profile controls whether " +
-            "BackupAggregator uses fixture or production data."
-        );
+            "BackupAggregator uses fixture or production data.");
 
         Console.WriteLine();
 
-        Console.WriteLine(
-            "Optional runtime override:"
-        );
+        Console.WriteLine("Optional runtime override:");
 
         Console.WriteLine(
-            "  set SUPPORTTOOLKIT_BACKUP_AGGREGATOR_MODE=fixture"
-        );
+            "  set SUPPORTTOOLKIT_BACKUP_AGGREGATOR_MODE=fixture");
 
         Console.WriteLine(
-            "  set SUPPORTTOOLKIT_BACKUP_AGGREGATOR_MODE=production"
-        );
+            "  set SUPPORTTOOLKIT_BACKUP_AGGREGATOR_MODE=production");
 
         Console.WriteLine();
 
-        Console.WriteLine(
-            "Fixture mode also supports:"
-        );
-
-        Console.WriteLine(
-            "  SupportToolkit backup-aggregator"
-        );
+        Console.WriteLine("Fixture mode also supports:");
+        Console.WriteLine("  SupportToolkit backup-aggregator");
     }
 }

@@ -1,3 +1,4 @@
+
 using System.Net.Http.Json;
 using SupportToolkit.Core.Logging;
 
@@ -5,11 +6,21 @@ namespace SupportToolkit.Providers.Acronis.Transport;
 
 /// <summary>
 /// Shared cursor-pagination helper for Acronis collection endpoints.
-/// Endpoint-specific providers remain responsible for request paths and
-/// response contracts.
+///
+/// Endpoint-specific providers remain responsible for request paths
+/// and response contracts.
 /// </summary>
 public sealed class AcronisCursorPaginator
 {
+    /*
+     * A bounded traversal prevents an API that continuously returns
+     * fresh cursors from generating unlimited requests.
+     *
+     * Current callers request 100 items per page. The limit permits
+     * up to 500 pages before treating pagination as incomplete.
+     */
+    private const int MaxPages = 500;
+
     private readonly AcronisApiClient _apiClient;
     private readonly OperationalLogger? _logger;
 
@@ -17,7 +28,9 @@ public sealed class AcronisCursorPaginator
         AcronisApiClient apiClient,
         OperationalLogger? logger = null)
     {
-        _apiClient = apiClient;
+        _apiClient =
+            apiClient ?? throw new ArgumentNullException(nameof(apiClient));
+
         _logger = logger;
     }
 
@@ -34,6 +47,17 @@ public sealed class AcronisCursorPaginator
         var allItems =
             new List<TItem>();
 
+        /*
+         * Cursor tokens are opaque and case-sensitive.
+         *
+         * A repeated token means pagination is no longer advancing.
+         * Detect both immediate repetition and longer cycles.
+         *
+         * Never include actual tokens in logs or exception messages.
+         */
+        var seenAfterCursors =
+            new HashSet<string>(StringComparer.Ordinal);
+
         string? requestPath =
             firstRequestPath;
 
@@ -41,6 +65,14 @@ public sealed class AcronisCursorPaginator
 
         while (requestPath is not null)
         {
+            if (pageNumber > MaxPages)
+            {
+                throw new InvalidOperationException(
+                    $"Acronis {datasetName} pagination exceeded " +
+                    $"{MaxPages} pages."
+                );
+            }
+
             _logger?.Debug(
                 $"Fetching {datasetName} page {pageNumber}."
             );
@@ -56,9 +88,7 @@ public sealed class AcronisCursorPaginator
                 getItems(page)
                     .ToList();
 
-            allItems.AddRange(
-                pageItems
-            );
+            allItems.AddRange(pageItems);
 
             _logger?.Debug(
                 $"{datasetName} page {pageNumber}: " +
@@ -68,10 +98,23 @@ public sealed class AcronisCursorPaginator
             var after =
                 getAfterCursor(page);
 
-            requestPath =
-                string.IsNullOrWhiteSpace(after)
-                    ? null
-                    : buildNextRequestPath(after);
+            if (string.IsNullOrWhiteSpace(after))
+            {
+                requestPath = null;
+            }
+            else
+            {
+                if (!seenAfterCursors.Add(after))
+                {
+                    throw new InvalidOperationException(
+                        $"Acronis {datasetName} pagination returned " +
+                        "a repeated continuation cursor."
+                    );
+                }
+
+                requestPath =
+                    buildNextRequestPath(after);
+            }
 
             pageNumber++;
         }
@@ -106,8 +149,7 @@ public sealed class AcronisCursorPaginator
 
         return await response.Content
             .ReadFromJsonAsync<TPage>(
-                cancellationToken:
-                    cancellationToken
+                cancellationToken: cancellationToken
             )
             ?? throw new InvalidOperationException(
                 "Acronis returned an empty API response."

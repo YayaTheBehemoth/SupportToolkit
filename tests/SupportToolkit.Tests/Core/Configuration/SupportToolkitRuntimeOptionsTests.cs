@@ -136,18 +136,4 @@ public class SupportToolkitRuntimeOptionsTests
         );
     }
 
-    [Fact]
-    public void GetEnvironmentVariableName_NormalizesModuleCommand()
-    {
-        var variableName =
-            SupportToolkitRuntimeOptions
-                .GetEnvironmentVariableName(
-                    "backup-aggregator"
-                );
-
-        Assert.Equal(
-            "SUPPORTTOOLKIT_BACKUP_AGGREGATOR_MODE",
-            variableName
-        );
-    }
 }
