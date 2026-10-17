@@ -1,6 +1,8 @@
 
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Secrets;
+using SupportToolkit.Providers.Acronis.Transport;
+using SupportToolkit.Providers.Zendesk.Transport;
 
 namespace SupportToolkit.Cli.Commands;
 
@@ -53,17 +55,10 @@ public sealed partial class ConfigureCommand
 
         Console.WriteLine();
 
-        Console.WriteLine(
-            "Runtime"
-        );
+        Console.WriteLine("Runtime");
+        Console.WriteLine("-------");
 
-        Console.WriteLine(
-            "-------"
-        );
-
-        profile.Modules[
-            BackupAggregatorCommand
-        ] =
+        profile.Modules[BackupAggregatorCommand] =
             ReadMode(
                 "Backup Aggregator",
                 GetConfiguredMode(
@@ -72,9 +67,7 @@ public sealed partial class ConfigureCommand
                 )
             );
 
-        profile.Modules[
-            BackupHealthCommand
-        ] =
+        profile.Modules[BackupHealthCommand] =
             ReadMode(
                 "Backup Health",
                 GetConfiguredMode(
@@ -83,27 +76,41 @@ public sealed partial class ConfigureCommand
                 )
             );
 
-        if (RequiresAcronisConnection(
-                profile))
+        if (RequiresAcronisConnection(profile))
         {
             Console.WriteLine();
 
-            var pendingSecret =
-                await ConfigureAcronisConnectionAsync(
+            var keepExisting =
+                await KeepExistingAcronisConnectionAsync(
                     configuration,
                     profile
                 );
 
-            if (pendingSecret is not null)
+            if (!keepExisting)
             {
-                pendingSecrets.Add(
-                    pendingSecret
-                );
+                Console.WriteLine();
+
+                var pendingSecret =
+                    await ConfigureAcronisConnectionAsync(
+                        configuration,
+                        profile
+                    );
+
+                if (pendingSecret is not null)
+                {
+                    pendingSecrets.Add(
+                        pendingSecret
+                    );
+                }
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(
-                profile.ZendeskConnection)
+        var zendeskSelected =
+            !string.IsNullOrWhiteSpace(
+                profile.ZendeskConnection
+            );
+
+        if (zendeskSelected
             || ReadConfirmation(
                 "Configure Zendesk ticket submission for this profile? [y/N]: ",
                 defaultValue: false
@@ -111,28 +118,98 @@ public sealed partial class ConfigureCommand
         {
             Console.WriteLine();
 
-            var pendingSecret =
-                await ConfigureZendeskConnectionAsync(
+            var keepExisting =
+                zendeskSelected
+                && await KeepExistingZendeskConnectionAsync(
                     configuration,
                     profile
                 );
 
-            if (pendingSecret is not null)
+            if (!keepExisting)
             {
-                pendingSecrets.Add(
-                    pendingSecret
-                );
+                Console.WriteLine();
+
+                var pendingSecret =
+                    await ConfigureZendeskConnectionAsync(
+                        configuration,
+                        profile
+                    );
+
+                if (pendingSecret is not null)
+                {
+                    pendingSecrets.Add(
+                        pendingSecret
+                    );
+                }
             }
         }
 
+        /*
+         * Profile configuration and profile activation are distinct.
+         *
+         * The first profile must become active during onboarding.
+         * Otherwise, changing a different profile does not change
+         * the active profile unless the operator explicitly requests it.
+         */
+        var isFirstProfile =
+            configuration.Profiles.Count == 0;
+
+        var isAlreadyActive =
+            string.Equals(
+                configuration.ActiveProfile,
+                profileName,
+                StringComparison.OrdinalIgnoreCase
+            )
+            && existingProfile is not null;
+
+        var activateProfile =
+            isFirstProfile;
+
+        Console.WriteLine();
+
+        if (isFirstProfile)
+        {
+            Console.WriteLine(
+                "This is the first profile and will be activated " +
+                "when configuration is saved."
+            );
+        }
+        else if (isAlreadyActive)
+        {
+            Console.WriteLine(
+                $"Profile '{profileName}' is already active."
+            );
+        }
+        else
+        {
+            Console.WriteLine(
+                $"Current active profile: {configuration.ActiveProfile}"
+            );
+
+            Console.WriteLine();
+
+            activateProfile =
+                ReadConfirmation(
+                    $"Activate profile '{profileName}' after saving? [y/N]: ",
+                    defaultValue: false
+                );
+        }
+
+        /*
+         * Record the profile before saving, but do not change
+         * activation unless requested or required for first-run.
+         */
         UpsertProfile(
             configuration,
             profileName,
             profile
         );
 
-        configuration.ActiveProfile =
-            profileName;
+        if (activateProfile)
+        {
+            configuration.ActiveProfile =
+                profileName;
+        }
 
         Console.WriteLine();
 
@@ -170,14 +247,274 @@ public sealed partial class ConfigureCommand
         Console.WriteLine();
 
         Console.WriteLine(
-            "Configuration saved."
+            $"Profile '{profileName}' saved."
+        );
+
+        if (activateProfile)
+        {
+            Console.WriteLine(
+                $"Active profile: {profileName}"
+            );
+        }
+        else
+        {
+            Console.WriteLine(
+                $"Active profile unchanged: {configuration.ActiveProfile}"
+            );
+
+            Console.WriteLine(
+                $"To activate '{profileName}' later, run: " +
+                $"SupportToolkit configure use {profileName}"
+            );
+        }
+
+        return 0;
+    }
+
+    private async Task<bool> KeepExistingAcronisConnectionAsync(
+        SupportToolkitConfiguration configuration,
+        SupportToolkitProfile profile)
+    {
+        if (string.IsNullOrWhiteSpace(
+                profile.AcronisConnection))
+        {
+            return false;
+        }
+
+        var connectionName =
+            profile.AcronisConnection;
+
+        var connection =
+            FindAcronisConnection(
+                configuration,
+                connectionName
+            );
+
+        if (connection is null)
+        {
+            Console.WriteLine(
+                $"Acronis connection '{connectionName}' no longer exists."
+            );
+
+            Console.WriteLine(
+                "Connection setup is required."
+            );
+
+            return false;
+        }
+
+        var secret =
+            await _secretStore.GetSecretAsync(
+                SupportToolkitSecretKeys
+                    .AcronisClientSecret(
+                        connectionName
+                    )
+            );
+
+        AcronisOptions options;
+
+        try
+        {
+            options =
+                AcronisOptions.Create(
+                    connection.DatacenterUrl,
+                    connection.ClientId,
+                    secret ?? string.Empty
+                );
+        }
+        catch (InvalidOperationException)
+        {
+            Console.WriteLine(
+                $"Acronis connection '{connectionName}' is incomplete " +
+                "or invalid."
+            );
+
+            Console.WriteLine(
+                "Connection setup is required."
+            );
+
+            return false;
+        }
+
+        Console.WriteLine(
+            "Existing Acronis configuration"
         );
 
         Console.WriteLine(
-            $"Active profile: {profileName}"
+            "------------------------------"
         );
 
-        return 0;
+        Console.WriteLine(
+            $"Connection: {connectionName}"
+        );
+
+        Console.WriteLine(
+            $"Datacenter: {options.DatacenterUrl}"
+        );
+
+        Console.WriteLine(
+            "Client secret: configured"
+        );
+
+        Console.WriteLine();
+
+        var keep =
+            ReadConfirmation(
+                "Keep existing Acronis configuration? [Y/n]: ",
+                defaultValue: true
+            );
+
+        if (keep)
+        {
+            Console.WriteLine(
+                "Acronis configuration kept unchanged."
+            );
+        }
+
+        return keep;
+    }
+
+    private async Task<bool> KeepExistingZendeskConnectionAsync(
+        SupportToolkitConfiguration configuration,
+        SupportToolkitProfile profile)
+    {
+        if (string.IsNullOrWhiteSpace(
+                profile.ZendeskConnection))
+        {
+            return false;
+        }
+
+        var connectionName =
+            profile.ZendeskConnection;
+
+        var connection =
+            FindZendeskConnection(
+                configuration,
+                connectionName
+            );
+
+        if (connection is null)
+        {
+            Console.WriteLine(
+                $"Zendesk connection '{connectionName}' no longer exists."
+            );
+
+            Console.WriteLine(
+                "Connection setup is required."
+            );
+
+            return false;
+        }
+
+        var destinationName =
+            profile.ZendeskDestination;
+
+        var destination =
+            string.IsNullOrWhiteSpace(destinationName)
+                ? null
+                : connection.Destinations
+                    .FirstOrDefault(
+                        pair =>
+                            string.Equals(
+                                pair.Key,
+                                destinationName,
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                    )
+                    .Value;
+
+        if (destination is null
+            || destination.GroupId <= 0)
+        {
+            Console.WriteLine(
+                "The existing Zendesk destination is missing " +
+                "or invalid."
+            );
+
+            Console.WriteLine(
+                "Zendesk destination setup is required."
+            );
+
+            return false;
+        }
+
+        var secret =
+            await _secretStore.GetSecretAsync(
+                SupportToolkitSecretKeys
+                    .ZendeskClientSecret(
+                        connectionName
+                    )
+            );
+
+        ZendeskOptions options;
+
+        try
+        {
+            options =
+                ZendeskOptions.Create(
+                    connection.Subdomain,
+                    connection.ClientId,
+                    secret ?? string.Empty
+                );
+        }
+        catch (InvalidOperationException)
+        {
+            Console.WriteLine(
+                $"Zendesk connection '{connectionName}' is incomplete " +
+                "or invalid."
+            );
+
+            Console.WriteLine(
+                "Connection setup is required."
+            );
+
+            return false;
+        }
+
+        Console.WriteLine(
+            "Existing Zendesk configuration"
+        );
+
+        Console.WriteLine(
+            "------------------------------"
+        );
+
+        Console.WriteLine(
+            $"Connection:  {connectionName}"
+        );
+
+        Console.WriteLine(
+            $"Instance:    {options.BaseUri.GetLeftPart(UriPartial.Authority)}"
+        );
+
+        Console.WriteLine(
+            $"Destination: {destinationName}"
+        );
+
+        Console.WriteLine(
+            $"Group ID:    {destination.GroupId}"
+        );
+
+        Console.WriteLine(
+            "Client secret: configured"
+        );
+
+        Console.WriteLine();
+
+        var keep =
+            ReadConfirmation(
+                "Keep existing Zendesk configuration? [Y/n]: ",
+                defaultValue: true
+            );
+
+        if (keep)
+        {
+            Console.WriteLine(
+                "Zendesk configuration kept unchanged."
+            );
+        }
+
+        return keep;
     }
 
     private async Task<int> DeleteProfileAsync(
@@ -288,8 +625,7 @@ public sealed partial class ConfigureCommand
         var defaultConnectionName =
             GetDefaultConnectionName(
                 profile.AcronisConnection,
-                configuration.Connections
-                    .Acronis.Keys
+                configuration.Connections.Acronis.Keys
             );
 
         var connectionName =
@@ -333,9 +669,9 @@ public sealed partial class ConfigureCommand
             Console.WriteLine();
 
             if (ReadConfirmation(
-                    "Update connection metadata? [y/N]: ",
-                    defaultValue: false
-                ))
+                "Update connection metadata? [y/N]: ",
+                defaultValue: false
+            ))
             {
                 ConfigureAcronisMetadata(
                     connection
@@ -381,16 +717,14 @@ public sealed partial class ConfigureCommand
             );
 
         if (!secretConfigured
-            && string.IsNullOrEmpty(
-                secret))
+            && string.IsNullOrEmpty(secret))
         {
             Console.WriteLine(
                 "WARNING: Acronis client secret is not configured."
             );
         }
 
-        return string.IsNullOrEmpty(
-                secret)
+        return string.IsNullOrEmpty(secret)
             ? null
             : new PendingSecret(
                 secretKey,
@@ -411,13 +745,6 @@ public sealed partial class ConfigureCommand
             "------------------"
         );
 
-        /*
-         * Selecting a connection and creating a new connection are
-         * deliberately different operations.
-         *
-         * A destination name must never accidentally become a new
-         * connection name.
-         */
         var selection =
             SelectZendeskConnection(
                 configuration,
@@ -452,11 +779,6 @@ public sealed partial class ConfigureCommand
                 connection
             );
 
-            /*
-             * If this subdomain is already registered, the operator
-             * most likely wants another ticket destination, not another
-             * credential set.
-             */
             var matchingConnection =
                 configuration.Connections.Zendesk
                     .FirstOrDefault(
@@ -540,10 +862,6 @@ public sealed partial class ConfigureCommand
             }
         }
 
-        /*
-         * Moving a profile to another connection requires the operator
-         * to select its destination again.
-         */
         if (!string.Equals(
                 profile.ZendeskConnection,
                 connectionName,
@@ -591,10 +909,6 @@ public sealed partial class ConfigureCommand
             $"Client secret: {DisplaySecretStatus(secretConfigured)}"
         );
 
-        /*
-         * Reusing an existing connection must not force the user to
-         * supply credentials again.
-         */
         var updateSecret =
             isNewConnection
             || !secretConfigured

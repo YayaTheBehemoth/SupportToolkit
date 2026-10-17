@@ -1,23 +1,47 @@
+
+using System.Text.RegularExpressions;
+
 namespace SupportToolkit.Core.Logging;
 
 /// <summary>
 /// Lightweight diagnostic logging for SupportToolkit operations.
 ///
-/// INFO and DEBUG output are intended for development and troubleshooting
-/// and are emitted only when SUPPORTTOOLKIT_DEBUG=true.
+/// INFO and DEBUG output are emitted only when
+/// SUPPORTTOOLKIT_DEBUG=true.
 ///
-/// Warnings represent operator-relevant conditions and are always emitted.
+/// Warnings are always emitted.
 ///
-/// Human-facing progress messages belong to the UI rather than this logger.
+/// Identifier redaction reduces accidental disclosure in copied
+/// diagnostic output. It does not guarantee that arbitrary messages
+/// are free of other sensitive information.
+///
+/// Human-facing progress belongs to the UI.
 /// </summary>
 public sealed class OperationalLogger
 {
+    private static readonly Regex UuidPattern =
+        new(
+            @"(?<![0-9a-fA-F])" +
+            @"[0-9a-fA-F]{8}-" +
+            @"[0-9a-fA-F]{4}-" +
+            @"[0-9a-fA-F]{4}-" +
+            @"[0-9a-fA-F]{4}-" +
+            @"[0-9a-fA-F]{12}" +
+            @"(?![0-9a-fA-F])",
+            RegexOptions.Compiled |
+            RegexOptions.CultureInvariant
+        );
+
+    private readonly TextWriter? _output;
+
     public bool DebugEnabled { get; }
 
     public OperationalLogger(
-        bool debugEnabled = false)
+        bool debugEnabled = false,
+        TextWriter? output = null)
     {
         DebugEnabled = debugEnabled;
+        _output = output;
     }
 
     public static OperationalLogger FromEnvironment(
@@ -28,59 +52,84 @@ public sealed class OperationalLogger
 
         return new OperationalLogger(
             string.Equals(
-                environmentReader(
-                    "SUPPORTTOOLKIT_DEBUG"
-                ),
+                environmentReader("SUPPORTTOOLKIT_DEBUG"),
                 "true",
                 StringComparison.OrdinalIgnoreCase
             )
         );
     }
 
-    public void Info(
-        string message)
+    public void Info(string message)
     {
         if (!DebugEnabled)
         {
             return;
         }
 
-        Write(
-            "INFO",
-            message
-        );
+        Write("INFO", message);
     }
 
-    public void Debug(
-        string message)
+    public void Debug(string message)
     {
         if (!DebugEnabled)
         {
             return;
         }
 
-        Write(
-            "DEBUG",
-            message
-        );
+        Write("DEBUG", message);
     }
 
-    public void Warning(
-        string message)
+    public void Warning(string message)
     {
-        Write(
-            "WARN",
-            message
-        );
+        Write("WARN", message);
     }
 
-    private static void Write(
+    private void Write(
         string level,
         string message)
     {
-        Console.WriteLine(
+        ArgumentNullException.ThrowIfNull(message);
+
+        var safeMessage =
+            SanitizeMessage(message);
+
+        /*
+         * Resolve Console.Out at write time, preserving the existing
+         * console behavior unless an explicit writer was supplied.
+         *
+         * An injected writer is useful for deterministic tests.
+         */
+        var output =
+            _output ?? Console.Out;
+
+        output.WriteLine(
             $"[{DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss.fff}Z] " +
-            $"[{level}] {message}"
+            $"[{level}] {safeMessage}"
+        );
+    }
+
+    private static string SanitizeMessage(
+        string message)
+    {
+        /*
+         * Prevent user-controlled or vendor-supplied line breaks from
+         * creating additional, misleading log entries.
+         */
+        var singleLine =
+            message
+                .Replace('\r', ' ')
+                .Replace('\n', ' ');
+
+        /*
+         * Redact UUIDs regardless of which provider generated the
+         * diagnostic message.
+         *
+         * Do not redact HTTP status codes, route names, elapsed time,
+         * or numeric counters that remain useful for troubleshooting.
+         */
+        return UuidPattern.Replace(
+            singleLine,
+            "{uuid}"
         );
     }
 }

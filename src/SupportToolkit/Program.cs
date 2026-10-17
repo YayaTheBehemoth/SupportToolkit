@@ -163,7 +163,15 @@ catch (Exception exception)
     if (IsDebugEnabled())
     {
         Console.Error.WriteLine();
-        Console.Error.WriteLine(exception);
+
+        /*
+         * Do not print the raw exception object here.
+         *
+         * Exception.ToString() may expose URLs, credentials,
+         * request data, or local paths.
+         */
+        Console.Error.WriteLine(
+            ConsoleErrorFormatter.FormatDiagnostic(exception));
     }
 
     return 1;

@@ -30,16 +30,14 @@ public sealed class BackupInventoryReviewService
         {
             throw new ArgumentOutOfRangeException(
                 nameof(maxConcurrentTenants),
-                "Tenant concurrency must be at least 1."
-            );
+                "Tenant concurrency must be at least 1.");
         }
 
         _tenantResolver = tenantResolver;
         _tenantReviewer = new TenantInventoryReviewService(
             microsoft365Inventory,
             deviceInventory,
-            normalizer
-        );
+            normalizer);
         _logger = logger;
         _maxConcurrentTenants = maxConcurrentTenants;
     }
@@ -49,34 +47,28 @@ public sealed class BackupInventoryReviewService
         CancellationToken cancellationToken = default)
     {
         _logger?.Info(
-            "Starting backup inventory review."
-        );
+            "Starting backup inventory review.");
 
         var tenant =
             await _tenantResolver.ResolveExactAsync(
                 tenantName,
-                cancellationToken
-            );
+                cancellationToken);
 
         _logger?.Info(
-            "Tenant resolved."
-        );
+            "Tenant resolved.");
 
         var result =
             await _tenantReviewer.ReviewResolvedTenantAsync(
                 tenant,
-                cancellationToken
-            );
+                cancellationToken);
 
         _logger?.Info(
             $"Microsoft 365 resources: " +
-            $"{result.Microsoft365ResourceCount}."
-        );
+            $"{result.Microsoft365ResourceCount}.");
 
         _logger?.Info(
             $"Device resources: " +
-            $"{result.DeviceResourceCount}."
-        );
+            $"{result.DeviceResourceCount}.");
 
         var report =
             new AggregatedBackupReport
@@ -91,8 +83,7 @@ public sealed class BackupInventoryReviewService
             $"Backup inventory review complete: " +
             $"{report.RowsChecked} checked, " +
             $"{report.FindingsCount} require attention, " +
-            $"{report.UnknownRowsCount} unclassified."
-        );
+            $"{report.UnknownRowsCount} unclassified.");
 
         return report;
     }
@@ -104,57 +95,47 @@ public sealed class BackupInventoryReviewService
             Stopwatch.StartNew();
 
         _logger?.Info(
-            "Starting all-tenant backup inventory review."
-        );
+            "Starting all-tenant backup inventory review.");
 
         var tenants =
             await _tenantResolver.GetCustomerTenantsAsync(
-                cancellationToken
-            );
+                cancellationToken);
 
         _logger?.Info(
-            $"Customer tenants selected: {tenants.Count}."
-        );
+            $"Customer tenants selected: {tenants.Count}.");
 
         /*
          * An empty customer population is not a successful backup review.
          *
-         * It may indicate lost API visibility, an unexpected tenant-kind
-         * change, incorrect scoping, or a legitimately empty hierarchy.
+         * It may indicate lost API visibility, unexpected tenant kinds,
+         * incorrect scoping, or a genuinely empty hierarchy.
          *
-         * Regardless of cause, SupportToolkit cannot claim that the
-         * customer estate was reviewed when no customers were discovered.
-         *
-         * Fail before any backup-resource requests are made.
+         * In every case, SupportToolkit cannot claim the customer
+         * estate was reviewed when no customers were discovered.
          */
         if (tenants.Count == 0)
         {
             throw new InvalidOperationException(
                 "Acronis tenant discovery returned zero customer tenants. " +
                 "The all-tenant backup review cannot be considered complete. " +
-                "Verify the configured Acronis connection and tenant scope."
-            );
+                "Verify the configured Acronis connection and tenant scope.");
         }
 
         _logger?.Info(
             $"Tenant review concurrency limit: " +
-            $"{_maxConcurrentTenants}."
-        );
+            $"{_maxConcurrentTenants}.");
 
         /*
-         * Each tenant remains internally sequential.
+         * Independent tenants are reviewed concurrently.
          *
-         * Only independent tenant reviews overlap. Outcomes are stored
-         * by original tenant index so reporting order remains stable.
+         * Outcomes are stored by their original index so that
+         * reporting order stays deterministic.
          */
         var outcomes =
             new TenantReviewOutcome?[tenants.Count];
 
         await Parallel.ForEachAsync(
-            Enumerable.Range(
-                0,
-                tenants.Count
-            ),
+            Enumerable.Range(0, tenants.Count),
             new ParallelOptions
             {
                 MaxDegreeOfParallelism =
@@ -163,32 +144,25 @@ public sealed class BackupInventoryReviewService
                 CancellationToken =
                     cancellationToken
             },
-            async (
-                index,
-                iterationCancellationToken) =>
+            async (index, iterationCancellationToken) =>
             {
-                var tenant =
-                    tenants[index];
+                var tenant = tenants[index];
 
                 _logger?.Info(
                     $"Starting tenant review " +
-                    $"{index + 1}/{tenants.Count}."
-                );
+                    $"{index + 1}/{tenants.Count}.");
 
                 outcomes[index] =
                     await ReviewTenantSafelyAsync(
                         tenant,
                         index + 1,
                         tenants.Count,
-                        iterationCancellationToken
-                    );
+                        iterationCancellationToken);
 
                 _logger?.Info(
                     $"Completed tenant review " +
-                    $"{index + 1}/{tenants.Count}."
-                );
-            }
-        );
+                    $"{index + 1}/{tenants.Count}.");
+            });
 
         var reports =
             new List<TenantBackupReport>();
@@ -201,22 +175,17 @@ public sealed class BackupInventoryReviewService
             if (outcome is null)
             {
                 throw new InvalidOperationException(
-                    "A tenant review completed without producing an outcome."
-                );
+                    "A tenant review completed without producing an outcome.");
             }
 
             if (outcome.Report is not null)
             {
-                reports.Add(
-                    outcome.Report
-                );
+                reports.Add(outcome.Report);
             }
 
             if (outcome.Failure is not null)
             {
-                failures.Add(
-                    outcome.Failure
-                );
+                failures.Add(outcome.Failure);
             }
         }
 
@@ -238,8 +207,7 @@ public sealed class BackupInventoryReviewService
             $"{report.TenantCount} reviewed, " +
             $"{report.FailedTenantCount} failed, " +
             $"{report.RowsChecked} resources checked, " +
-            $"{stopwatch.Elapsed.TotalSeconds:F1}s elapsed."
-        );
+            $"{stopwatch.Elapsed.TotalSeconds:F1}s elapsed.");
 
         return report;
     }
@@ -256,13 +224,11 @@ public sealed class BackupInventoryReviewService
             var result =
                 await _tenantReviewer.ReviewResolvedTenantAsync(
                     tenant,
-                    cancellationToken
-                );
+                    cancellationToken);
 
             return new TenantReviewOutcome(
                 result.Report,
-                null
-            );
+                null);
         }
         catch (OperationCanceledException)
             when (cancellationToken.IsCancellationRequested)
@@ -271,12 +237,22 @@ public sealed class BackupInventoryReviewService
         }
         catch (TenantReviewStageException exception)
         {
+            var underlyingException =
+                exception.InnerException ?? exception;
+
+            /*
+             * Never log raw exception messages here.
+             *
+             * HTTP and vendor exception messages can contain
+             * URLs, cursor tokens, request identifiers, or other
+             * values not handled by UUID redaction.
+             *
+             * Preserve the stage, exception type, and HTTP status.
+             */
             _logger?.Debug(
                 $"Tenant review {tenantNumber}/{tenantCount} " +
                 $"failed during {exception.Stage}: " +
-                $"{exception.InnerException?.GetType().Name ?? exception.GetType().Name}: " +
-                $"{exception.InnerException?.Message ?? exception.Message}"
-            );
+                $"{DescribeFailure(underlyingException)}.");
 
             return new TenantReviewOutcome(
                 null,
@@ -290,20 +266,15 @@ public sealed class BackupInventoryReviewService
 
                     Reason =
                         GetSafeFailureReason(
-                            exception.InnerException
-                            ?? exception
-                        )
-                }
-            );
+                            underlyingException)
+                });
         }
         catch (Exception exception)
         {
             _logger?.Debug(
                 $"Tenant review {tenantNumber}/{tenantCount} " +
                 $"failed unexpectedly: " +
-                $"{exception.GetType().Name}: " +
-                $"{exception.Message}"
-            );
+                $"{DescribeFailure(exception)}.");
 
             return new TenantReviewOutcome(
                 null,
@@ -316,12 +287,32 @@ public sealed class BackupInventoryReviewService
                         "Unexpected error",
 
                     Reason =
-                        GetSafeFailureReason(
-                            exception
-                        )
-                }
-            );
+                        GetSafeFailureReason(exception)
+                });
         }
+    }
+
+    /// <summary>
+    /// Structured diagnostic information derived only from
+    /// exception type and HTTP status.
+    ///
+    /// Does not include Exception.Message, request URLs,
+    /// response bodies, or exception ToString() output.
+    /// </summary>
+    private static string DescribeFailure(
+        Exception exception)
+    {
+        var typeName =
+            exception.GetType().Name;
+
+        if (exception is HttpRequestException httpException
+            && httpException.StatusCode is HttpStatusCode statusCode)
+        {
+            return
+                $"{typeName} (HTTP {(int)statusCode})";
+        }
+
+        return typeName;
     }
 
     private static string GetSafeFailureReason(
@@ -348,6 +339,5 @@ public sealed class BackupInventoryReviewService
 
     private sealed record TenantReviewOutcome(
         TenantBackupReport? Report,
-        TenantBackupReviewFailure? Failure
-    );
+        TenantBackupReviewFailure? Failure);
 }
