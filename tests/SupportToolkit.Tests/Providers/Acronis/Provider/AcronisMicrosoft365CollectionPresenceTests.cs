@@ -1,9 +1,5 @@
 
 using System.Net;
-using System.Net.Http.Headers;
-using System.Text;
-using SupportToolkit.Providers.Acronis.Microsoft365;
-using SupportToolkit.Providers.Acronis.Transport;
 
 namespace SupportToolkit.Tests.Providers.Acronis;
 
@@ -34,7 +30,7 @@ public class AcronisMicrosoft365CollectionPresenceTests
             CreateHttpClient(groupsJson);
 
         var provider =
-            CreateProvider(httpClient);
+            AcronisProviderTestSupport.CreateMicrosoft365Provider(httpClient);
 
         var exception =
             await Assert.ThrowsAsync<InvalidOperationException>(
@@ -62,7 +58,7 @@ public class AcronisMicrosoft365CollectionPresenceTests
             CreateHttpClient(groupsJson);
 
         var provider =
-            CreateProvider(httpClient);
+            AcronisProviderTestSupport.CreateMicrosoft365Provider(httpClient);
 
         var resources =
             await provider.GetResourcesForTenantAsync(TenantId);
@@ -83,7 +79,7 @@ public class AcronisMicrosoft365CollectionPresenceTests
             );
 
         var provider =
-            CreateProvider(httpClient);
+            AcronisProviderTestSupport.CreateMicrosoft365Provider(httpClient);
 
         var exception =
             await Assert.ThrowsAsync<InvalidOperationException>(
@@ -112,29 +108,12 @@ public class AcronisMicrosoft365CollectionPresenceTests
             );
 
         var provider =
-            CreateProvider(httpClient);
+            AcronisProviderTestSupport.CreateMicrosoft365Provider(httpClient);
 
         var resources =
             await provider.GetResourcesForTenantAsync(TenantId);
 
         Assert.Empty(resources);
-    }
-
-    private static AcronisMicrosoft365InventoryProvider CreateProvider(
-        HttpClient httpClient)
-    {
-        return new AcronisMicrosoft365InventoryProvider(
-            new AcronisApiClient(
-                httpClient,
-                new AcronisOptions
-                {
-                    DatacenterUrl =
-                        "https://fixture.acronis.invalid",
-                    ClientId = "fixture-client",
-                    ClientSecret = "fixture-secret"
-                }
-            )
-        );
     }
 
     private static HttpClient CreateHttpClient(
@@ -151,31 +130,23 @@ public class AcronisMicrosoft365CollectionPresenceTests
             }
             """;
 
-        var handler =
-            new StubHttpMessageHandler(
+        return AcronisProviderTestSupport.CreateClient(
                 request =>
                 {
                     var path =
                         request.RequestUri?.AbsolutePath
                         ?? string.Empty;
 
-                    if (path == "/api/2/idp/token")
-                    {
-                        return TokenResponse(
-                            request.Headers.Authorization
-                        );
-                    }
-
                     if (path == "/bc/api/resource_manager/v1/o365/groups")
                     {
-                        return JsonResponse(groupsJson);
+                        return AcronisProviderTestSupport.JsonResponse(groupsJson);
                     }
 
                     if (path.StartsWith(
                             "/bc/api/resource_manager/v1/o365/groups/",
                             StringComparison.Ordinal))
                     {
-                        return JsonResponse(resourcesJson!);
+                        return AcronisProviderTestSupport.JsonResponse(resourcesJson!);
                     }
 
                     return new HttpResponseMessage(
@@ -184,62 +155,6 @@ public class AcronisMicrosoft365CollectionPresenceTests
                 }
             );
 
-        return new HttpClient(handler);
     }
 
-    private static HttpResponseMessage TokenResponse(
-        AuthenticationHeaderValue? authorization)
-    {
-        var token =
-            string.Equals(
-                authorization?.Scheme,
-                "Basic",
-                StringComparison.OrdinalIgnoreCase
-            )
-                ? "base-token"
-                : "scoped-token";
-
-        return JsonResponse(
-            $$"""
-            {
-              "access_token": "{{token}}",
-              "token_type": "bearer",
-              "expires_on": 4102444800
-            }
-            """
-        );
-    }
-
-    private static HttpResponseMessage JsonResponse(
-        string json)
-    {
-        return new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(
-                json,
-                Encoding.UTF8,
-                "application/json"
-            )
-        };
-    }
-
-    private sealed class StubHttpMessageHandler
-        : HttpMessageHandler
-    {
-        private readonly Func<HttpRequestMessage, HttpResponseMessage>
-            _handler;
-
-        public StubHttpMessageHandler(
-            Func<HttpRequestMessage, HttpResponseMessage> handler)
-        {
-            _handler = handler;
-        }
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
-        {
-            return Task.FromResult(_handler(request));
-        }
-    }
 }
