@@ -1,3 +1,4 @@
+
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Net.Http.Json;
@@ -25,13 +26,13 @@ public sealed class AcronisTenantProvider
         AcronisApiClient apiClient,
         OperationalLogger? logger = null)
     {
-        _apiClient = apiClient;
+        _apiClient =
+            apiClient ?? throw new ArgumentNullException(nameof(apiClient));
 
         _paginator =
             new AcronisCursorPaginator(
                 apiClient,
-                logger
-            );
+                logger);
 
         _logger = logger;
     }
@@ -41,13 +42,11 @@ public sealed class AcronisTenantProvider
             CancellationToken cancellationToken = default)
     {
         _logger?.Info(
-            "Fetching Acronis tenants."
-        );
+            "Fetching Acronis tenants.");
 
         var rootTenantId =
             await _apiClient.GetRootTenantIdAsync(
-                cancellationToken
-            );
+                cancellationToken);
 
         var tenants =
             await _paginator.FetchAllAsync<
@@ -70,20 +69,17 @@ public sealed class AcronisTenantProvider
                 getAfterCursor:
                     page => page.Paging.Cursors.After,
                 cancellationToken:
-                    cancellationToken
-            );
+                    cancellationToken);
 
         if (tenants.Count == 0)
         {
             _logger?.Warning(
                 "Acronis returned zero tenants. " +
-                "Verify API-client scope and tenant discovery."
-            );
+                "Verify API-client scope and tenant discovery.");
         }
 
         _logger?.Info(
-            $"Acronis tenants fetched: {tenants.Count}."
-        );
+            $"Acronis tenants fetched: {tenants.Count}.");
 
         return tenants;
     }
@@ -95,49 +91,39 @@ public sealed class AcronisTenantProvider
         if (_tenantIdMappings is not null)
         {
             _logger?.Debug(
-                "Using cached Acronis tenant ID mapping."
-            );
+                "Using cached Acronis tenant ID mapping.");
 
             return _tenantIdMappings;
         }
 
         var rootUuid =
             await _apiClient.GetRootTenantIdAsync(
-                cancellationToken
-            );
+                cancellationToken);
 
         using var rootResponse =
             await _apiClient.GetAsync(
                 $"/api/1/groups/{Uri.EscapeDataString(rootUuid)}",
-                cancellationToken
-            );
+                cancellationToken);
 
         rootResponse.EnsureSuccessStatusCode();
 
         var root =
             await rootResponse.Content
                 .ReadFromJsonAsync<LegacyTenantGroupDto>(
-                    cancellationToken:
-                        cancellationToken
-                )
+                    cancellationToken: cancellationToken)
             ?? throw new InvalidOperationException(
-                "Acronis returned an empty legacy root tenant response."
-            );
+                "Acronis returned an empty legacy root tenant response.");
 
-        ValidateLegacyGroup(
-            root
-        );
+        ValidateLegacyGroup(root);
 
         var mappings =
             new Dictionary<string, string>(
-                StringComparer.Ordinal
-            );
+                StringComparer.Ordinal);
 
         AddMapping(
             mappings,
             root.Id,
-            root.Uuid!
-        );
+            root.Uuid!);
 
         var queue =
             new Queue<long>();
@@ -145,9 +131,7 @@ public sealed class AcronisTenantProvider
         var visited =
             new HashSet<long>();
 
-        queue.Enqueue(
-            root.Id
-        );
+        queue.Enqueue(root.Id);
 
         while (queue.Count > 0)
         {
@@ -163,67 +147,102 @@ public sealed class AcronisTenantProvider
             {
                 throw new InvalidOperationException(
                     "Acronis tenant hierarchy traversal exceeded " +
-                    $"{MaxHierarchyNodes} branch nodes."
-                );
+                    $"{MaxHierarchyNodes} branch nodes.");
             }
 
             using var response =
                 await _apiClient.GetAsync(
-                    $"/api/1/groups/" +
-                    $"{currentNumericId.ToString(CultureInfo.InvariantCulture)}" +
+                    "/api/1/groups/" +
+                    currentNumericId.ToString(
+                        CultureInfo.InvariantCulture) +
                     "/children",
-                    cancellationToken
-                );
+                    cancellationToken);
 
             response.EnsureSuccessStatusCode();
 
             var page =
                 await response.Content
                     .ReadFromJsonAsync<LegacyTenantChildrenPageDto>(
-                        cancellationToken:
-                            cancellationToken
-                    )
+                        cancellationToken: cancellationToken)
                 ?? throw new InvalidOperationException(
-                    "Acronis returned an empty tenant hierarchy response."
-                );
+                    "Acronis returned an empty tenant hierarchy response.");
+
+            /*
+             * 'items' is already required by the DTO.
+             *
+             * Missing property: JSON deserialization fails.
+             * Explicit null: reject here.
+             * Empty array: valid terminal response.
+             */
+            if (page.Items is null)
+            {
+                throw new InvalidOperationException(
+                    "Acronis tenant hierarchy response contained " +
+                    "a null 'items' collection. " +
+                    "Tenant ID mapping is incomplete.");
+            }
 
             foreach (var child in page.Items)
             {
+                if (child is null)
+                {
+                    throw new InvalidOperationException(
+                        "Acronis returned a null tenant hierarchy item. " +
+                        "Tenant ID mapping is incomplete.");
+                }
+
+                /*
+                 * Invalid identifiers must not be skipped.
+                 *
+                 * Skipping an entry could silently omit a tenant
+                 * or its descendants from the mapping.
+                 */
                 if (child.Id <= 0
                     || string.IsNullOrWhiteSpace(child.Uuid)
                     || !Guid.TryParse(child.Uuid, out _))
                 {
-                    _logger?.Warning(
-                        "Acronis returned an invalid tenant hierarchy item."
-                    );
+                    throw new InvalidOperationException(
+                        "Acronis returned an invalid tenant hierarchy item. " +
+                        "Tenant ID mapping is incomplete.");
+                }
 
-                    continue;
+                /*
+                 * Presence and JSON-type validation are handled
+                 * by the DTO's required integer property.
+                 *
+                 * Do not assume values are strictly limited to 0/1.
+                 * Any positive value continues traversal.
+                 */
+                if (child.HasChildren < 0)
+                {
+                    throw new InvalidOperationException(
+                        "Acronis returned an invalid 'has_children' value. " +
+                        "Tenant ID mapping is incomplete.");
                 }
 
                 AddMapping(
                     mappings,
                     child.Id,
-                    child.Uuid
-                );
+                    child.Uuid);
 
                 if (child.HasChildren > 0)
                 {
-                    queue.Enqueue(
-                        child.Id
-                    );
+                    queue.Enqueue(child.Id);
                 }
             }
         }
 
+        /*
+         * Only publish/cache the mapping after the entire
+         * traversal has completed successfully.
+         */
         _tenantIdMappings =
             new ReadOnlyDictionary<string, string>(
-                mappings
-            );
+                mappings);
 
         _logger?.Debug(
             $"Acronis tenant hierarchy mapping completed: " +
-            $"{mappings.Count} mapping(s)."
-        );
+            $"{mappings.Count} mapping(s).");
 
         return _tenantIdMappings;
     }
@@ -234,16 +253,14 @@ public sealed class AcronisTenantProvider
         if (group.Id <= 0)
         {
             throw new InvalidOperationException(
-                "Acronis returned an invalid legacy root tenant ID."
-            );
+                "Acronis returned an invalid legacy root tenant ID.");
         }
 
         if (string.IsNullOrWhiteSpace(group.Uuid)
             || !Guid.TryParse(group.Uuid, out _))
         {
             throw new InvalidOperationException(
-                "Acronis returned an invalid root tenant UUID."
-            );
+                "Acronis returned an invalid root tenant UUID.");
         }
     }
 
@@ -254,23 +271,19 @@ public sealed class AcronisTenantProvider
     {
         var key =
             numericId.ToString(
-                CultureInfo.InvariantCulture
-            );
+                CultureInfo.InvariantCulture);
 
         if (mappings.TryGetValue(
                 key,
-                out var existingUuid
-            )
+                out var existingUuid)
             && !string.Equals(
                 existingUuid,
                 uuid,
-                StringComparison.OrdinalIgnoreCase
-            ))
+                StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
                 "Acronis returned conflicting UUID mappings " +
-                "for the same legacy tenant ID."
-            );
+                "for the same legacy tenant ID.");
         }
 
         mappings[key] = uuid;
