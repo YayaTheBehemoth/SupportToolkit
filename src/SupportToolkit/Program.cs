@@ -1,4 +1,4 @@
-﻿
+
 using SupportToolkit.Cli.Commands;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.ErrorHandling;
@@ -21,34 +21,32 @@ ISecretStore secretStore =
 var configurationResolver =
     new SupportToolkitConfigurationResolver(
         configurationStore,
-        secretStore
-    );
+        secretStore);
 
 var configureCommand =
     new ConfigureCommand(
         configurationStore,
-        secretStore
-    );
+        secretStore);
+
+var tenantDirectoryCommand =
+    new AcronisTenantDirectoryDevCommand(
+        configurationResolver);
 
 var backupAggregatorWorkflow =
     new BackupAggregatorWorkflow(
-        configurationResolver
-    );
+        configurationResolver);
 
 var backupHealthWorkflow =
     new BackupHealthWorkflow(
-        configurationResolver
-    );
+        configurationResolver);
 
 ISupportToolkitModule[] modules =
 [
     new BackupHealthModule(
-        backupHealthWorkflow
-    ),
+        backupHealthWorkflow),
 
     new BackupAggregatorModule(
-        backupAggregatorWorkflow
-    ),
+        backupAggregatorWorkflow),
 
     new ComplianceModule()
 ];
@@ -58,16 +56,13 @@ var interactiveShell =
         configurationStore,
         configureCommand,
         backupAggregatorWorkflow,
-        backupHealthWorkflow
-    );
+        backupHealthWorkflow);
 
 var firstRunStartup =
     new FirstRunStartup(
-        configurationStore
-    );
+        configurationStore);
 
-var httpErrorContext =
-    ResolveHttpErrorContext(args);
+var httpErrorContext = ResolveHttpErrorContext(args);
 
 try
 {
@@ -75,10 +70,8 @@ try
     {
         return await firstRunStartup.RunAsync(
             () => configureCommand.RunAsync(
-                Array.Empty<string>()
-            ),
-            () => interactiveShell.RunAsync()
-        );
+                Array.Empty<string>()),
+            () => interactiveShell.RunAsync());
     }
 
     if (args[0] is "--help" or "-h")
@@ -88,37 +81,74 @@ try
     }
 
     /*
-     * Host-level commands are handled before operational
-     * module dispatch.
+     * Host-level developer utility.
      *
-     * Configuration is application infrastructure,
-     * not an ISupportToolkitModule.
+     * --production explicitly authorizes a read-only Acronis API call.
+     * --names additionally permits customer names in console output.
+     *
+     * This is infrastructure diagnostics, not an operational module.
      */
-    if (string.Equals(
+    if (args.Length >= 2
+        && string.Equals(
             args[0],
-            "configure",
+            "dev",
+            StringComparison.OrdinalIgnoreCase)
+        && string.Equals(
+            args[1],
+            "acronis-tenants",
             StringComparison.OrdinalIgnoreCase))
     {
+        var validArguments =
+            (args.Length == 3 || args.Length == 4)
+            && string.Equals(
+                args[2],
+                "--production",
+                StringComparison.OrdinalIgnoreCase)
+            && (args.Length == 3
+                || string.Equals(
+                    args[3],
+                    "--names",
+                    StringComparison.OrdinalIgnoreCase));
+
+        if (!validArguments)
+        {
+            Console.Error.WriteLine(
+                "Usage: SupportToolkit dev acronis-tenants " +
+                "--production [--names]");
+            return 1;
+        }
+
+        return await tenantDirectoryCommand.RunAsync(
+            Console.Out,
+            showNames: args.Length == 4);
+    }
+
+    /*
+     * Host-level configuration is handled before module dispatch.
+     */
+    if (string.Equals(
+        args[0],
+        "configure",
+        StringComparison.OrdinalIgnoreCase))
+    {
         return await configureCommand.RunAsync(
-            args[1..]
-        );
+            args[1..]);
     }
 
     var command = args[0];
 
-    var module = modules.FirstOrDefault(
-        candidate => string.Equals(
-            candidate.Command,
-            command,
-            StringComparison.OrdinalIgnoreCase
-        )
-    );
+    var module =
+        modules.FirstOrDefault(
+            candidate =>
+                string.Equals(
+                    candidate.Command,
+                    command,
+                    StringComparison.OrdinalIgnoreCase));
 
     if (module is null)
     {
         Console.Error.WriteLine(
-            $"Unknown command or module: {command}"
-        );
+            $"Unknown command or module: {command}");
 
         Console.Error.WriteLine();
 
@@ -128,23 +158,25 @@ try
     }
 
     return await module.RunAsync(
-        args[1..]
-    );
+        args[1..]);
 }
 catch (Exception exception)
 {
     Console.Error.WriteLine(
-        "ERROR: " +
-        ConsoleErrorFormatter.Format(
-            exception,
-            httpErrorContext
-        )
-    );
+        $"ERROR: {ConsoleErrorFormatter.Format(exception, httpErrorContext)}");
 
     if (IsDebugEnabled())
     {
         Console.Error.WriteLine();
-        Console.Error.WriteLine(exception);
+
+        /*
+         * Do not print the raw exception object here.
+         *
+         * Exception.ToString() may expose URLs, credentials,
+         * request data, or local paths.
+         */
+        Console.Error.WriteLine(
+            ConsoleErrorFormatter.FormatDiagnostic(exception));
     }
 
     return 1;
@@ -197,61 +229,46 @@ static HttpErrorContext ResolveHttpErrorContext(
         return HttpErrorContext.Acronis;
     }
 
+    if (commandLine.Length > 1
+        && string.Equals(command, "dev", StringComparison.OrdinalIgnoreCase)
+        && string.Equals(commandLine[1], "acronis-tenants", StringComparison.OrdinalIgnoreCase))
+    {
+        return HttpErrorContext.Acronis;
+    }
     return HttpErrorContext.Generic;
 }
 
 static void PrintUsage(
     IEnumerable<ISupportToolkitModule> modules)
 {
-    Console.WriteLine(
-        "SupportToolkit"
-    );
-
+    Console.WriteLine("SupportToolkit");
     Console.WriteLine();
 
-    Console.WriteLine(
-        "Interactive:"
-    );
-
-    Console.WriteLine(
-        "  SupportToolkit"
-    );
-
+    Console.WriteLine("Interactive:");
+    Console.WriteLine("  SupportToolkit");
     Console.WriteLine();
 
-    Console.WriteLine(
-        "Raw CLI:"
-    );
-
-    Console.WriteLine(
-        "  SupportToolkit <command> [options]"
-    );
-
-    Console.WriteLine(
-        "  SupportToolkit <module> [options]"
-    );
-
+    Console.WriteLine("Raw CLI:");
+    Console.WriteLine("  SupportToolkit <command> [options]");
+    Console.WriteLine("  SupportToolkit <module> [options]");
     Console.WriteLine();
 
+    Console.WriteLine("Application commands:");
     Console.WriteLine(
-        "Application commands:"
-    );
-
-    Console.WriteLine(
-        "  configure            Configure persistent settings and credentials."
-    );
-
+        "  configure            Configure persistent settings and credentials.");
     Console.WriteLine();
 
+    Console.WriteLine("Developer diagnostics:");
     Console.WriteLine(
-        "Modules:"
-    );
+        "  dev acronis-tenants --production [--names]");
+    Console.WriteLine();
+
+    Console.WriteLine("Modules:");
 
     foreach (var module in modules)
     {
         Console.WriteLine(
-            $"  {module.Command,-20} {module.Description}"
-        );
+            $"  {module.Command,-20} {module.Description}");
     }
 }
 
@@ -259,9 +276,7 @@ static bool IsDebugEnabled()
 {
     return string.Equals(
         Environment.GetEnvironmentVariable(
-            "SUPPORTTOOLKIT_DEBUG"
-        ),
+            "SUPPORTTOOLKIT_DEBUG"),
         "true",
-        StringComparison.OrdinalIgnoreCase
-    );
+        StringComparison.OrdinalIgnoreCase);
 }

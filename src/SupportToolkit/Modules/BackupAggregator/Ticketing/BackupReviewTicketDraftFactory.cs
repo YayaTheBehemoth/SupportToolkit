@@ -1,3 +1,4 @@
+
 using System.Text;
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Modules.BackupAggregator.Reporting;
@@ -10,8 +11,8 @@ namespace SupportToolkit.Modules.BackupAggregator.Ticketing;
 /// shared ticket model owned by Core/Ticketing.
 ///
 /// BackupAggregator owns this translation because it owns the meaning of the
-/// source report. The shared ticketing capability remains unaware of BackupAggregator
-/// domain models.
+/// source report. The shared ticketing capability remains unaware of
+/// BackupAggregator domain models.
 /// </summary>
 public sealed class BackupReviewTicketDraftFactory
 {
@@ -43,6 +44,14 @@ public sealed class BackupReviewTicketDraftFactory
     private static void ValidateReport(
         AggregatedBackupReport report)
     {
+        if (report.TenantsAttempted == 0)
+        {
+            throw new InvalidOperationException(
+                "Cannot create a backup review ticket because " +
+                "no customer tenants were discovered or reviewed."
+            );
+        }
+
         if (!report.IsFullyAccountedFor)
         {
             throw new InvalidOperationException(
@@ -311,7 +320,8 @@ public sealed class BackupReviewTicketDraftFactory
         string? value)
     {
         return string.IsNullOrWhiteSpace(
-            value)
+            value
+        )
             ? "-"
             : Inline(
                 value

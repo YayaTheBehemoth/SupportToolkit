@@ -1,102 +1,71 @@
-[![Download for Windows](https://img.shields.io/badge/Download-Windows_x64-blue?logo=windows)](https://github.com/YayaTheBehemoth/SupportToolkit/releases)CLICK TO DOWNLOAD NEWEST RELEASE
-
 
 # SupportToolkit
 
-SupportToolkit is a modular .NET console application for automating repetitive MSP IT support tasks.
+[![Windows x64](https://img.shields.io/badge/Download-Windows_x64-blue?logo=windows)](https://github.com/YayaTheBehemoth/SupportToolkit/releases)
 
-It currently provides Acronis backup inventory and health monitoring workflows, with shared configuration, credential management, and Zendesk ticketing functionality.
+**SupportToolkit** is a modular .NET command-line application for automating repetitive Managed Service Provider (MSP) support tasks.
 
-The application supports both an interactive console and direct CLI commands.
+The project focuses on reducing manual investigation, improving operational consistency, and presenting actionable information from external service providers.
 
-## Features
+SupportToolkit currently includes:
 
-| Component | Description |
-|---|---|
-| BackupAggregator | Reviews Acronis backup inventory across individual or multiple customer tenants and produces consolidated exception reports |
-| BackupHealth | Evaluates Acronis backup health information and identifies resources requiring attention |
-| Ticketing | Generates ticket drafts from BackupAggregator results and supports Zendesk ticket submission |
-| Interactive CLI | Menu-driven access to operational workflows |
-| Configuration | Persistent runtime profiles, provider connections, and credential management |
+- **BackupAggregator** — Consolidated Acronis backup inventory reviews.
+- **BackupHealth** — Acronis backup health evaluation.
+- **Zendesk ticketing** — Ticket generation and submission from backup reviews.
+- **Configuration management** — Reusable provider connections, runtime profiles, and secure credential storage.
+- **Interactive CLI** — Menu-driven workflows alongside commands suitable for scripting.
 
-## Installation
+The application supports fixture-based development and production integrations through the same underlying workflows.
 
-### Portable Windows Installation
+## Getting started
 
-SupportToolkit can be distributed as a self-contained Windows x64 application.
+### Download for Windows
 
-The portable package does not require the .NET SDK or a separate .NET runtime installation.
+Download the latest available Windows x64 package from the [GitHub Releases page](https://github.com/YayaTheBehemoth/SupportToolkit/releases).
 
-1. Obtain `SupportToolkit-win-x64.zip`.
+1. Download `SupportToolkit-win-x64.zip`.
 2. Extract the archive to a directory of your choice.
 3. Run `SupportToolkit.exe`.
-4. Complete the configuration wizard on first launch.
+4. Complete the configuration wizard when prompted.
 
-The archive includes the executable and the supporting files required by the application.
+The portable distribution is self-contained and does not require the .NET SDK or a separate .NET runtime.
 
-No installation wizard or administrator-level installation is required by SupportToolkit itself.
+SupportToolkit itself does not require an installation wizard or administrator-level installation.
 
-### First-Run Configuration
+### First-run configuration
 
-When no configuration profile exists, SupportToolkit automatically launches its configuration wizard.
+When no configuration profiles exist, SupportToolkit automatically launches its configuration wizard.
 
-The wizard allows the operator to configure:
+The wizard guides you through:
 
-- Runtime profile name
-- Fixture or production execution mode for each module
-- Acronis API connection
-- Optional Zendesk connection
-- External-write permissions
+1. Creating a runtime profile.
+2. Selecting fixture or production mode for each module.
+3. Configuring or reusing an Acronis connection when required.
+4. Optionally configuring Zendesk ticket submission.
+5. Selecting a Zendesk ticket destination.
+6. Saving the configuration.
 
-Production connections require the relevant API credentials.
+The first profile is activated automatically.
 
-Fixture mode can be used without connecting to external services.
+Subsequent profiles can be saved without changing the active profile.
 
-After saving the configuration, SupportToolkit opens its interactive menu.
+**Fixture mode does not require production API credentials.** This allows the backup modules to be explored and tested without accessing external systems.
 
-### Configuration Storage
+### Launching the application
 
-Portable releases store non-secret configuration at:
-
-```text
-%LOCALAPPDATA%\SupportToolkit\local.config.json
-```
-
-Authentication secrets are stored separately using Windows Credential Manager.
-
-Configuration remains available between application launches.
-
-To inspect the current configuration:
+Run:
 
 ```cmd
-SupportToolkit.exe configure status
+SupportToolkit.exe
 ```
 
-To modify it:
+The interactive menu provides access to BackupAggregator, BackupHealth, profile switching, configuration, and debug logging.
 
-```cmd
-SupportToolkit.exe configure
-```
-
-To select a different profile:
-
-```cmd
-SupportToolkit.exe configure use profile-name
-```
-
-### Updating the Portable Application
-
-To update an existing portable installation:
-
-1. Obtain a newer distribution archive.
-2. Extract it to the desired application directory.
-3. Launch the updated executable.
-
-The default configuration and stored credentials are maintained separately from the application directory, so replacing the executable does not remove them.
+Direct CLI commands are also available for scripting and development.
 
 ---
 
-## Building from Source
+## Building from source
 
 ### Requirements
 
@@ -117,170 +86,143 @@ Build:
 dotnet build
 ```
 
-Run tests:
+Run the automated tests:
 
 ```cmd
 dotnet test
 ```
 
-Launch the application:
+Start the interactive console:
 
 ```cmd
 dotnet run --project src\SupportToolkit
 ```
 
-Running without arguments starts the interactive console.
-
-### Development Configuration
-
-Debug builds use `local.config.json` at the repository root.
-
-Release builds use `%LOCALAPPDATA%\SupportToolkit`.
-
-An explicit `SUPPORTTOOLKIT_CONFIG` environment variable overrides the default location.
-
-To start configuration manually:
-
-```cmd
-dotnet run --project src\SupportToolkit -- configure
-```
-
-Additional commands:
+To execute a raw CLI command, append `--` followed by the SupportToolkit command:
 
 ```cmd
 dotnet run --project src\SupportToolkit -- configure status
-dotnet run --project src\SupportToolkit -- configure profile local-dev
-dotnet run --project src\SupportToolkit -- configure use local-dev
-dotnet run --project src\SupportToolkit -- configure profile delete old-profile
 ```
 
-### Building a Portable Distribution
-
-From the repository root:
-
-```cmd
-scripts\publish-windows.cmd
-```
-
-The publishing script:
-
-1. Builds the project in Release configuration.
-2. Runs the automated tests.
-3. Publishes a self-contained Windows x64 executable.
-4. Packages the published files into a ZIP archive.
-
-Generated output:
+The command examples below use the development workflow. For a portable installation, replace:
 
 ```text
-artifacts/
-├── publish/
-│   └── win-x64/
-│       └── SupportToolkit.exe
-│
-└── SupportToolkit-win-x64.zip
+dotnet run --project src\SupportToolkit --
 ```
 
-The publish directory also contains the supporting fixture files.
+with:
 
-The generated ZIP can be extracted and run independently of the source repository.
+```text
+SupportToolkit.exe
+```
 
 ---
 
 ## BackupAggregator
 
-BackupAggregator retrieves Acronis backup inventory data and generates consolidated reports across one or more customer tenants.
+BackupAggregator reviews Acronis backup inventory across individual customers or the discovered customer estate.
 
-It summarizes healthy resources and highlights exceptions rather than displaying every backup resource individually.
+The module consolidates information from Acronis Microsoft 365 and device backup inventories into a single review.
 
-### Functionality
+Its purpose is to highlight exceptions and incomplete observations rather than require operators to inspect every healthy resource manually.
 
-- Discover Acronis customer tenants
-- Review individual tenants or all discovered customer tenants
-- Retrieve Microsoft 365 and device backup inventory
-- Handle paginated API responses
-- Normalize and deduplicate resource data
-- Classify backup resources
-- Aggregate resource and tenant statistics
-- Suppress healthy resources from detailed output
-- Report resources requiring attention
-- Identify incomplete tenant reviews
+### Capabilities
 
-### Resource Classification
+- Discover customer tenants using the Acronis Account Management API.
+- Review an individual tenant or all discovered customer tenants.
+- Collect Microsoft 365 backup resources and device inventories.
+- Follow paginated resource and tenant API responses.
+- Normalize and deduplicate backup resource records.
+- Identify healthy resources and resources requiring attention.
+- Preserve resources that cannot be classified reliably.
+- Isolate individual tenant failures without discarding successful reviews.
+- Report resource accounting and tenant coverage.
+- Generate Zendesk ticket drafts from completed reviews.
 
-| Classification | Description |
+### Resource classification
+
+BackupAggregator uses three classifications:
+
+| Classification | Meaning |
 |---|---|
-| Healthy | Available data provides sufficient evidence of a healthy backup state |
-| NeedsReview | The resource reports a condition requiring attention |
-| Unknown | Available data is insufficient for a reliable classification |
+| Healthy | Available evidence supports a healthy backup state. |
+| NeedsReview | Available evidence indicates an issue requiring attention. |
+| Unknown | Available evidence is insufficient for a reliable classification. |
 
-Every normalized resource is accounted for:
+Every normalized backup resource is accounted for:
 
 ```text
 Resources checked = Healthy + NeedsReview + Unknown
 ```
 
-Tenant reviews are accounted for separately, including failed reviews.
+Healthy resources are counted but generally suppressed from detailed exception reporting.
 
-### Inventory Coverage
+Unknown resources remain visible instead of being silently classified as healthy.
 
-The currently implemented inventory collection uses two Acronis data sources:
+### Review completeness
 
-**Microsoft 365:** Resources retrieved through Acronis Resource Manager endpoints.
+A completed review must distinguish between successfully reviewed tenants and failed tenant reviews.
 
-**Devices:** Resources retrieved through the built-in `AllMachines` inventory.
+If individual tenants fail, BackupAggregator preserves the successful results but explicitly identifies the review as partial.
 
-Resource counts represent Acronis resource objects, which do not necessarily correspond one-to-one with physical devices.
+If customer discovery unexpectedly returns zero customer tenants, the all-tenant review fails rather than reporting an apparently healthy empty estate.
 
-Coverage is limited to the inventory sources currently implemented and validated.
+Ticket creation is blocked when the underlying review is incomplete or its resource accounting is inconsistent.
 
 ### Commands
 
-The following commands use the source-development CLI. For portable installations, replace `dotnet run --project src\SupportToolkit --` with `SupportToolkit.exe`.
-
-Review a single tenant:
+Review one tenant:
 
 ```cmd
-dotnet run --project src\SupportToolkit -- backup-aggregator inventory-review "Customer Example"
+dotnet run --project src\SupportToolkit -- backup-aggregator inventory-review "Example Customer"
 ```
 
-Review all customer tenants:
+Review all discovered customer tenants:
 
 ```cmd
 dotnet run --project src\SupportToolkit -- backup-aggregator inventory-review --all
 ```
 
-Run the fixture workflow:
+In fixture mode, the following shortcut is also available:
 
 ```cmd
 dotnet run --project src\SupportToolkit -- backup-aggregator
 ```
 
-The last command requires BackupAggregator to be configured for fixture mode.
+### Exit codes
 
-### Exit Codes
-
-| Code | Description |
+| Code | Meaning |
 |---|---|
-| 0 | Review completed without tenant-level failures |
-| 1 | Invalid command or execution error |
-| 2 | One or more tenant reviews were incomplete |
+| 0 | Review completed without tenant-level failures. |
+| 1 | Invalid command or execution error. |
+| 2 | One or more tenant reviews were incomplete. |
 
-Backup exceptions do not themselves cause an execution failure.
+Individual backup findings do not automatically cause an execution error.
+
+### Inventory limitations
+
+BackupAggregator currently collects the Acronis Microsoft 365 and device resource inventories implemented by its providers.
+
+Acronis inventory objects do not necessarily correspond one-to-one with physical devices or protected workloads.
+
+The module reports the information available from these sources; it is not a guarantee that every possible Acronis workload type has been inspected.
+
+Pagination and response-contract safeguards are tested with synthetic API responses. Some API behaviors have also been validated against live Acronis responses, but not every endpoint and pagination scenario has been observed in production.
 
 ---
 
 ## BackupHealth
 
-BackupHealth retrieves Acronis backup health information and evaluates resources against a set of health rules.
+BackupHealth evaluates Acronis backup health information and presents exceptions requiring operator attention.
 
 The workflow:
 
-1. Retrieves resource and diagnostic information.
-2. Builds a normalized backup health snapshot.
-3. Evaluates resources for exceptions.
-4. Presents the results in the console.
+1. Retrieves backup resource and diagnostic information.
+2. Constructs a normalized backup health snapshot.
+3. Evaluates resources against backup health rules.
+4. Presents exceptions and supporting diagnostics in the console.
 
-The current exception evaluation includes detection of stale backup activity using a 48-hour threshold.
+The current evaluation includes stale backup activity detection using a 48-hour threshold.
 
 ### Command
 
@@ -288,101 +230,342 @@ The current exception evaluation includes detection of stale backup activity usi
 dotnet run --project src\SupportToolkit -- backup-health
 ```
 
-BackupHealth supports both fixture and production execution.
+BackupHealth supports fixture and production modes.
+
+It is separate from BackupAggregator: BackupHealth evaluates backup health conditions, while BackupAggregator produces consolidated inventory reviews.
 
 ---
 
-## Ticketing
+## Zendesk ticketing
 
-SupportToolkit includes shared ticketing functionality, currently integrated with BackupAggregator.
+SupportToolkit includes a shared ticketing capability currently used by BackupAggregator.
 
-The integration supports:
+Ticketing is not an independent operational module. It is an integration capability available to workflows that need to generate or submit tickets.
 
-- Generating ticket drafts from backup review results
-- Previewing generated tickets
-- Submitting tickets through Zendesk
+### Ticket workflow
 
-### Commands
+BackupAggregator can:
 
-Preview a ticket:
+- Generate a ticket draft from a completed backup review.
+- Preview the subject and internal ticket content.
+- Submit the ticket to a configured Zendesk destination.
+- Display the resulting ticket ID and browser link.
+- Identify an idempotent replay when Zendesk explicitly reports one.
+
+Tickets include review findings and unclassified resources while suppressing healthy resource details.
+
+### Preview a ticket
 
 ```cmd
 dotnet run --project src\SupportToolkit -- backup-aggregator ticket preview
 ```
 
-Submit a ticket:
+A preview does not create a Zendesk ticket.
+
+### Submit a ticket
 
 ```cmd
 dotnet run --project src\SupportToolkit -- backup-aggregator ticket submit
 ```
 
-Ticket submission requires a configured Zendesk connection and explicitly enabled external-write permission.
+**This command performs a real external write.**
 
-The interactive console additionally requests confirmation before submission.
+Submission requires:
+
+- A configured Zendesk connection.
+- A selected destination with a valid group ID.
+- Valid Zendesk credentials.
+- A complete backup review suitable for ticket generation.
+- An explicitly invoked ticket submission operation.
+
+The raw CLI command is noninteractive and does not request an additional confirmation.
+
+The interactive console displays the resolved Zendesk instance, destination, group ID, and review summary before requesting confirmation.
+
+If the destination changes between interactive confirmation and submission, SupportToolkit blocks the submission.
+
+### Idempotency and retries
+
+Zendesk submissions include a deterministic idempotency key derived from the ticket contents and destination.
+
+When Zendesk confirms an idempotent replay, SupportToolkit displays the existing ticket rather than claiming a new ticket was created.
+
+Idempotency is limited by the external provider's retention behavior. It is not permanent ticket deduplication.
+
+SupportToolkit does not automatically retry ticket creation POST requests.
+
+If a request times out, fails, or returns an invalid response, ticket creation may still have succeeded.
+
+**Check the selected Zendesk destination for an existing ticket before retrying an unconfirmed submission.**
 
 ---
 
-## Interactive Console
+## Configuration management
 
-Running SupportToolkit without arguments opens the interactive interface.
+SupportToolkit separates runtime profiles, reusable provider connections, ticket destinations, and credentials.
 
-The main menu provides access to:
+### Runtime profiles
 
-- BackupAggregator
-- BackupHealth
-- Runtime profile selection
+A profile defines:
 
-The BackupAggregator interface allows the operator to run tenant reviews, view reports, preview tickets, and submit tickets.
+- The runtime mode of each module.
+- An optional Acronis connection reference.
+- An optional Zendesk connection reference.
+- The Zendesk destination to use for ticket submission.
 
-The interactive interface and direct CLI use the same underlying application workflows.
+Each module can independently use either:
+
+| Mode | Behavior |
+|---|---|
+| `fixture` | Use synthetic development data without provider API calls. |
+| `production` | Use the configured external provider integration. |
+
+A profile can use fixture data for one module and production data for another.
+
+### Provider connections
+
+Provider connections contain reusable integration metadata.
+
+An Acronis connection defines the API datacenter and client identity.
+
+A Zendesk connection defines the Zendesk instance and client identity.
+
+Multiple profiles may reference the same connection without duplicating its credentials.
+
+### Zendesk destinations
+
+Each Zendesk connection may contain multiple named ticket destinations.
+
+A destination maps to a Zendesk group ID within that instance.
+
+For example, separate destinations may be configured for development testing and operational ticket routing.
+
+Selecting a destination does not create a ticket. It only determines where an explicitly submitted ticket will be routed.
+
+### Managing profiles
+
+Inspect configuration:
+
+```cmd
+dotnet run --project src\SupportToolkit -- configure status
+```
+
+Create or edit a profile:
+
+```cmd
+dotnet run --project src\SupportToolkit -- configure profile local-dev
+```
+
+Run the wizard for the current/default profile:
+
+```cmd
+dotnet run --project src\SupportToolkit -- configure
+```
+
+Activate a profile:
+
+```cmd
+dotnet run --project src\SupportToolkit -- configure use local-dev
+```
+
+Delete an inactive profile:
+
+```cmd
+dotnet run --project src\SupportToolkit -- configure profile delete old-profile
+```
+
+Editing or creating a non-active profile does not automatically activate it.
+
+The wizard offers an explicit activation choice. The standalone `configure use` command is also available.
+
+Deleting a profile does not delete shared provider connections or their stored credentials.
+
+### Configuration status
+
+The status command distinguishes:
+
+- Effective runtime module modes.
+- Saved profile settings.
+- Selected Acronis and Zendesk connections.
+- Zendesk destination and group routing.
+- Environment overrides.
+- Locally detectable missing or invalid configuration.
+
+Configuration readiness checks do not authenticate with external providers or perform API requests.
+
+A configuration reported as valid locally has not necessarily been verified against the live service.
+
+### Configuration storage
+
+Debug builds use:
+
+```text
+<repository-root>\local.config.json
+```
+
+Portable Release builds use:
+
+```text
+%LOCALAPPDATA%\SupportToolkit\local.config.json
+```
+
+The configuration file contains non-secret profile and connection metadata.
+
+Authentication secrets are stored separately through Windows Credential Manager.
+
+The configuration path may be overridden with:
+
+```cmd
+set SUPPORTTOOLKIT_CONFIG=C:\Path\To\config.json
+```
+
+The development configuration file is excluded from Git.
 
 ---
 
-## Configuration
+## Environment overrides
 
-SupportToolkit uses named configuration profiles to control runtime behavior.
+Runtime modes can be overridden independently of saved profile settings.
 
-Profiles specify:
-
-- Module execution modes
-- Acronis connection references
-- Zendesk connection references
-- External-write permissions
-
-Provider connection metadata is stored separately from authentication secrets.
-
-### Runtime Overrides
-
-Module execution modes can be overridden through environment variables.
-
-Windows CMD:
+For example:
 
 ```cmd
 set SUPPORTTOOLKIT_BACKUP_AGGREGATOR_MODE=fixture
-set SUPPORTTOOLKIT_BACKUP_HEALTH_MODE=fixture
+set SUPPORTTOOLKIT_BACKUP_HEALTH_MODE=production
 ```
 
-Valid modes are `fixture` and `production`.
+Supported values are `fixture` and `production`.
 
-### Debug Logging
+Clear an override in Windows CMD:
 
-Enable detailed diagnostics:
+```cmd
+set SUPPORTTOOLKIT_BACKUP_AGGREGATOR_MODE=
+set SUPPORTTOOLKIT_BACKUP_HEALTH_MODE=
+```
+
+Provider configuration also supports selected environment overrides.
+
+### Acronis
+
+```text
+ACRONIS_DATACENTER_URL
+ACRONIS_CLIENT_ID
+ACRONIS_CLIENT_SECRET
+```
+
+Providing all three allows an environment-defined Acronis connection without requiring a stored provider connection.
+
+### Zendesk
+
+```text
+ZENDESK_SUBDOMAIN
+ZENDESK_CLIENT_ID
+ZENDESK_CLIENT_SECRET
+```
+
+Zendesk ticket destinations must still be configured through an active profile.
+
+A Zendesk subdomain override cannot silently redirect ticket submission to another instance while retaining the configured destination.
+
+### Override precedence
+
+Effective runtime settings are resolved from environment overrides and the active profile.
+
+Run:
+
+```cmd
+dotnet run --project src\SupportToolkit -- configure status
+```
+
+to inspect the effective settings before running a production workflow.
+
+Environment variables should not be used to store production credentials in shared scripts or committed files.
+
+---
+
+## Debug logging and diagnostics
+
+SupportToolkit provides optional diagnostic logging for troubleshooting.
+
+Enable it in Windows CMD:
 
 ```cmd
 set SUPPORTTOOLKIT_DEBUG=true
 ```
 
-Disable:
+Disable it:
 
 ```cmd
 set SUPPORTTOOLKIT_DEBUG=
 ```
 
+Debug output includes operational information such as request methods, endpoint categories, response status codes, execution timings, and resource counts.
+
+Additional safeguards include:
+
+- UUID redaction in operational logging.
+- Single-line diagnostic messages.
+- Structured tenant-failure diagnostics.
+- Exception type and HTTP status reporting without raw debug stack traces.
+- Explicit reporting of incomplete tenant reviews.
+
+These measures reduce accidental information disclosure but do not make arbitrary production output safe to publish.
+
+Operator-facing reports can contain tenant names, resource names, and other operational data. Review and sanitize captured output before sharing it.
+
+---
+
+## Acronis tenant discovery diagnostics
+
+SupportToolkit includes a developer utility for inspecting Acronis tenant discovery independently of the backup modules.
+
+This performs a read-only production API operation:
+
+```cmd
+dotnet run --project src\SupportToolkit -- dev acronis-tenants --production
+```
+
+It reports tenant population and contract diagnostics, including invalid identities, missing fields, and duplicate identifiers.
+
+To additionally display customer names for local membership verification:
+
+```cmd
+dotnet run --project src\SupportToolkit -- dev acronis-tenants --production --names
+```
+
+Customer names are not displayed unless `--names` is explicitly supplied.
+
+This command uses the active profile's configured Acronis connection and does not require changing BackupAggregator or BackupHealth to production mode.
+
+Production diagnostic output should be handled as potentially sensitive.
+
+---
+
+## Interactive console
+
+Launching SupportToolkit without arguments opens its interactive interface:
+
+```cmd
+dotnet run --project src\SupportToolkit
+```
+
+The main menu provides:
+
+- BackupAggregator
+- BackupHealth
+- Profile switching
+- Configuration wizard
+- Debug logging toggle
+
+The BackupAggregator menu supports full reviews, individual tenant reviews, ticket previews, and destination-aware ticket submission.
+
+Interactive and raw CLI operations share the same application workflows.
+
 ---
 
 ## Architecture
 
-SupportToolkit separates application workflows, external integrations, and user interfaces.
+SupportToolkit separates operational modules, external providers, shared infrastructure, and user interfaces.
 
 ```text
 src/
@@ -428,43 +611,147 @@ scripts/
 └── publish-windows.cmd
 ```
 
-**Modules** contain operational workflows, domain models, services, and reporting.
+### Modules
 
-**Providers** handle communication with external systems. The Acronis integration uses separate providers for tenant discovery, Microsoft 365 resources, devices, resource status, and alerts.
+Modules implement operational workflows and own their domain-specific logic, models, and reporting.
 
-**Core** contains shared configuration, credential storage, logging, module contracts, and ticketing abstractions.
+### Providers
 
-**CLI and UI** provide separate entry points to the same application workflows.
+Providers handle integration with external systems.
+
+Acronis integrations are separated by responsibility, including tenant discovery, Microsoft 365 resources, devices, and backup health data.
+
+Zendesk implements the shared ticket-provider capability.
+
+### Core
+
+Core contains shared configuration, secure credential storage, logging, error handling, and ticketing abstractions.
+
+### CLI and UI
+
+The raw CLI and interactive console are separate presentation layers over the same workflows.
 
 ---
 
-## Security
+## Security principles
 
-- **Acronis:** API communication uses a restricted HTTP transport permitting approved read operations and required authentication requests.
-- **Credentials:** Authentication secrets are stored using Windows Credential Manager rather than plain-text configuration files.
-- **External writes:** Disabled by default and explicitly required for Zendesk ticket submission.
-- **Test data:** Fixture data supports local development and testing without accessing production customer environments.
+SupportToolkit is designed around explicit external-operation boundaries.
 
-Production credentials and unsanitized customer data should not be committed to the repository.
+### Acronis
+
+Acronis requests use a restricted HTTP transport that permits only approved read endpoints and the authentication requests necessary to obtain access tokens.
+
+Unapproved endpoints, methods, and origins are rejected before transmission.
+
+### Zendesk
+
+Ticket creation is an explicit write operation.
+
+A configured connection alone does not authorize automatic ticket creation.
+
+Submission requires valid destination routing, and the interactive console additionally requests confirmation.
+
+### Credentials
+
+Authentication secrets are stored separately from configuration metadata using Windows Credential Manager.
+
+Credentials, tokens, customer data, and unsanitized diagnostic output must not be committed to the repository.
+
+### Fixture-driven development
+
+Synthetic fixtures are used to develop and test provider behavior without depending on production environments.
+
+Fixture tests validate the application's behavior against known inputs. They do not, by themselves, establish that an external API behaves identically in production.
+
+Live integration validation is performed separately when authorized.
 
 ---
 
 ## Testing
 
-Run the test suite:
+Run the full automated test suite:
 
 ```cmd
 dotnet test
 ```
 
-Tests cover:
+Run a Release build and test suite:
 
-- Backup resource classification
-- Microsoft 365 and device inventory collection
-- Pagination and deduplication
-- Tenant selection and resolution
-- Multi-tenant aggregation
-- Failure isolation and resource accounting
-- Console reporting
-- Provider transport restrictions
-- Runtime configuration and workflow behavior
+```cmd
+dotnet build -c Release
+dotnet test -c Release --no-build
+```
+
+The automated tests cover areas including:
+
+- Backup resource normalization and classification.
+- Tenant discovery and resolution.
+- Microsoft 365 and device inventory contracts.
+- Pagination and duplicate handling.
+- Resource and tenant accounting.
+- Concurrency and tenant-failure isolation.
+- Ticket draft generation and review completeness.
+- Zendesk destination validation and routing.
+- Idempotent ticket replay reporting.
+- Submission failures and uncertain outcomes.
+- Profile and configuration behavior.
+- Logging and exception diagnostics.
+- Acronis transport restrictions.
+
+Synthetic integration tests and live vendor validation are distinct forms of evidence.
+
+---
+
+## Publishing a Windows release
+
+A Windows x64 distribution can be built using:
+
+```cmd
+scripts\publish-windows.cmd
+```
+
+The publishing script:
+
+1. Builds the application in Release configuration.
+2. Runs the automated tests.
+3. Publishes a self-contained Windows x64 executable.
+4. Packages the published application into a ZIP archive.
+5. Validates the ZIP archive and its contents.
+
+The generated package is:
+
+```text
+artifacts\SupportToolkit-win-x64.zip
+```
+
+The published executable is located under:
+
+```text
+artifacts\publish\win-x64\SupportToolkit.exe
+```
+
+The ZIP includes the executable and required supporting files, including bundled fixture data.
+
+### Updating a portable installation
+
+To update SupportToolkit:
+
+1. Download a newer release.
+2. Extract the new distribution archive.
+3. Launch the updated executable.
+
+By default, portable releases keep configuration and credentials outside the application directory, allowing an application update without deleting stored profiles or secrets.
+
+---
+
+## Project status
+
+SupportToolkit is under active development.
+
+BackupAggregator, BackupHealth, and Zendesk ticket submission are implemented, with automated test coverage and selected production integration validation.
+
+Provider behavior is only considered production-validated where real external responses have been observed and checked.
+
+Future modules and integrations will be added incrementally as their operational requirements and provider capabilities are established.
+
+The current focus is correctness, maintainability, explicit operator control, and practical usefulness in MSP support workflows.

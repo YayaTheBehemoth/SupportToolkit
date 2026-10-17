@@ -1,3 +1,4 @@
+
 using System.Net.Http.Json;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Providers.Acronis.Microsoft365.Dtos;
@@ -9,7 +10,7 @@ namespace SupportToolkit.Providers.Acronis.Microsoft365;
 /// Reads the Microsoft 365 backup inventory exposed by Acronis Resource Manager.
 ///
 /// A tenant that does not have Microsoft 365 configured is represented as a
-/// valid empty Microsoft 365 inventory rather than as a failed tenant review.
+/// valid empty Microsoft 365 inventory rather than a failed tenant review.
 ///
 /// The provider discovers queryable leaf groups, follows resource pagination,
 /// and removes duplicate resource identities caused by overlapping groups.
@@ -28,7 +29,9 @@ public sealed class AcronisMicrosoft365InventoryProvider
         AcronisApiClient apiClient,
         OperationalLogger? logger = null)
     {
-        _apiClient = apiClient;
+        _apiClient =
+            apiClient ?? throw new ArgumentNullException(nameof(apiClient));
+
         _logger = logger;
     }
 
@@ -37,9 +40,7 @@ public sealed class AcronisMicrosoft365InventoryProvider
             string tenantId,
             CancellationToken cancellationToken = default)
     {
-        if (!Guid.TryParse(
-                tenantId,
-                out _))
+        if (!Guid.TryParse(tenantId, out _))
         {
             throw new ArgumentException(
                 "A tenant UUID is required for customer-scoped authentication.",
@@ -59,13 +60,6 @@ public sealed class AcronisMicrosoft365InventoryProvider
                 cancellationToken
             );
 
-        /*
-         * A successful empty group collection is a valid state.
-         *
-         * In production this occurs for customer tenants where the Microsoft
-         * 365 workload is not configured at all. Their device inventory must
-         * still be reviewed normally.
-         */
         if (groups.Count == 0)
         {
             _logger?.Debug(
@@ -80,18 +74,10 @@ public sealed class AcronisMicrosoft365InventoryProvider
                 .Where(
                     group =>
                         group.Leaf == true
-                        && Guid.TryParse(
-                            group.Id,
-                            out _
-                        )
+                        && Guid.TryParse(group.Id, out _)
                 )
-                .Select(
-                    group =>
-                        group.Id!
-                )
-                .Distinct(
-                    StringComparer.OrdinalIgnoreCase
-                )
+                .Select(group => group.Id!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
         _logger?.Debug(
@@ -101,9 +87,11 @@ public sealed class AcronisMicrosoft365InventoryProvider
         if (leafGroupIds.Count == 0)
         {
             /*
-             * The endpoint responded successfully but exposed no queryable
-             * Microsoft 365 resource groups. This is still a valid empty
-             * inventory rather than a transport failure.
+             * Preserve existing behavior when the groups endpoint
+             * returns no queryable leaf groups.
+             *
+             * Validation of unexpected group metadata remains a
+             * separate provider audit item.
              */
             return [];
         }
@@ -120,15 +108,11 @@ public sealed class AcronisMicrosoft365InventoryProvider
                     cancellationToken
                 );
 
-            rawResources.AddRange(
-                groupResources
-            );
+            rawResources.AddRange(groupResources);
         }
 
         var uniqueResources =
-            Deduplicate(
-                rawResources
-            );
+            Deduplicate(rawResources);
 
         _logger?.Debug(
             $"Microsoft 365 inventory rows: {rawResources.Count} raw, " +
@@ -153,23 +137,31 @@ public sealed class AcronisMicrosoft365InventoryProvider
                 cancellationToken
             );
 
-        /*
-         * HTTP failures remain failures.
-         *
-         * Only a successful response containing no Microsoft 365 groups is
-         * normalized to an empty inventory.
-         */
         response.EnsureSuccessStatusCode();
 
         var payload =
             await response.Content
                 .ReadFromJsonAsync<AcronisMicrosoft365GroupsDto>(
-                    cancellationToken:
-                        cancellationToken
+                    cancellationToken: cancellationToken
                 )
             ?? throw new InvalidOperationException(
                 "Acronis returned an empty Microsoft 365 groups response."
             );
+
+        /*
+         * An absent collection is not equivalent to an explicitly
+         * empty or null collection.
+         *
+         * A malformed response must not silently produce an empty
+         * backup inventory.
+         */
+        if (!payload.HasCollectionProperty)
+        {
+            throw new InvalidOperationException(
+                "Acronis Microsoft 365 groups response did not include " +
+                "a 'data' or 'items' collection."
+            );
+        }
 
         return payload.Groups;
     }
@@ -183,10 +175,20 @@ public sealed class AcronisMicrosoft365InventoryProvider
         var resources =
             new List<AcronisMicrosoft365ResourceDto>();
 
+        /*
+         * Pagination cursors are opaque, case-sensitive tokens.
+         *
+         * A repeated cursor indicates that collection is not making
+         * forward progress. Fail the review rather than returning
+         * potentially incomplete inventory.
+         *
+         * Cursor values must not appear in diagnostics.
+         */
+        var seenAfterCursors =
+            new HashSet<string>(StringComparer.Ordinal);
+
         string? requestPath =
-            BuildInitialResourcePath(
-                groupId
-            );
+            BuildInitialResourcePath(groupId);
 
         var pageNumber = 1;
 
@@ -211,34 +213,32 @@ public sealed class AcronisMicrosoft365InventoryProvider
             var page =
                 await response.Content
                     .ReadFromJsonAsync<AcronisMicrosoft365ResourcePageDto>(
-                        cancellationToken:
-                            cancellationToken
+                        cancellationToken: cancellationToken
                     )
                 ?? throw new InvalidOperationException(
                     "Acronis returned an empty Microsoft 365 resource response."
                 );
 
             /*
-             * Explicit JSON null for an items collection represents an empty
-             * page. Null elements themselves are ignored because there is no
-             * resource object to classify.
+             * Explicitly null and empty collections remain supported.
+             * A missing items property is an incomplete API response.
              */
+            if (!page.HasItemsProperty)
+            {
+                throw new InvalidOperationException(
+                    "Acronis Microsoft 365 resource response did not " +
+                    "include an 'items' collection."
+                );
+            }
+
             var pageItems =
                 page.Items?
-                    .Where(
-                        item =>
-                            item is not null
-                    )
-                    .Select(
-                        item =>
-                            item!
-                    )
+                    .Where(item => item is not null)
+                    .Select(item => item!)
                     .ToList()
                 ?? [];
 
-            resources.AddRange(
-                pageItems
-            );
+            resources.AddRange(pageItems);
 
             if (resources.Count > MaxResources)
             {
@@ -257,15 +257,39 @@ public sealed class AcronisMicrosoft365InventoryProvider
                     .Cursors?
                     .After;
 
-            requestPath =
-                string.IsNullOrWhiteSpace(
-                    after
-                )
-                    ? null
-                    : BuildNextResourcePath(
-                        groupId,
-                        after
+            if (string.IsNullOrWhiteSpace(after))
+            {
+                /*
+                 * Keep terminal-page metadata permissive.
+                 *
+                 * Production observation showed paging.cursors on all
+                 * sampled terminal pages, but does not establish that
+                 * every legitimate terminal response must include it.
+                 */
+                requestPath = null;
+            }
+            else
+            {
+                if (!seenAfterCursors.Add(after))
+                {
+                    throw new InvalidOperationException(
+                        "Acronis Microsoft 365 resource pagination " +
+                        "returned a repeated continuation cursor."
                     );
+                }
+
+                /*
+                 * Production probe confirmed that this endpoint accepts
+                 * after-only continuation requests.
+                 *
+                 * Repeating limit also worked in the sampled group.
+                 * Repeating the original order expression caused HTTP 400.
+                 *
+                 * Preserve the existing, validated request pattern.
+                 */
+                requestPath =
+                    BuildNextResourcePath(groupId, after);
+            }
 
             pageNumber++;
         }
@@ -288,31 +312,21 @@ public sealed class AcronisMicrosoft365InventoryProvider
         foreach (var resource in resources)
         {
             var identity =
-                string.IsNullOrWhiteSpace(
-                    resource.Id
-                )
+                string.IsNullOrWhiteSpace(resource.Id)
                     ? resource.InternalId
                     : resource.Id;
 
-            if (string.IsNullOrWhiteSpace(
-                    identity
-                ))
+            if (string.IsNullOrWhiteSpace(identity))
             {
-                withoutIdentity.Add(
-                    resource
-                );
-
+                withoutIdentity.Add(resource);
                 continue;
             }
 
-            unique[identity] =
-                resource;
+            unique[identity] = resource;
         }
 
         return unique.Values
-            .Concat(
-                withoutIdentity
-            )
+            .Concat(withoutIdentity)
             .ToList()
             .AsReadOnly();
     }

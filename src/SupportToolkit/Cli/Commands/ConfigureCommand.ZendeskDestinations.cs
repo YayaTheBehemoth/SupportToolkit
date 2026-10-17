@@ -73,7 +73,21 @@ public sealed partial class ConfigureCommand
                 connection
             );
 
-            if (connection.Destinations.Count > 0
+            /*
+             * A connection may contain destinations with invalid group
+             * IDs, for example from an old or manually edited config.
+             *
+             * Do not exit this step unless there is at least one
+             * selectable destination.
+             */
+            var hasValidDestination =
+                connection.Destinations.Values.Any(
+                    destination =>
+                        destination is not null
+                        && destination.GroupId > 0
+                );
+
+            if (hasValidDestination
                 && !ReadConfirmation(
                     "Add or update a destination? [y/N]: ",
                     defaultValue: false
@@ -82,10 +96,10 @@ public sealed partial class ConfigureCommand
                 break;
             }
 
-            if (connection.Destinations.Count == 0)
+            if (!hasValidDestination)
             {
                 Console.WriteLine(
-                    "At least one destination is required."
+                    "At least one valid destination is required."
                 );
             }
 
@@ -112,11 +126,12 @@ public sealed partial class ConfigureCommand
                                 destinationName,
                                 StringComparison.OrdinalIgnoreCase
                             )
+                            && pair.Value is not null
                             && pair.Value.GroupId == groupId
                     );
 
             if (!string.IsNullOrWhiteSpace(
-                duplicate.Key))
+                    duplicate.Key))
             {
                 Console.WriteLine();
 
@@ -208,6 +223,16 @@ public sealed partial class ConfigureCommand
                          StringComparer.OrdinalIgnoreCase
                      ))
         {
+            if (pair.Value is null
+                || pair.Value.GroupId <= 0)
+            {
+                Console.WriteLine(
+                    $"  {pair.Key}: invalid group ID"
+                );
+
+                continue;
+            }
+
             Console.WriteLine(
                 $"  {pair.Key}: group {pair.Value.GroupId}"
             );
@@ -277,81 +302,206 @@ public sealed partial class ConfigureCommand
         }
     }
 
+    /// <summary>
+    /// Presents the valid destinations as a numbered list.
+    ///
+    /// The profile's existing selection is the default when valid.
+    /// A sole valid destination is also a safe default.
+    ///
+    /// With multiple destinations and no existing selection,
+    /// the operator must make an explicit choice.
+    ///
+    /// Destination names remain accepted for compatibility.
+    /// </summary>
     private static string ReadSelectedZendeskDestination(
         ZendeskConnectionConfiguration connection,
         string? currentDestination)
     {
-        var configuredDefault =
-            connection.Destinations.Keys
-                .FirstOrDefault(
-                    name =>
+        var availableDestinations =
+            connection.Destinations
+                .Where(
+                    pair =>
+                        pair.Value is not null
+                        && pair.Value.GroupId > 0
+                )
+                .OrderBy(
+                    pair => pair.Key,
+                    StringComparer.OrdinalIgnoreCase
+                )
+                .ToList();
+
+        if (availableDestinations.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "No valid Zendesk destinations are available. " +
+                "Configure a destination with a positive group ID."
+            );
+        }
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "Available destinations:"
+        );
+
+        for (var index = 0;
+             index < availableDestinations.Count;
+             index++)
+        {
+            var pair =
+                availableDestinations[index];
+
+            Console.WriteLine(
+                $"  {index + 1}. {pair.Key} " +
+                $"(group {pair.Value.GroupId})"
+            );
+        }
+
+        var invalidCount =
+            connection.Destinations.Count
+            - availableDestinations.Count;
+
+        if (invalidCount > 0)
+        {
+            Console.WriteLine();
+
+            Console.WriteLine(
+                $"{invalidCount} invalid destination(s) excluded. " +
+                "Update their group IDs before selecting them."
+            );
+        }
+
+        var defaultIndex =
+            -1;
+
+        if (!string.IsNullOrWhiteSpace(
+                currentDestination))
+        {
+            defaultIndex =
+                availableDestinations.FindIndex(
+                    pair =>
                         string.Equals(
-                            name,
+                            pair.Key,
                             currentDestination,
                             StringComparison.OrdinalIgnoreCase
                         )
                 );
+        }
 
-        var defaultName =
-            configuredDefault
-            ?? GetDefaultConnectionName(
-                null,
-                connection.Destinations.Keys
-            );
+        /*
+         * A single valid destination can safely be selected by
+         * pressing Enter. Multiple destinations require explicit
+         * selection unless the profile already has a valid default.
+         */
+        if (defaultIndex < 0
+            && availableDestinations.Count == 1)
+        {
+            defaultIndex = 0;
+        }
+
+        Console.WriteLine();
 
         while (true)
         {
+            Console.Write(
+                defaultIndex >= 0
+                    ? $"Select destination [{defaultIndex + 1}]: "
+                    : "Select destination (number or name): "
+            );
+
             var input =
-                ReadRequiredWithDefault(
-                    "Destination name",
-                    defaultName
+                Console.ReadLine();
+
+            if (input is null)
+            {
+                throw new InvalidOperationException(
+                    "Input ended before a Zendesk destination " +
+                    "was selected."
                 );
-
-            string destinationName;
-
-            try
-            {
-                destinationName =
-                    SupportToolkitConfigurationNames
-                        .NormalizeConnectionName(
-                            input
-                        );
             }
-            catch (ArgumentException exception)
+
+            input =
+                input.Trim();
+
+            if (string.IsNullOrWhiteSpace(input))
             {
+                if (defaultIndex >= 0)
+                {
+                    return availableDestinations[
+                        defaultIndex
+                    ].Key;
+                }
+
                 Console.WriteLine(
-                    exception.Message
+                    "Select a destination by number or name."
                 );
 
                 continue;
             }
 
-            var destination =
+            /*
+             * Numbered choices are preferred, matching the existing
+             * Zendesk connection selection workflow.
+             */
+            if (int.TryParse(
+                    input,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var selectedIndex
+                )
+                && selectedIndex >= 1
+                && selectedIndex <= availableDestinations.Count)
+            {
+                return availableDestinations[
+                    selectedIndex - 1
+                ].Key;
+            }
+
+            /*
+             * Also support typing an existing destination name,
+             * case-insensitively.
+             */
+            var namedDestination =
+                availableDestinations
+                    .FirstOrDefault(
+                        pair =>
+                            string.Equals(
+                                pair.Key,
+                                input,
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                    );
+
+            if (!string.IsNullOrWhiteSpace(
+                    namedDestination.Key))
+            {
+                return namedDestination.Key;
+            }
+
+            /*
+             * Distinguish an existing but invalid destination
+             * from a completely unknown selection.
+             */
+            var invalidDestination =
                 FindZendeskDestination(
                     connection,
-                    destinationName
+                    input
                 );
 
-            if (destination is null)
+            if (invalidDestination is not null
+                && invalidDestination.GroupId <= 0)
             {
                 Console.WriteLine(
-                    $"Unknown Zendesk destination '{destinationName}'."
+                    $"Destination '{input}' has an invalid " +
+                    "group ID. Update it before selecting."
                 );
 
                 continue;
             }
 
-            if (destination.GroupId <= 0)
-            {
-                Console.WriteLine(
-                    $"Destination '{destinationName}' has an invalid " +
-                    "group ID. Update that destination first."
-                );
-
-                continue;
-            }
-
-            return destinationName;
+            Console.WriteLine(
+                "Choose an available destination by number or name."
+            );
         }
     }
 
