@@ -1,6 +1,7 @@
 
 using System.Net;
 using SupportToolkit.Core.Modules;
+using SupportToolkit.Modules.Compliance.Fixtures;
 using SupportToolkit.Modules.Compliance.Reporting;
 using SupportToolkit.Modules.Compliance.Services;
 using SupportToolkit.Providers.MicrosoftGraph.ManagedDevices;
@@ -9,10 +10,12 @@ using SupportToolkit.Providers.MicrosoftGraph.ComplianceSettings;
 namespace SupportToolkit.Modules.Compliance;
 
 /// <summary>
-/// Dev Proxy-only compliance investigation and inventory.
+/// Development-only compliance reporting and investigation.
 ///
-/// No production Graph authentication, remediation,
-/// or ticket writes are supported.
+/// The consolidated report uses in-process synthetic fixtures.
+/// List and investigate retain their existing Dev Proxy behavior.
+///
+/// No live authentication, remediation or ticket writes.
 /// </summary>
 public sealed class ComplianceModule : ISupportToolkitModule
 {
@@ -31,6 +34,14 @@ public sealed class ComplianceModule : ISupportToolkitModule
             PrintUsage();
             return 0;
         }
+
+        var reportCommand =
+            args.Length == 1
+            && string.Equals(
+                args[0],
+                "report",
+                StringComparison.OrdinalIgnoreCase
+            );
 
         var listCommand =
             args.Length == 1
@@ -56,7 +67,8 @@ public sealed class ComplianceModule : ISupportToolkitModule
                 StringComparison.OrdinalIgnoreCase
             );
 
-        if (!listCommand
+        if (!reportCommand
+            && !listCommand
             && (!investigateCommand
                 || (args.Length == 3 && !notePreview)))
         {
@@ -73,6 +85,14 @@ public sealed class ComplianceModule : ISupportToolkitModule
             );
         }
 
+        // No HTTP transport or Dev Proxy is required
+        // for the new fixture-based consolidated report.
+        if (reportCommand)
+        {
+            return await RunReportAsync();
+        }
+
+        // Preserve the existing Dev Proxy workflow.
         using var handler = new HttpClientHandler
         {
             UseProxy = true,
@@ -122,6 +142,7 @@ public sealed class ComplianceModule : ISupportToolkitModule
             Console.WriteLine(
                 "This does not establish compliance."
             );
+
             return 2;
         }
 
@@ -146,6 +167,25 @@ public sealed class ComplianceModule : ISupportToolkitModule
         return 0;
     }
 
+    private static async Task<int> RunReportAsync()
+    {
+        var sources = ComplianceSyntheticTenantFixtures.Create();
+
+        var service = new ComplianceMultiTenantReportService();
+
+        var report = await service.CollectAsync(sources);
+
+        var reporter = new ComplianceMultiTenantReporter();
+
+        Console.WriteLine();
+        Console.Write(reporter.Render(report));
+        Console.WriteLine();
+
+        // Match the existing BackupAggregator convention:
+        // incomplete collection is not a successful full run.
+        return report.FailedTenants > 0 ? 2 : 0;
+    }
+
     private static async Task<int> RunListAsync(
         IGraphManagedDeviceProvider deviceProvider,
         IGraphComplianceSettingProvider settingProvider)
@@ -157,7 +197,6 @@ public sealed class ComplianceModule : ISupportToolkitModule
 
         var result = await service.GetAsync();
 
-        // Reject unexpected data before displaying it.
         foreach (var entry in result.Entries)
         {
             ValidateSyntheticDevice(entry.Device);
@@ -197,7 +236,18 @@ public sealed class ComplianceModule : ISupportToolkitModule
         Console.WriteLine("Compliance (development only)");
         Console.WriteLine();
 
-        Console.WriteLine("Device inventory:");
+        Console.WriteLine("Consolidated synthetic report:");
+        Console.WriteLine(
+            "  SupportToolkit compliance report"
+        );
+
+        Console.WriteLine(
+            "  Does not require Dev Proxy."
+        );
+
+        Console.WriteLine();
+
+        Console.WriteLine("Single-inventory Dev Proxy view:");
         Console.WriteLine(
             "  SupportToolkit compliance list"
         );
@@ -208,16 +258,19 @@ public sealed class ComplianceModule : ISupportToolkitModule
         Console.WriteLine(
             "  SupportToolkit compliance investigate <synthetic-device-name>"
         );
+
         Console.WriteLine(
             "  SupportToolkit compliance investigate <synthetic-device-name> --note-preview"
         );
 
         Console.WriteLine();
+
         Console.WriteLine(
-            "Requires local Dev Proxy on 127.0.0.1:8000."
+            "List and investigate require Dev Proxy on 127.0.0.1:8000."
         );
+
         Console.WriteLine(
-            "No live Graph authentication or ticket writes."
+            "No live Graph authentication, BC integration or ticket writes."
         );
     }
 }
