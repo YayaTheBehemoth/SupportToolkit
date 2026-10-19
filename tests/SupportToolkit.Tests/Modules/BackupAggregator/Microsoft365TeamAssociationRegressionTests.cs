@@ -17,76 +17,56 @@ public class Microsoft365TeamAssociationRegressionTests
     [Theory]
     [InlineData(15, 1, 1, 16)]
     [InlineData(136, 5, 0, 136)]
-    public void TeamAssociatedGroups_AreAccountedForAsSeparateWorkloads(
+    public void TeamAssociatedGroups_WithProtectedSites_AreSeparateWorkloads(
         int microsoft365Count,
         int associatedGroups,
         int deviceCount,
         int expectedTotal)
     {
-        var microsoft365 =
-            new List<AcronisMicrosoft365ResourceDto>();
+        var resources = new List<AcronisMicrosoft365ResourceDto>();
 
-        for (var index = 0; index < associatedGroups; index++)
+        for (var i = 0; i < associatedGroups; i++)
         {
-            var identity = $"synthetic-{index}";
+            resources.Add(CreateResource(
+                $"Group {i}",
+                "GROUP",
+                $"GROUP.pair-{i}",
+                teamName: $"Team {i}",
+                basicKinds: GroupComponents(true)));
 
-            microsoft365.Add(
-                CreateResource(
-                    $"Group {index}",
-                    "GROUP",
-                    $"GROUP.{identity}",
-                    teamName: $"Team {index}"
-                )
-            );
-
-            microsoft365.Add(
-                CreateResource(
-                    $"Team {index}",
-                    "TEAM",
-                    $"TEAM.{identity}"
-                )
-            );
+            resources.Add(CreateResource(
+                $"Team {i}",
+                "TEAM",
+                $"TEAM.pair-{i}"));
         }
 
-        var remaining =
-            microsoft365Count - microsoft365.Count;
-
-        for (var index = 0; index < remaining; index++)
+        for (var i = resources.Count; i < microsoft365Count; i++)
         {
-            microsoft365.Add(
-                CreateResource(
-                    $"Mailbox {index}",
-                    "USER",
-                    $"USER.synthetic-{index}"
-                )
-            );
+            resources.Add(CreateResource(
+                $"User {i}",
+                "USER",
+                $"USER.synthetic-{i}"));
         }
 
-        var devices =
-            Enumerable.Range(0, deviceCount)
-                .Select(
-                    index =>
-                        new AcronisDeviceResourceDto
-                        {
-                            Id = $"device-{index}",
-                            Name = $"Synthetic device {index}",
-                            Status = new AcronisDeviceResourceStatusDto
-                            {
-                                State = "idle",
-                                LastBackup = SuccessfulBackup,
-                                LastSuccessBackup = SuccessfulBackup
-                            }
-                        }
-                )
-                .ToList();
+        var devices = Enumerable.Range(0, deviceCount)
+            .Select(i => new AcronisDeviceResourceDto
+            {
+                Id = $"device-{i}",
+                Name = $"Synthetic device {i}",
+                Status = new AcronisDeviceResourceStatusDto
+                {
+                    State = "idle",
+                    LastBackup = SuccessfulBackup,
+                    LastSuccessBackup = SuccessfulBackup
+                }
+            })
+            .ToList();
 
-        var report =
-            new BackupInventoryNormalizer()
-                .BuildTenantReport(
-                    "Synthetic tenant",
-                    microsoft365,
-                    devices
-                );
+        var report = new BackupInventoryNormalizer()
+            .BuildTenantReport(
+                "Synthetic tenant",
+                resources,
+                devices);
 
         Assert.Equal(expectedTotal, report.RowsChecked);
         Assert.Equal(expectedTotal, report.HealthyRowsSuppressed);
@@ -94,129 +74,280 @@ public class Microsoft365TeamAssociationRegressionTests
         Assert.Equal(0, report.UnknownRowsCount);
     }
 
-    [Fact]
-    public void AssociatedGroupFailure_IsIndependentFromHealthyTeam()
+    [Theory]
+    [InlineData(16, 4, 24, 5, 5, false, 44)]
+    [InlineData(39, 19, 72, 6, 5, true, 136)]
+    public void ObservedTenantShapes_MatchExpectedWorkloadCounts(
+        int groupCount,
+        int siteCount,
+        int userCount,
+        int teamCount,
+        int associatedGroups,
+        bool independentSiteProtection,
+        int expectedRows)
     {
-        var resources =
-            new[]
-            {
-                CreateResource(
-                    "Example group",
-                    "GROUP",
-                    "GROUP.shared-identity",
-                    teamName: "Example team",
-                    status: "warning"
-                ),
+        var resources = new List<AcronisMicrosoft365ResourceDto>();
 
-                CreateResource(
-                    "Example team",
-                    "TEAM",
-                    "TEAM.shared-identity"
-                )
-            };
+        for (var i = 0; i < groupCount; i++)
+        {
+            var associated = i < associatedGroups;
+
+            bool? siteProtection =
+                !associated || independentSiteProtection
+                    ? true
+                    : null;
+
+            resources.Add(CreateResource(
+                $"Group {i}",
+                "GROUP",
+                associated
+                    ? $"GROUP.pair-{i}"
+                    : $"GROUP.other-{i}",
+                teamName: associated ? $"Team {i}" : null,
+                basicKinds: GroupComponents(siteProtection)));
+        }
+
+        for (var i = 0; i < siteCount; i++)
+        {
+            resources.Add(CreateResource(
+                $"Site {i}",
+                "SITE",
+                $"SITE.site-{i}"));
+        }
+
+        for (var i = 0; i < userCount; i++)
+        {
+            resources.Add(CreateResource(
+                $"User {i}",
+                "USER",
+                $"USER.user-{i}"));
+        }
+
+        for (var i = 0; i < teamCount; i++)
+        {
+            resources.Add(CreateResource(
+                $"Team {i}",
+                "TEAM",
+                i < associatedGroups
+                    ? $"TEAM.pair-{i}"
+                    : $"TEAM.unrelated-{i}"));
+        }
+
+        var report = new BackupInventoryNormalizer()
+            .BuildTenantReport(
+                "Synthetic tenant",
+                resources,
+                []);
+
+        Assert.Equal(
+            groupCount + siteCount + userCount + teamCount,
+            resources.Count);
+
+        Assert.Equal(expectedRows, report.RowsChecked);
+        Assert.Equal(expectedRows, report.HealthyRowsSuppressed);
+        Assert.Equal(0, report.FindingsCount);
+        Assert.Equal(0, report.UnknownRowsCount);
+    }
+
+    [Fact]
+    public void MailboxOnlyGroupFailure_IsNotSuppressed()
+    {
+        var resources = new[]
+        {
+            CreateResource(
+                "Example group",
+                "GROUP",
+                "GROUP.shared",
+                teamName: "Example team",
+                status: "warning",
+                basicKinds: GroupComponents(null)),
+
+            CreateResource(
+                "Example team",
+                "TEAM",
+                "TEAM.shared")
+        };
+
+        var entry = Assert.Single(_normalizer.Normalize(resources));
+
+        Assert.Equal("Example team", entry.ResourceName);
+        Assert.Equal(
+            BackupReportEntryClassification.NeedsReview,
+            entry.Classification);
+        Assert.Equal("warning", entry.LastResult);
+    }
+
+    [Fact]
+    public void IndependentlyProtectedGroupFailure_RemainsSeparate()
+    {
+        var resources = new[]
+        {
+            CreateResource(
+                "Example group",
+                "GROUP",
+                "GROUP.shared",
+                teamName: "Example team",
+                status: "warning",
+                basicKinds: GroupComponents(true)),
+
+            CreateResource(
+                "Example team",
+                "TEAM",
+                "TEAM.shared")
+        };
 
         var entries = _normalizer.Normalize(resources);
 
         Assert.Equal(2, entries.Count);
 
-        var group =
-            Assert.Single(
-                entries,
-                entry => entry.ResourceName == "Example group"
-            );
+        var group = Assert.Single(
+            entries,
+            entry => entry.ResourceName == "Example group");
 
         Assert.Equal(
             BackupReportEntryClassification.NeedsReview,
-            group.Classification
-        );
-
+            group.Classification);
         Assert.Equal("warning", group.LastResult);
 
-        var team =
-            Assert.Single(
-                entries,
-                entry => entry.ResourceName == "Example team"
-            );
-
-        Assert.Equal(
-            BackupReportEntryClassification.Healthy,
-            team.Classification
-        );
+        Assert.Contains(
+            entries,
+            entry =>
+                entry.ResourceName == "Example team"
+                && entry.Classification
+                    == BackupReportEntryClassification.Healthy);
     }
 
     [Fact]
     public void AssociatedGroupWithoutProtectionEvidence_IsPreserved()
     {
-        var resources =
-            new[]
-            {
-                CreateResource(
-                    "Example group",
-                    "GROUP",
-                    "GROUP.shared-identity",
-                    teamName: "Example team",
-                    protectedResource: null
-                ),
+        var resources = new[]
+        {
+            CreateResource(
+                "Example group",
+                "GROUP",
+                "GROUP.shared",
+                teamName: "Example team",
+                protectedResource: null),
 
-                CreateResource(
-                    "Example team",
-                    "TEAM",
-                    "TEAM.shared-identity"
-                )
-            };
+            CreateResource(
+                "Example team",
+                "TEAM",
+                "TEAM.shared")
+        };
 
         var entries = _normalizer.Normalize(resources);
 
         Assert.Equal(2, entries.Count);
 
-        var group =
-            Assert.Single(
-                entries,
-                entry => entry.ResourceName == "Example group"
-            );
+        var group = Assert.Single(
+            entries,
+            entry => entry.ResourceName == "Example group");
 
         Assert.Equal(
             BackupReportEntryClassification.Unknown,
-            group.Classification
-        );
+            group.Classification);
+    }
+
+    [Fact]
+    public void ExplicitlyUnprotectedSite_RemainsVisible()
+    {
+        var resources = new[]
+        {
+            CreateResource(
+                "Example group",
+                "GROUP",
+                "GROUP.shared",
+                teamName: "Example team",
+                basicKinds: GroupComponents(false)),
+
+            CreateResource(
+                "Example team",
+                "TEAM",
+                "TEAM.shared")
+        };
+
+        var entries = _normalizer.Normalize(resources);
+
+        Assert.Equal(2, entries.Count);
+
+        var group = Assert.Single(
+            entries,
+            entry => entry.ResourceName == "Example group");
+
+        Assert.Equal(
+            BackupReportEntryClassification.NeedsReview,
+            group.Classification);
+        Assert.Equal("protection_conflict", group.LastResult);
+    }
+
+    [Fact]
+    public void MailboxOnlyGroupWithoutMatchingTeam_IsPreserved()
+    {
+        var resources = new[]
+        {
+            CreateResource(
+                "Example group",
+                "GROUP",
+                "GROUP.group-one",
+                teamName: "Example team",
+                basicKinds: GroupComponents(null)),
+
+            CreateResource(
+                "Example team",
+                "TEAM",
+                "TEAM.team-two")
+        };
+
+        Assert.Equal(2, _normalizer.Normalize(resources).Count);
     }
 
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void GroupWithoutPopulatedTeamName_UsesExistingConsolidation(
+    public void GroupWithoutTeamName_UsesLegacyConsolidation(
         string? teamName)
     {
-        var resources =
-            new[]
-            {
-                CreateResource(
-                    "Example group",
-                    "GROUP",
-                    "GROUP.shared-identity",
-                    teamName: teamName,
-                    status: "warning"
-                ),
+        var resources = new[]
+        {
+            CreateResource(
+                "Example group",
+                "GROUP",
+                "GROUP.shared",
+                teamName: teamName,
+                status: "warning"),
 
-                CreateResource(
-                    "Example team",
-                    "TEAM",
-                    "TEAM.shared-identity"
-                )
-            };
+            CreateResource(
+                "Example team",
+                "TEAM",
+                "TEAM.shared")
+        };
 
-        var entry =
-            Assert.Single(_normalizer.Normalize(resources));
+        var entry = Assert.Single(_normalizer.Normalize(resources));
 
         Assert.Equal("Example team", entry.ResourceName);
-
         Assert.Equal(
             BackupReportEntryClassification.NeedsReview,
-            entry.Classification
-        );
-
+            entry.Classification);
         Assert.Equal("warning", entry.LastResult);
+    }
+
+    private static IReadOnlyList<AcronisMicrosoft365BasicKindDto?>
+        GroupComponents(bool? siteProtected)
+    {
+        return
+        [
+            new AcronisMicrosoft365BasicKindDto
+            {
+                Kind = "SITE",
+                HasProtections = siteProtected
+            },
+            new AcronisMicrosoft365BasicKindDto
+            {
+                Kind = "MAILBOX",
+                HasProtections = true
+            }
+        ];
     }
 
     private static AcronisMicrosoft365ResourceDto CreateResource(
@@ -225,7 +356,8 @@ public class Microsoft365TeamAssociationRegressionTests
         string internalId,
         string? teamName = null,
         string status = "ok",
-        bool? protectedResource = true)
+        bool? protectedResource = true,
+        IReadOnlyList<AcronisMicrosoft365BasicKindDto?>? basicKinds = null)
     {
         return new AcronisMicrosoft365ResourceDto
         {
@@ -234,6 +366,7 @@ public class Microsoft365TeamAssociationRegressionTests
             Name = name,
             Kind = kind,
             TeamName = teamName,
+            BasicKinds = basicKinds,
             HasProtections = protectedResource,
             LastTaskStatus = status,
             LastTaskState = "idle",
