@@ -10,13 +10,16 @@
     "zendesk": {
       "example-sandbox": {
         "subdomain": "example",
-        "clientId": "example-zendesk-client-id"
+        "clientId": "example-zendesk-client-id",
+        "destinations": {
+          "dev": { "groupId": 111111 },
+          "operations": { "groupId": 222222 }
+        }
       }
     }
   },
   "profiles": {
     "local-dev": {
-      "allowWrites": false,
       "modules": {
         "backup-aggregator": "fixture",
         "backup-health": "fixture"
@@ -24,7 +27,7 @@
     },
     "zendesk-sandbox": {
       "zendeskConnection": "example-sandbox",
-      "allowWrites": true,
+      "zendeskDestination": "dev",
       "modules": {
         "backup-aggregator": "fixture",
         "backup-health": "fixture"
@@ -32,7 +35,6 @@
     },
     "readonly-validation": {
       "acronisConnection": "example-production",
-      "allowWrites": false,
       "modules": {
         "backup-aggregator": "production",
         "backup-health": "fixture"
