@@ -141,6 +141,37 @@ public sealed partial class ConfigureCommand
             }
         }
 
+        var businessCentralSelected =
+            !string.IsNullOrWhiteSpace(
+                profile.BusinessCentralConnection
+            );
+
+        if (businessCentralSelected
+            || ReadConfirmation(
+                "Configure the Business Central monitoring-scope " +
+                "source for this profile? [y/N]: ",
+                defaultValue: false
+            ))
+        {
+            Console.WriteLine();
+
+            if (!(businessCentralSelected
+                && KeepExistingBusinessCentralConnection(
+                    configuration,
+                    profile
+                )))
+            {
+                Console.WriteLine();
+
+                ConfigureBusinessCentralConnection(
+                    configuration,
+                    profile
+                );
+            }
+
+            EnsureMonitoringItemNumber(profile);
+        }
+
         /*
          * Profile configuration and profile activation are distinct.
          *

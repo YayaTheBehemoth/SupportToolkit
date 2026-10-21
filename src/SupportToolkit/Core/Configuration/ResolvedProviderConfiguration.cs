@@ -11,6 +11,24 @@ public sealed record ResolvedAcronisConnection(
 );
 
 /// <summary>
+/// Resolved Business Central connection metadata.
+///
+/// Presence is checked during resolution. Format validation and the
+/// pinned hosts belong to the Business Central provider options.
+/// There is no secret: sign-in is delegated and interactive.
+/// </summary>
+public sealed record ResolvedBusinessCentralConnection(
+    string TenantId,
+    string ClientId,
+    string Environment,
+    string CompanyId,
+    string? CompanyName,
+    string ApiPublisher,
+    string ApiGroup,
+    string ApiVersion
+);
+
+/// <summary>
 /// Fully resolved Zendesk connection and ticket destination.
 ///
 /// DestinationName and GroupId are resolved from the active profile

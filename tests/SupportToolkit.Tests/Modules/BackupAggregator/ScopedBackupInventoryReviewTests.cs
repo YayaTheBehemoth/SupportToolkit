@@ -1,3 +1,4 @@
+using SupportToolkit.Core.MonitoringScope;
 
 using System.Collections.Concurrent;
 using System.Net;

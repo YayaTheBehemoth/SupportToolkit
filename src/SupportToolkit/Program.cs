@@ -31,8 +31,16 @@ var tenantDirectoryCommand =
     new AcronisTenantDirectoryDevCommand(
         configurationResolver);
 
+var businessCentralDiagnosticsCommand =
+    new BusinessCentralSubscriptionDevCommand(
+        configurationResolver);
+
 var backupAggregatorWorkflow =
     new BackupAggregatorWorkflow(
+        configurationResolver);
+
+var backupAggregatorScopedWorkflow =
+    new BackupAggregatorScopedWorkflow(
         configurationResolver);
 
 var backupHealthWorkflow =
@@ -45,7 +53,8 @@ ISupportToolkitModule[] modules =
         backupHealthWorkflow),
 
     new BackupAggregatorModule(
-        backupAggregatorWorkflow)
+        backupAggregatorWorkflow,
+        backupAggregatorScopedWorkflow)
 ];
 
 var interactiveShell =
@@ -53,7 +62,8 @@ var interactiveShell =
         configurationStore,
         configureCommand,
         backupAggregatorWorkflow,
-        backupHealthWorkflow);
+        backupHealthWorkflow,
+        backupAggregatorScopedWorkflow);
 
 var firstRunStartup =
     new FirstRunStartup(
@@ -116,6 +126,39 @@ try
         return await tenantDirectoryCommand.RunAsync(
             Console.Out,
             showNames: args.Length == 4);
+    }
+
+    /*
+     * Host-level developer utility.
+     *
+     * --production explicitly authorizes a read-only Business Central
+     * read with an interactive sign-in. Output is aggregate counts only.
+     */
+    if (args.Length >= 2
+        && string.Equals(
+            args[0],
+            "dev",
+            StringComparison.OrdinalIgnoreCase)
+        && string.Equals(
+            args[1],
+            "bc-subscriptions",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        if (args.Length != 3
+            || !string.Equals(
+                args[2],
+                "--production",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine(
+                "Usage: SupportToolkit dev bc-subscriptions " +
+                "--production");
+
+            return 1;
+        }
+
+        return await businessCentralDiagnosticsCommand.RunAsync(
+            Console.Out);
     }
 
     /*
@@ -267,6 +310,8 @@ static void PrintUsage(
     Console.WriteLine("Developer diagnostics:");
     Console.WriteLine(
         "  dev acronis-tenants --production [--names]");
+    Console.WriteLine(
+        "  dev bc-subscriptions --production");
     Console.WriteLine();
 
     Console.WriteLine("  dev monitoring-scope");

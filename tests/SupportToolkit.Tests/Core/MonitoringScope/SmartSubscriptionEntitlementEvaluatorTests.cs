@@ -1,3 +1,4 @@
+using SupportToolkit.Core.MonitoringScope;
 
 using SupportToolkit.Modules.BackupAggregator.Fixtures;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
@@ -101,7 +102,7 @@ public class SmartSubscriptionEntitlementEvaluatorTests
         );
 
         Assert.Contains(
-            "blocked",
+            "suspended",
             contoso.Reason,
             StringComparison.OrdinalIgnoreCase
         );
@@ -128,12 +129,12 @@ public class SmartSubscriptionEntitlementEvaluatorTests
     }
 
     [Fact]
-    public void PlannedSubscription_RequiresReview()
+    public void OpenStatus_IsUnverifiedAndRequiresReview()
     {
         var result =
             Assert.Single(
                 EvaluateSingle(
-                    status: "Planlægges",
+                    status: "Open",
                     startDate: new DateOnly(2026, 11, 1)
                 )
             );
@@ -269,7 +270,7 @@ public class SmartSubscriptionEntitlementEvaluatorTests
         var result =
             Assert.Single(
                 EvaluateSingle(
-                    status: "aktiv",
+                    status: "active",
                     startDate: new DateOnly(2026, 1, 1)
                 )
             );
@@ -305,7 +306,7 @@ public class SmartSubscriptionEntitlementEvaluatorTests
             new(
                 "SUB-001",
                 "BC-001",
-                "Aktiv",
+                "Active",
                 new DateOnly(2026, 1, 1),
                 null
             )
@@ -346,14 +347,14 @@ public class SmartSubscriptionEntitlementEvaluatorTests
             new(
                 "SUB-001",
                 "BC-001",
-                "Aktiv",
+                "Active",
                 new DateOnly(2026, 1, 1),
                 null
             ),
             new(
                 "SUB-001",
                 "BC-002",
-                "Aktiv",
+                "Active",
                 new DateOnly(2026, 1, 1),
                 null
             )
@@ -399,16 +400,18 @@ public class SmartSubscriptionEntitlementEvaluatorTests
             new(
                 "SUB-001",
                 "BC-001",
-                "Aktiv",
+                "Active",
                 new DateOnly(2026, 1, 1),
-                null
+                null,
+                "BC-001",
+                ""
             )
         ];
 
         IReadOnlyList<SmartSubscriptionLine> lines =
         [
-            new("SUB-001", "OTHER-ITEM"),
-            new("SUB-001", "CUSTOM-MONITORING-ITEM")
+            new("SUB-001", "OTHER-ITEM", "Item", false),
+            new("SUB-001", "CUSTOM-MONITORING-ITEM", "Item", false)
         ];
 
         var result =
@@ -428,7 +431,7 @@ public class SmartSubscriptionEntitlementEvaluatorTests
 
     private IReadOnlyList<MonitoringEntitlementObservation>
         EvaluateSingle(
-            string status = "Aktiv",
+            string status = "Active",
             DateOnly? startDate = null,
             DateOnly? endDate = null,
             string? customerNumber = "BC-001")
@@ -440,7 +443,9 @@ public class SmartSubscriptionEntitlementEvaluatorTests
                 customerNumber,
                 status,
                 startDate,
-                endDate
+                endDate,
+                customerNumber,
+                ""
             )
         ];
 
@@ -448,7 +453,9 @@ public class SmartSubscriptionEntitlementEvaluatorTests
         [
             new(
                 "SUB-001",
-                SmartSubscriptionFixtureFactory.FixtureMonitoringItemNumber
+                SmartSubscriptionFixtureFactory.FixtureMonitoringItemNumber,
+                "Item",
+                false
             )
         ];
 

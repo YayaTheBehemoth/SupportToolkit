@@ -276,6 +276,11 @@ public sealed class JsonSupportToolkitConfigurationStore
                 string,
                 ZendeskConnectionConfiguration>();
 
+        configuration.Connections.BusinessCentral ??=
+            new Dictionary<
+                string,
+                BusinessCentralConnectionConfiguration>();
+
         configuration.Profiles ??=
             new Dictionary<
                 string,
@@ -287,6 +292,11 @@ public sealed class JsonSupportToolkitConfigurationStore
                 new Dictionary<
                     string,
                     SupportToolkitMode>();
+
+            profile.MonitoringScope ??=
+                new Dictionary<
+                    string,
+                    ModuleMonitoringScopeConfiguration>();
         }
     }
 

@@ -106,6 +106,12 @@ public sealed partial class ConfigureCommand
 
         Console.WriteLine();
 
+        await WriteEffectiveBusinessCentralAsync(
+            profile,
+            resolver);
+
+        Console.WriteLine();
+
         WriteEnvironmentOverrides();
 
         Console.WriteLine(
@@ -404,6 +410,10 @@ public sealed partial class ConfigureCommand
             Console.WriteLine(
                 $"    Zendesk destination: " +
                 $"{DisplayOptionalValue(profile.ZendeskDestination)}");
+
+            Console.WriteLine(
+                $"    Business Central:    " +
+                $"{DisplayOptionalValue(profile.BusinessCentralConnection)}");
 
             Console.WriteLine(
                 $"    Backup Aggregator:   " +

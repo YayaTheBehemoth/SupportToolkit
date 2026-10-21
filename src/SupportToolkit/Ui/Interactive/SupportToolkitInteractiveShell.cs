@@ -34,6 +34,9 @@ public sealed partial class SupportToolkitInteractiveShell
     private readonly BackupAggregatorWorkflow _backupAggregatorWorkflow;
     private readonly BackupHealthWorkflow _backupHealthWorkflow;
 
+    private readonly BackupAggregatorScopedWorkflow?
+        _backupAggregatorScopedWorkflow;
+
     private readonly ConsoleBackupAggregatorReporter
         _backupAggregatorReporter;
 
@@ -47,8 +50,12 @@ public sealed partial class SupportToolkitInteractiveShell
         ISupportToolkitConfigurationStore configurationStore,
         ConfigureCommand configureCommand,
         BackupAggregatorWorkflow backupAggregatorWorkflow,
-        BackupHealthWorkflow backupHealthWorkflow)
+        BackupHealthWorkflow backupHealthWorkflow,
+        BackupAggregatorScopedWorkflow? backupAggregatorScopedWorkflow = null)
     {
+        _backupAggregatorScopedWorkflow =
+            backupAggregatorScopedWorkflow;
+
         _configurationStore =
             configurationStore
             ?? throw new ArgumentNullException(

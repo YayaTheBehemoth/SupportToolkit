@@ -1,3 +1,4 @@
+using SupportToolkit.Core.MonitoringScope;
 
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 

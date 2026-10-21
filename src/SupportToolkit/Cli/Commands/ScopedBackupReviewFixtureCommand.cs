@@ -1,3 +1,4 @@
+using SupportToolkit.Core.MonitoringScope;
 
 using System.Collections.Concurrent;
 using SupportToolkit.Modules.BackupAggregator.Fixtures;
@@ -277,73 +278,4 @@ public sealed class ScopedBackupReviewFixtureCommand
         }
     }
 
-    private sealed class HealthyFixtureInventoryProvider
-        : IAcronisMicrosoft365InventoryProvider,
-          IAcronisDeviceInventoryProvider
-    {
-        private readonly DateTimeOffset _backupTime;
-
-        public ConcurrentBag<string> Microsoft365Requests { get; } =
-            new();
-
-        public ConcurrentBag<string> DeviceRequests { get; } =
-            new();
-
-        public HealthyFixtureInventoryProvider(
-            DateOnly asOfDate)
-        {
-            _backupTime =
-                new DateTimeOffset(
-                    asOfDate.ToDateTime(
-                        new TimeOnly(12, 0)
-                    ),
-                    TimeSpan.Zero
-                );
-        }
-
-        public Task<IReadOnlyList<AcronisMicrosoft365ResourceDto>>
-            GetResourcesForTenantAsync(
-                string tenantId,
-                CancellationToken cancellationToken = default)
-        {
-            Microsoft365Requests.Add(
-                tenantId
-            );
-
-            return Task.FromResult<
-                IReadOnlyList<AcronisMicrosoft365ResourceDto>>(
-                []
-            );
-        }
-
-        Task<IReadOnlyList<AcronisDeviceResourceDto>>
-            IAcronisDeviceInventoryProvider.GetResourcesForTenantAsync(
-                string tenantId,
-                CancellationToken cancellationToken)
-        {
-            DeviceRequests.Add(
-                tenantId
-            );
-
-            IReadOnlyList<AcronisDeviceResourceDto> resources =
-            [
-                new AcronisDeviceResourceDto
-                {
-                    Id = "fixture-device",
-                    Name = "Fixture Backup Device",
-
-                    Status =
-                        new AcronisDeviceResourceStatusDto
-                        {
-                            State = "ok",
-                            LastBackup = _backupTime,
-                            LastSuccessBackup = _backupTime,
-                            AppliedPolicyNames = "Fixture Backup"
-                        }
-                }
-            ];
-
-            return Task.FromResult(resources);
-        }
-    }
 }

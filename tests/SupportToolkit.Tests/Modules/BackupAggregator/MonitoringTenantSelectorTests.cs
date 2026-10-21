@@ -1,3 +1,4 @@
+using SupportToolkit.Core.MonitoringScope;
 
 using SupportToolkit.Modules.BackupAggregator.Fixtures;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;

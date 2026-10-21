@@ -29,6 +29,10 @@ public sealed partial class SupportToolkitInteractiveShell
                         cancellationToken
                     );
 
+            var scopedAvailable =
+                await IsScopedReviewAvailableAsync(
+                    cancellationToken);
+
             Console.WriteLine(
                 "Backup Aggregator"
             );
@@ -67,8 +71,19 @@ public sealed partial class SupportToolkitInteractiveShell
                 "4. Submit ticket"
             );
 
+            var backChoice = 5;
+
+            if (scopedAvailable)
+            {
+                Console.WriteLine(
+                    "5. Review monitored tenants (Business Central)"
+                );
+
+                backChoice = 6;
+            }
+
             Console.WriteLine(
-                "5. Back"
+                $"{backChoice}. Back"
             );
 
             Console.WriteLine();
@@ -78,7 +93,7 @@ public sealed partial class SupportToolkitInteractiveShell
                     minimum:
                         1,
                     maximum:
-                        5
+                        backChoice
                 );
 
             Console.WriteLine();
@@ -115,10 +130,79 @@ public sealed partial class SupportToolkitInteractiveShell
 
                     break;
 
-                case 5:
+                case 5 when scopedAvailable:
+                    await ReviewScopedAsync(
+                        cancellationToken
+                    );
+
+                    break;
+
+                default:
                     return;
             }
         }
+    }
+
+    /// <summary>
+    /// The scoped review is offered only when the active profile
+    /// selects a Business Central connection. Any configuration
+    /// problem simply hides it; the regular menu is unaffected.
+    /// </summary>
+    private async Task<bool> IsScopedReviewAvailableAsync(
+        CancellationToken cancellationToken)
+    {
+        if (_backupAggregatorScopedWorkflow is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            return await _backupAggregatorScopedWorkflow
+                .IsEnabledAsync(cancellationToken);
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    private async Task ReviewScopedAsync(
+        CancellationToken cancellationToken)
+    {
+        WriteProgress(
+            "Loading monitoring scope and backup data..."
+        );
+
+        try
+        {
+            var result =
+                await _backupAggregatorScopedWorkflow!
+                    .ReviewAsync(
+                        DateOnly.FromDateTime(DateTime.Today),
+                        cancellationToken
+                    );
+
+            new ConsoleScopedReviewReporter()
+                .Write(Console.Out, result);
+
+            Console.WriteLine();
+
+            _backupAggregatorReporter
+                .Write(result.Inventory);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            WriteError(
+                exception
+            );
+        }
+
+        Pause();
     }
 
     private async Task<AggregatedBackupReport?>

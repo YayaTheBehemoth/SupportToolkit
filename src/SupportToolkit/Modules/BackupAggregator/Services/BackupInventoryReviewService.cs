@@ -104,6 +104,18 @@ public sealed class BackupInventoryReviewService
     }
 
     /// <summary>
+    /// Customer tenants available for selection. Does not review
+    /// anything.
+    /// </summary>
+    public Task<IReadOnlyList<TenantDto>> GetCustomerTenantsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return _tenantResolver.GetCustomerTenantsAsync(
+            cancellationToken
+        );
+    }
+
+    /// <summary>
     /// Preserves the existing unscoped all-tenant behavior.
     ///
     /// Monitoring entitlement is not applied to this operation.

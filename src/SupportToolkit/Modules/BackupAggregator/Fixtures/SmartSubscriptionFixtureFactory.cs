@@ -1,3 +1,4 @@
+using SupportToolkit.Core.MonitoringScope;
 
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 
@@ -30,45 +31,55 @@ public static class SmartSubscriptionFixtureFactory
             new(
                 "SUB-NORTHWIND",
                 "BC-NORTHWIND",
-                "Aktiv",
+                "Active",
                 new DateOnly(2026, 1, 1),
-                null
+                null,
+                "BC-NORTHWIND",
+                ""
             ),
 
             // Operational exception: blocked subscription.
             new(
                 "SUB-CONTOSO",
                 "BC-CONTOSO",
-                "Spærret",
+                "Suspended",
                 new DateOnly(2025, 6, 1),
-                null
+                null,
+                "BC-CONTOSO",
+                ""
             ),
 
             // Backup service exists, but monitoring is not evidenced.
             new(
                 "SUB-ALPINE",
                 "BC-ALPINE",
-                "Aktiv",
+                "Active",
                 new DateOnly(2026, 1, 1),
-                null
+                null,
+                "BC-ALPINE",
+                ""
             ),
 
             // Normal monitoring entitlement candidate.
             new(
                 "SUB-FABRIKAM",
                 "BC-FABRIKAM",
-                "Aktiv",
+                "Active",
                 new DateOnly(2026, 1, 1),
-                null
+                null,
+                "BC-FABRIKAM",
+                ""
             ),
 
             // Normal monitoring entitlement candidate.
             new(
                 "SUB-ADVENTURE",
                 "BC-ADVENTURE",
-                "Aktiv",
+                "Active",
                 new DateOnly(2026, 1, 1),
-                null
+                null,
+                "BC-ADVENTURE",
+                ""
             )
         ];
 
@@ -76,32 +87,44 @@ public static class SmartSubscriptionFixtureFactory
         [
             new(
                 "SUB-NORTHWIND",
-                FixtureMonitoringItemNumber
+                FixtureMonitoringItemNumber,
+                "Item",
+                false
             ),
 
             new(
                 "SUB-NORTHWIND",
-                FixtureBackupItemNumber
+                FixtureBackupItemNumber,
+                "Item",
+                false
             ),
 
             new(
                 "SUB-CONTOSO",
-                FixtureMonitoringItemNumber
+                FixtureMonitoringItemNumber,
+                "Item",
+                false
             ),
 
             new(
                 "SUB-ALPINE",
-                FixtureBackupItemNumber
+                FixtureBackupItemNumber,
+                "Item",
+                false
             ),
 
             new(
                 "SUB-FABRIKAM",
-                FixtureMonitoringItemNumber
+                FixtureMonitoringItemNumber,
+                "Item",
+                false
             ),
 
             new(
                 "SUB-ADVENTURE",
-                FixtureMonitoringItemNumber
+                FixtureMonitoringItemNumber,
+                "Item",
+                false
             )
         ];
 

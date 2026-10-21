@@ -16,14 +16,20 @@ public sealed class BackupAggregatorModule
 
     private readonly BackupAggregatorWorkflow _workflow;
 
+    private readonly BackupAggregatorScopedWorkflow? _scopedWorkflow;
+
     public string Command => ModuleCommand;
 
     public string Description =>
         "Review Acronis backup inventory and surface only exceptions.";
 
     public BackupAggregatorModule(
-        BackupAggregatorWorkflow workflow)
+        BackupAggregatorWorkflow workflow,
+        BackupAggregatorScopedWorkflow? scopedWorkflow = null)
     {
+        _scopedWorkflow =
+            scopedWorkflow;
+
         _workflow =
             workflow
             ?? throw new ArgumentNullException(nameof(workflow));
@@ -46,6 +52,11 @@ public sealed class BackupAggregatorModule
         if (IsTicketSubmitCommand(args))
         {
             return await RunTicketSubmitAsync();
+        }
+
+        if (IsScopedReviewCommand(args))
+        {
+            return await RunScopedReviewAsync();
         }
 
         /*
@@ -95,6 +106,36 @@ public sealed class BackupAggregatorModule
         WriteReport(report);
 
         return GetExitCode(report);
+    }
+
+    /// <summary>
+    /// Opt-in review limited to the tenants selected by the shared
+    /// monitoring scope. Never used by the default commands.
+    /// </summary>
+    private async Task<int> RunScopedReviewAsync()
+    {
+        if (_scopedWorkflow is null)
+        {
+            Console.Error.WriteLine(
+                "Scoped review is not available in this host.");
+
+            return 1;
+        }
+
+        var result =
+            await _scopedWorkflow.ReviewAsync(
+                DateOnly.FromDateTime(DateTime.Today));
+
+        new ConsoleScopedReviewReporter()
+            .Write(Console.Out, result);
+
+        Console.WriteLine();
+
+        WriteReport(result.Inventory);
+
+        return result.IsOverallComplete
+            ? 0
+            : 2;
     }
 
     private async Task<int> RunTicketPreviewAsync()
@@ -157,6 +198,16 @@ public sealed class BackupAggregatorModule
                 StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsScopedReviewCommand(
+        string[] args)
+    {
+        return args.Length == 1
+            && string.Equals(
+                args[0],
+                "scoped-review",
+                StringComparison.OrdinalIgnoreCase);
+    }
+
     private static bool IsTicketPreviewCommand(
         string[] args)
     {
@@ -209,6 +260,17 @@ public sealed class BackupAggregatorModule
 
         Console.WriteLine(
             "  SupportToolkit backup-aggregator ticket submit");
+
+        Console.WriteLine();
+
+        Console.WriteLine("Scoped review (opt-in, Business Central):");
+
+        Console.WriteLine(
+            "  SupportToolkit backup-aggregator scoped-review");
+
+        Console.WriteLine(
+            "Reviews only tenants the monitoring scope selects. " +
+            "Does not replace inventory-review and cannot create tickets.");
 
         Console.WriteLine();
 
