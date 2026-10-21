@@ -17,6 +17,8 @@ SupportToolkit currently includes:
 
 The application supports fixture-based development and production integrations through the same underlying workflows.
 
+**Current release:** [`v0.2.4`](https://github.com/YayaTheBehemoth/SupportToolkit/releases) (Windows x64 prerelease). See [Release history](#release-history) for what changed and why, and [Development branches](#development-branches) for work that is not part of `main` yet.
+
 ## Getting started
 
 ### Download for Windows
@@ -62,6 +64,21 @@ SupportToolkit.exe
 The interactive menu provides access to BackupAggregator, BackupHealth, profile switching, configuration, and debug logging.
 
 Direct CLI commands are also available for scripting and development.
+
+### Command overview
+
+| Command | Purpose | External effect |
+|---|---|---|
+| `SupportToolkit` | Interactive console (first run starts the configuration wizard). | Depends on the menu action chosen. |
+| `SupportToolkit --help` | Print usage. | None. |
+| `configure [status \| profile <name> \| profile delete <name> \| use <name>]` | Manage profiles, connections and credentials. | Local configuration and Windows Credential Manager only. |
+| `backup-aggregator inventory-review <tenant> \| --all` | Consolidated Acronis inventory review. | Read-only in production mode. |
+| `backup-aggregator ticket preview` | Generate and display a Zendesk ticket draft. | None. |
+| `backup-aggregator ticket submit` | Create a Zendesk ticket from a completed review. | **Writes to Zendesk.** |
+| `backup-health` | Acronis backup health evaluation. | Read-only in production mode. |
+| `dev acronis-tenants --production [--names]` | Tenant discovery diagnostics. | Read-only Acronis calls. |
+
+Run any module with `--help` for its own usage text. Exit codes are listed per command below.
 
 ---
 
@@ -208,6 +225,18 @@ Acronis inventory objects do not necessarily correspond one-to-one with physical
 The module reports the information available from these sources; it is not a guarantee that every possible Acronis workload type has been inspected.
 
 Pagination and response-contract safeguards are tested with synthetic API responses. Some API behaviors have also been validated against live Acronis responses, but not every endpoint and pagination scenario has been observed in production.
+
+### Microsoft 365 workload accounting
+
+Acronis can report a Microsoft 365 Team and its associated Group as separate resource records.
+
+- A Group associated with a Team is kept as an independently monitored workload when it carries its own protection evidence, such as a protected SharePoint site.
+- A matching Group without that evidence is consolidated with its Team, and its health evidence is merged rather than hidden behind a healthy Team.
+- Failed or unknown evidence on a consolidated entry stays visible.
+
+This rule is deliberately narrow. It reflects discrepancies observed in real customer data and is covered by synthetic regression tests, but it does not establish that every Acronis resource shape has been exercised. It was last changed in `v0.2.4`.
+
+Acronis inventory counts and the Acronis portal's "protected workloads" figure can legitimately differ, because BackupAggregator reports every inventoried resource.
 
 ---
 
@@ -421,6 +450,17 @@ set SUPPORTTOOLKIT_CONFIG=C:\Path\To\config.json
 
 The development configuration file is excluded from Git.
 
+An example file is provided in `local.config.example.json`. All values in it are fictional.
+
+### Retired write switch
+
+Earlier versions had a global `allowWrites` profile setting and a `SUPPORTTOOLKIT_ALLOW_WRITES` environment variable. Both are retired:
+
+- Existing configuration files that still contain `allowWrites` load normally, and the property is dropped the next time the file is saved.
+- `SUPPORTTOOLKIT_ALLOW_WRITES` is ignored. `configure status` reports it as obsolete if it is still set.
+
+The switch was removed because it duplicated the safeguards that actually gate a write: an explicitly invoked submit operation, a configured Zendesk connection, a valid destination, and (in the interactive console) a confirmation prompt.
+
 ---
 
 ## Environment overrides
@@ -526,6 +566,8 @@ dotnet run --project src\SupportToolkit -- dev acronis-tenants --production
 ```
 
 It reports tenant population and contract diagnostics, including invalid identities, missing fields, and duplicate identifiers.
+
+The command exits with code `2` and prints a warning when the tenant directory has completeness or identity anomalies, such as an empty directory, invalid or duplicate identifiers, or missing names or kinds. Duplicate customer display names are reported as observations and do not by themselves cause exit code `2`.
 
 To additionally display customer names for local membership verification:
 
@@ -744,14 +786,50 @@ By default, portable releases keep configuration and credentials outside the app
 
 ---
 
+## Release history
+
+Releases are published as Windows x64 prereleases on the [GitHub Releases page](https://github.com/YayaTheBehemoth/SupportToolkit/releases).
+
+| Version | Tagged commit date | Summary | Why |
+|---|---|---|---|
+| `v0.2.4` | 2026-10-19 | Corrected Teams and SharePoint workload accounting in BackupAggregator. | Real customer comparisons showed Team-associated Groups with their own protected SITE workload being collapsed into the Team, undercounting resources. |
+| `v0.2.3` | 2026-10-17 | Stabilization baseline: provider contract and pagination hardening, fail-closed ticketing and configuration behavior, read-only `dev acronis-tenants` diagnostics, retired `allowWrites`, redacted diagnostics, reorganized configuration code, consolidated tests. | Live Acronis observations and a review of failure paths showed that incomplete or contradictory data must never read as a clean result. |
+| `v0.2.2` | 2026-10-13 | Zendesk destination routing, Teams backing-group normalization, configuration and debug controls in the interactive console. | Tickets needed to reach an explicitly chosen group without duplicating credentials across profiles. |
+| `v0.2.1` | 2026-10-11 | Windows-compatible ZIP packaging with extraction and startup checks in the release workflow. | The first ZIP did not open cleanly with Windows Explorer. |
+| `v0.2.0` | 2026-10-11 | First automated Windows release. Adds the interactive console, configuration profiles and wizard, and Zendesk ticketing from BackupAggregator, with CI and a GitHub Releases workflow. | Colleagues needed a portable executable that is built and tested the same way every time, not assembled by hand. |
+| `v0.1.0` | 2026-10-09 | Initial tag: BackupHealth and BackupAggregator as raw CLI commands. | |
+
+Behavior changes that matter to operators:
+
+- **Partial reviews are explicit.** A tenant that fails to review is reported as incomplete and the run exits with code `2`. Ticket creation is blocked for incomplete reviews.
+- **Zero discovered customers is a failure,** not an empty healthy estate.
+- **Ticket destinations are explicit.** A profile selects one named Zendesk destination, and destination identity is part of the idempotency key.
+- **Diagnostics are redacted.** UUIDs are redacted in operational logging, and debug output reports exception types and HTTP statuses rather than raw messages or stack traces.
+
+## Development branches
+
+Two feature branches contain work that is **not** in `main` or in any release:
+
+| Branch | Contents | Evidence boundary |
+|---|---|---|
+| `feature/compliance-investigation` | A synthetic Intune and Microsoft Graph compliance module: exception-first device list, setting-level evidence, device investigation and a consolidated multi-tenant `compliance report`. | Uses synthetic fixtures. No live Graph authorization, tenant coverage or case lifecycle automation has been established. |
+| `feature/business-central-monitoring-scope` | Monitoring-entitlement assessment from Business Central subscription records, tenant selection and an opt-in `backup-aggregator scoped-review`. Includes fixture commands and a read-only Business Central provider with delegated sign-in. | Fixture behavior is tested. Production read access, entitlement rules and Business Central to Acronis customer identity mapping are unresolved, and the default review and ticketing paths are unchanged. |
+
+Synthetic fixtures do not prove real API contracts, authorization or completeness.
+
 ## Project status
 
 SupportToolkit is under active development.
 
-BackupAggregator, BackupHealth, and Zendesk ticket submission are implemented, with automated test coverage and selected production integration validation.
+BackupAggregator, BackupHealth, and Zendesk ticket submission are implemented on `main`, with automated test coverage and selected production integration validation:
+
+- Acronis production reads and comparisons against the Acronis portal have been exercised for BackupAggregator and tenant discovery.
+- Zendesk ticket routing and idempotent replay were validated in a personal trial account. Authorized end-to-end validation in an organizational Zendesk environment has not been completed.
 
 Provider behavior is only considered production-validated where real external responses have been observed and checked.
 
-Future modules and integrations will be added incrementally as their operational requirements and provider capabilities are established.
+Deployment model, scheduling, persistence and an operator-friendly interface are intentionally undecided. Different modules have different operational needs, and the current interactive console has usability limits for non-developers. These will be revisited when a validated workflow needs them rather than designed up front.
 
 The current focus is correctness, maintainability, explicit operator control, and practical usefulness in MSP support workflows.
+
+Sanitized design decisions, operational discoveries and validation notes are kept in the public [SupportToolkitNotes](https://github.com/YayaTheBehemoth/SupportToolkitNotes) repository. This repository's source and tests are authoritative for implementation.
