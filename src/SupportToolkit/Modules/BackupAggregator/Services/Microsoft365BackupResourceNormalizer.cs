@@ -12,66 +12,40 @@ public sealed class Microsoft365BackupResourceNormalizer
     public IReadOnlyList<BackupReportEntry> Normalize(
         IReadOnlyList<AcronisMicrosoft365ResourceDto> resources)
     {
-        var teamKeys =
-            resources
-                .Where(resource => IsKind(resource, TeamKind))
-                .Select(
-                    resource =>
-                        GetLogicalResourceKey(resource, TeamKind)
-                )
-                .Where(key => key is not null)
-                .Select(key => key!)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var teamKeys = resources
+            .Where(resource => IsKind(resource, TeamKind))
+            .Select(resource => GetLogicalResourceKey(resource, TeamKind))
+            .Where(key => key is not null)
+            .Select(key => key!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        /*
-         * Only Groups without an explicit Team association remain eligible
-         * for legacy consolidation.
-         *
-         * Production validation confirmed that Acronis exposes a populated
-         * teamName on Groups that it counts as separate protected workloads.
-         *
-         * Those Groups must not contribute to a merged Team entry.
-         */
-        var backingGroups =
-            resources
-                .Where(
-                    resource =>
-                        IsKind(resource, GroupKind)
-                        && string.IsNullOrWhiteSpace(resource.TeamName)
-                )
-                .Select(
-                    resource =>
-                        new
-                        {
-                            Resource = resource,
-                            Key = GetLogicalResourceKey(
-                                resource,
-                                GroupKind
-                            )
-                        }
-                )
-                .Where(
-                    item =>
-                        item.Key is not null
-                        && teamKeys.Contains(item.Key)
-                )
-                .GroupBy(
-                    item => item.Key!,
-                    StringComparer.OrdinalIgnoreCase
-                )
-                .ToDictionary(
-                    group => group.Key,
-                    group =>
-                        group.Select(item => item.Resource).ToList(),
-                    StringComparer.OrdinalIgnoreCase
-                );
+        // Find Groups that should be consolidated into a matching Team.
+        // A Team-associated Group with independent SITE protection must
+        // instead remain a separate workload.
+        var backingGroups = resources
+            .Where(resource =>
+                IsKind(resource, GroupKind)
+                && ShouldConsolidateWithTeam(resource))
+            .Select(resource => new
+            {
+                Resource = resource,
+                Key = GetLogicalResourceKey(resource, GroupKind)
+            })
+            .Where(item =>
+                item.Key is not null
+                && teamKeys.Contains(item.Key))
+            .GroupBy(
+                item => item.Key!,
+                StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(item => item.Resource).ToList(),
+                StringComparer.OrdinalIgnoreCase);
 
         var entries = new List<BackupReportEntry>();
 
         var processedTeamKeys =
-            new HashSet<string>(
-                StringComparer.OrdinalIgnoreCase
-            );
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var resource in resources)
         {
@@ -80,19 +54,11 @@ public sealed class Microsoft365BackupResourceNormalizer
                 var groupKey =
                     GetLogicalResourceKey(resource, GroupKind);
 
-                /*
-                 * Preserve the existing consolidation of a backing Group
-                 * when Acronis supplies no explicit Team association.
-                 *
-                 * A Group with a populated teamName is retained as its own
-                 * workload, even when its internal identity matches a Team.
-                 *
-                 * The Group's protection flags do not determine whether
-                 * it is consolidated.
-                 */
+                // Only skip a Group if a matching Team will account
+                // for it. Its health is retained in the Team entry.
                 if (groupKey is not null
                     && teamKeys.Contains(groupKey)
-                    && string.IsNullOrWhiteSpace(resource.TeamName))
+                    && ShouldConsolidateWithTeam(resource))
                 {
                     continue;
                 }
@@ -107,23 +73,15 @@ public sealed class Microsoft365BackupResourceNormalizer
                 {
                     if (!processedTeamKeys.Add(teamKey))
                     {
-                        /*
-                         * Preserve the existing handling of repeated
-                         * representations of the same Team identity.
-                         */
                         continue;
                     }
 
                     if (backingGroups.TryGetValue(
-                            teamKey,
-                            out var groups))
+                        teamKey,
+                        out var groups))
                     {
                         entries.Add(
-                            CreateLogicalTeamEntry(
-                                resource,
-                                groups
-                            )
-                        );
+                            CreateLogicalTeamEntry(resource, groups));
 
                         continue;
                     }
@@ -136,26 +94,73 @@ public sealed class Microsoft365BackupResourceNormalizer
         return entries.AsReadOnly();
     }
 
+    private static bool ShouldConsolidateWithTeam(
+        AcronisMicrosoft365ResourceDto group)
+    {
+        // Preserve the established legacy behavior.
+        if (string.IsNullOrWhiteSpace(group.TeamName))
+        {
+            return true;
+        }
+
+        // Observed Tenant A configuration:
+        // - Associated Group
+        // - Overall protection confirmed
+        // - MAILBOX protection true
+        // - SITE protection null
+        //
+        // This Group contributes mailbox protection but not an
+        // independently accounted SharePoint workload.
+        //
+        // Do not generalize null to mean unprotected elsewhere.
+        // Missing or contradictory metadata remains separate.
+        if (group.HasProtections != true
+            || group.BasicKinds is not { Count: 2 })
+        {
+            return false;
+        }
+
+        var protectedMailbox = group.BasicKinds.Count(
+            component =>
+                component is not null
+                && IsBasicKind(component, "MAILBOX")
+                && component.HasProtections == true);
+
+        var unconfirmedSite = group.BasicKinds.Count(
+            component =>
+                component is not null
+                && IsBasicKind(component, "SITE")
+                && component.HasProtections is null);
+
+        return protectedMailbox == 1 && unconfirmedSite == 1;
+    }
+
+    private static bool IsBasicKind(
+        AcronisMicrosoft365BasicKindDto component,
+        string kind)
+    {
+        return string.Equals(
+            component.Kind,
+            kind,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
     private static BackupReportEntry CreateLogicalTeamEntry(
         AcronisMicrosoft365ResourceDto team,
         IReadOnlyList<AcronisMicrosoft365ResourceDto> backingGroups)
     {
-        var candidates =
-            new[] { team }
-                .Concat(backingGroups)
-                .Select(ToReportEntry)
-                .OrderByDescending(
-                    entry =>
-                        GetClassificationPriority(
-                            entry.Classification
-                        )
-                )
-                .ThenByDescending(
-                    entry =>
-                        entry.LastBackupRun
-                        ?? DateTimeOffset.MinValue
-                )
-                .ToList();
+        // A failed or unknown Group must never disappear merely
+        // because its matching Team has a successful backup.
+        var candidates = new[] { team }
+            .Concat(backingGroups)
+            .Select(ToReportEntry)
+            .OrderByDescending(
+                entry => GetClassificationPriority(
+                    entry.Classification))
+            .ThenByDescending(
+                entry => entry.LastBackupRun
+                    ?? DateTimeOffset.MinValue)
+            .ToList();
 
         var selected = candidates[0];
 
@@ -187,8 +192,7 @@ public sealed class Microsoft365BackupResourceNormalizer
             _ => throw new ArgumentOutOfRangeException(
                 nameof(classification),
                 classification,
-                "Unsupported backup report classification."
-            )
+                "Unsupported backup report classification.")
         };
     }
 
@@ -204,14 +208,13 @@ public sealed class Microsoft365BackupResourceNormalizer
         var prefix = expectedKind + ".";
 
         if (!resource.InternalId.StartsWith(
-                prefix,
-                StringComparison.OrdinalIgnoreCase))
+            prefix,
+            StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
 
-        var key =
-            resource.InternalId[prefix.Length..].Trim();
+        var key = resource.InternalId[prefix.Length..].Trim();
 
         return string.IsNullOrWhiteSpace(key)
             ? null
@@ -225,18 +228,14 @@ public sealed class Microsoft365BackupResourceNormalizer
         return string.Equals(
             resource.Kind,
             kind,
-            StringComparison.OrdinalIgnoreCase
-        );
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private static BackupReportEntry ToReportEntry(
         AcronisMicrosoft365ResourceDto resource)
     {
-        var protectionState =
-            GetProtectionState(resource);
-
-        var classification =
-            Classify(resource, protectionState);
+        var protectionState = GetProtectionState(resource);
+        var classification = Classify(resource, protectionState);
 
         return new BackupReportEntry
         {
@@ -245,12 +244,10 @@ public sealed class Microsoft365BackupResourceNormalizer
                     ? "<unknown Microsoft 365 resource>"
                     : resource.Name,
 
-            LastResult =
-                GetDisplayedResult(
-                    resource,
-                    classification,
-                    protectionState
-                ),
+            LastResult = GetDisplayedResult(
+                resource,
+                classification,
+                protectionState),
 
             Classification = classification,
 
@@ -278,9 +275,6 @@ public sealed class Microsoft365BackupResourceNormalizer
             return BackupReportEntryClassification.Unknown;
         }
 
-        /*
-         * Contradictory Acronis protection signals must never be suppressed.
-         */
         if (protectionState == ProtectionState.Conflicting)
         {
             return BackupReportEntryClassification.NeedsReview;
@@ -300,13 +294,11 @@ public sealed class Microsoft365BackupResourceNormalizer
         if (string.Equals(
                 resource.LastTaskStatus,
                 "ok",
-                StringComparison.OrdinalIgnoreCase
-            )
+                StringComparison.OrdinalIgnoreCase)
             && string.Equals(
                 resource.LastTaskState,
                 "idle",
-                StringComparison.OrdinalIgnoreCase
-            )
+                StringComparison.OrdinalIgnoreCase)
             && resource.LastSuccessTime is not null)
         {
             return BackupReportEntryClassification.Healthy;
@@ -318,34 +310,26 @@ public sealed class Microsoft365BackupResourceNormalizer
     private static ProtectionState GetProtectionState(
         AcronisMicrosoft365ResourceDto resource)
     {
-        var protectionSignals =
-            new List<bool?>
-            {
-                resource.HasProtections
-            };
+        var protectionSignals = new List<bool?>
+        {
+            resource.HasProtections
+        };
 
-        /*
-         * Acronis may return null for basicKinds or its protection flags.
-         * Unknown signals do not automatically imply unprotected resources.
-         */
+        // Unknown component flags do not automatically mean
+        // the resource is unprotected.
         if (resource.BasicKinds is not null)
         {
             protectionSignals.AddRange(
                 resource.BasicKinds
-                    .Where(basicKind => basicKind is not null)
-                    .Select(
-                        basicKind =>
-                            basicKind!.HasProtections
-                    )
-            );
+                    .Where(component => component is not null)
+                    .Select(component => component!.HasProtections));
         }
 
-        var knownProtectionSignals =
-            protectionSignals
-                .Where(value => value.HasValue)
-                .Select(value => value!.Value)
-                .Distinct()
-                .ToList();
+        var knownProtectionSignals = protectionSignals
+            .Where(value => value.HasValue)
+            .Select(value => value!.Value)
+            .Distinct()
+            .ToList();
 
         if (knownProtectionSignals.Count == 0)
         {
@@ -384,8 +368,7 @@ public sealed class Microsoft365BackupResourceNormalizer
                 && !string.Equals(
                     resource.LastTaskStatus,
                     "ok",
-                    StringComparison.OrdinalIgnoreCase
-                ))
+                    StringComparison.OrdinalIgnoreCase))
             {
                 return resource.LastTaskStatus;
             }
@@ -394,8 +377,7 @@ public sealed class Microsoft365BackupResourceNormalizer
                 && !string.Equals(
                     resource.LastTaskState,
                     "idle",
-                    StringComparison.OrdinalIgnoreCase
-                ))
+                    StringComparison.OrdinalIgnoreCase))
             {
                 return resource.LastTaskState;
             }
