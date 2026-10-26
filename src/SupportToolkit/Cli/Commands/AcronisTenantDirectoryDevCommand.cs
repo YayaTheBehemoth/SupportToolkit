@@ -40,6 +40,7 @@ public sealed class AcronisTenantDirectoryDevCommand
     public async Task<int> RunAsync(
         TextWriter output,
         bool showNames,
+        bool showStructure = false,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -105,7 +106,8 @@ public sealed class AcronisTenantDirectoryDevCommand
         return WriteReport(
             output,
             tenants,
-            showNames);
+            showNames,
+            showStructure);
     }
 
     /// <summary>
@@ -117,7 +119,8 @@ public sealed class AcronisTenantDirectoryDevCommand
     public static int WriteReport(
         TextWriter output,
         IReadOnlyList<TenantDto> tenants,
-        bool showNames)
+        bool showNames,
+        bool showStructure = false)
     {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(tenants);
@@ -288,6 +291,11 @@ public sealed class AcronisTenantDirectoryDevCommand
                 "for explicit local membership review.");
         }
 
+        if (showStructure)
+        {
+            WriteStructure(output, validRows, showNames);
+        }
+
         output.WriteLine();
         output.WriteLine(
             "Scope: configured Acronis API client's tenant subtree.");
@@ -297,5 +305,84 @@ public sealed class AcronisTenantDirectoryDevCommand
             "counts alone do not prove completeness.");
 
         return incomplete ? 2 : 0;
+    }
+
+    /// <summary>
+    /// Hierarchy evidence for telling tenants apart without a name.
+    /// Identifiers are shortened to a prefix; nothing is written to
+    /// files. Names appear only when requested.
+    /// </summary>
+    private static void WriteStructure(
+        TextWriter output,
+        IReadOnlyList<TenantDto> tenants,
+        bool showNames)
+    {
+        var childCounts =
+            tenants
+                .Where(tenant => !string.IsNullOrWhiteSpace(tenant.ParentId))
+                .GroupBy(
+                    tenant => tenant.ParentId!,
+                    StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.Count(),
+                    StringComparer.OrdinalIgnoreCase);
+
+        var ids =
+            tenants
+                .Select(tenant => tenant.Id)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var outsideParents =
+            childCounts.Keys.Where(parent => !ids.Contains(parent)).ToList();
+
+        output.WriteLine();
+        output.WriteLine("Structure");
+        output.WriteLine("---------");
+
+        output.WriteLine(
+            "Parents outside the listed tenants: " +
+            outsideParents.Count);
+
+        foreach (var parent in outsideParents)
+        {
+            output.WriteLine(
+                $"  parent {Short(parent)} has " +
+                $"{childCounts[parent]} listed children");
+        }
+
+        output.WriteLine();
+
+        foreach (var tenant in tenants
+            .OrderBy(tenant => tenant.Kind, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(tenant => tenant.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(tenant => tenant.Id, StringComparer.OrdinalIgnoreCase))
+        {
+            var children =
+                childCounts.GetValueOrDefault(tenant.Id);
+
+            var name =
+                showNames
+                    ? JsonSerializer.Serialize(
+                        tenant.Name,
+                        NameJsonOptions)
+                    : "(hidden)";
+
+            output.WriteLine(
+                $"{tenant.Kind,-9} " +
+                $"id={Short(tenant.Id)} " +
+                $"parent={Short(tenant.ParentId)} " +
+                $"children={children,3} " +
+                $"enabled={(tenant.Enabled?.ToString() ?? "?"),-5} " +
+                $"{name}");
+        }
+    }
+
+    private static string Short(
+        string? id)
+    {
+        return string.IsNullOrWhiteSpace(id)
+            ? "-       "
+            : id.Trim()[..Math.Min(8, id.Trim().Length)];
     }
 }

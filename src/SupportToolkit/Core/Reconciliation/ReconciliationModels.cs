@@ -44,7 +44,14 @@ public enum DiscrepancyType
     /// Acronis tenant is absent, disabled or deleted. This is tenant
     /// level only; deployed services are not compared.
     /// </summary>
-    SubscriptionActiveTenantMissing
+    SubscriptionActiveTenantMissing,
+
+    /// <summary>
+    /// The Acronis tenant is reported as monitored, but the mapped
+    /// customer has no in-scope subscription with an entitled item.
+    /// Requires monitored evidence, which has no production source yet.
+    /// </summary>
+    MonitoredWithoutEntitlement
 }
 
 public enum ReconciliationSubject

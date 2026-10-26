@@ -1,4 +1,5 @@
 using SupportToolkit.Core.Configuration;
+using SupportToolkit.Core.MonitoringScope;
 using SupportToolkit.Providers.BusinessCentral.Transport;
 
 namespace SupportToolkit.Cli.Commands;
@@ -159,7 +160,10 @@ public sealed partial class ConfigureCommand
         settings.MonitoringItemNumber =
             ReadRequiredWithDefault(
                 "Monitoring service item number",
-                settings.MonitoringItemNumber);
+                string.IsNullOrWhiteSpace(settings.MonitoringItemNumber)
+                    ? SubscriptionItemNumbers
+                        .DefaultMonitoringItemNumbers[0]
+                    : settings.MonitoringItemNumber);
 
         profile.MonitoringScope[BackupAggregatorCommand] =
             settings;

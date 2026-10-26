@@ -33,6 +33,17 @@ public sealed class ReconciliationEngine
     /// <param name="relevantItemNumbers">
     /// When supplied, only subscriptions with at least one line for one
     /// of these items are reconciled. When null, every subscription is.
+    /// Item numbers are compared trimmed, NFC-normalized and ordinally
+    /// ignoring case.
+    /// </param>
+    /// <param name="excludedTenantIds">
+    /// Tenants that are never reconciled or reported, such as the
+    /// operator's own tenant.
+    /// </param>
+    /// <param name="monitoredTenantIds">
+    /// Tenants known to be monitored on the Acronis side. When null, no
+    /// monitored evidence exists and the monitored-versus-entitlement
+    /// checks are skipped; the tenant's enabled state is the only signal.
     /// </param>
     public ReconciliationReport Reconcile(
         IReadOnlyList<CustomerMappingRecord> mappings,
@@ -40,12 +51,42 @@ public sealed class ReconciliationEngine
         IReadOnlyList<SmartSubscriptionLine> lines,
         IReadOnlyList<AcronisTenantObservation> tenants,
         DateOnly asOfDate,
-        IReadOnlySet<string>? relevantItemNumbers = null)
+        IReadOnlySet<string>? relevantItemNumbers = null,
+        IReadOnlySet<string>? excludedTenantIds = null,
+        IReadOnlySet<string>? monitoredTenantIds = null)
     {
         ArgumentNullException.ThrowIfNull(mappings);
         ArgumentNullException.ThrowIfNull(headers);
         ArgumentNullException.ThrowIfNull(lines);
         ArgumentNullException.ThrowIfNull(tenants);
+
+        var relevantItems =
+            relevantItemNumbers is null
+                ? null
+                : SubscriptionItemNumbers.ToSet(relevantItemNumbers);
+
+        var excluded =
+            (excludedTenantIds ?? new HashSet<string>())
+                .Select(id => id.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var monitored =
+            monitoredTenantIds?
+                .Select(id => id.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        tenants =
+            tenants
+                .Where(
+                    tenant => !excluded.Contains(tenant.TenantId.Trim()))
+                .ToArray();
+
+        mappings =
+            mappings
+                .Where(
+                    mapping => !excluded.Contains(
+                        mapping.AcronisTenantId.Trim()))
+                .ToArray();
 
         var period =
             asOfDate.ToString(
@@ -89,7 +130,7 @@ public sealed class ReconciliationEngine
                     header => IsInScope(
                         header,
                         lines,
-                        relevantItemNumbers))
+                        relevantItems))
                 .ToArray();
 
         var duplicateSubscriptionNumbers =
@@ -176,7 +217,8 @@ public sealed class ReconciliationEngine
                         ?? [],
                     duplicateSubscriptionNumbers,
                     asOfDate,
-                    period
+                    period,
+                    monitored?.Contains(mapping.AcronisTenantId.Trim())
                 )
             );
         }
@@ -227,7 +269,8 @@ public sealed class ReconciliationEngine
         IReadOnlyList<AcronisTenantObservation> tenantObservations,
         IReadOnlySet<string> duplicateSubscriptionNumbers,
         DateOnly asOfDate,
-        string period)
+        string period,
+        bool? monitored)
     {
         var ambiguity =
             new List<string>();
@@ -265,7 +308,23 @@ public sealed class ReconciliationEngine
             );
         }
 
-        if (customerHeaders.Count == 0)
+        if (monitored == true
+            && tenant is null)
+        {
+            ambiguity.Add(
+                "Tenant is reported as monitored but was not found."
+            );
+        }
+
+        // A monitored tenant whose customer has no entitled
+        // subscription is decided below; without monitored evidence
+        // the case stays undefined.
+        var monitoredWithoutEntitlement =
+            monitored == true
+            && customerHeaders.Count == 0;
+
+        if (customerHeaders.Count == 0
+            && !monitoredWithoutEntitlement)
         {
             ambiguity.Add(
                 "Confirmed customer has no in-scope subscription " +
@@ -319,6 +378,16 @@ public sealed class ReconciliationEngine
             }
         }
 
+        if (monitored == false
+            && active.Count > 0)
+        {
+            ambiguity.Add(
+                "Entitled subscription is active but the tenant is not " +
+                "reported as monitored; the treatment of this case is " +
+                "undefined."
+            );
+        }
+
         if (ambiguity.Count > 0)
         {
             return new ReconciliationResult(
@@ -336,6 +405,21 @@ public sealed class ReconciliationEngine
 
         var discrepancies =
             new List<ReconciliationDiscrepancy>();
+
+        if (monitoredWithoutEntitlement)
+        {
+            discrepancies.Add(
+                new ReconciliationDiscrepancy(
+                    new DiscrepancyKey(
+                        mapping.Id,
+                        DiscrepancyType.MonitoredWithoutEntitlement,
+                        period),
+                    [],
+                    "Acronis tenant is monitored, but the customer has " +
+                    "no in-scope entitled subscription."
+                )
+            );
+        }
 
         if (tenantActive
             && active.Count == 0
@@ -439,6 +523,8 @@ public sealed class ReconciliationEngine
         {
             return true;
         }
+
+        // Expects a set built by SubscriptionItemNumbers.ToSet.
 
         var number =
             header.SubscriptionNumber.Trim();

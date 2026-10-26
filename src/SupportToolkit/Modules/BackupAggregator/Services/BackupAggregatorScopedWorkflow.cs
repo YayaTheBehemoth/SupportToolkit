@@ -100,8 +100,8 @@ public sealed class BackupAggregatorScopedWorkflow
                 new HealthyFixtureInventoryProvider(asOfDate);
 
             return await ExecuteAsync(
-                SmartSubscriptionFixtureFactory
-                    .FixtureMonitoringItemNumber,
+                [SmartSubscriptionFixtureFactory
+                    .FixtureMonitoringItemNumber],
                 new FixtureMonitoringIdentitySource(),
                 _ => Task.FromResult<ISmartSubscriptionEvidenceSource>(
                     new FixtureSmartSubscriptionEvidenceSource()),
@@ -118,24 +118,31 @@ public sealed class BackupAggregatorScopedWorkflow
                 cancellationToken);
         }
 
-        var itemNumber =
+        var itemNumbers =
             await _configurationResolver
-                .GetMonitoringItemNumberAsync(
+                .GetMonitoringItemNumbersAsync(
+                    BackupAggregatorModule.ModuleCommand,
+                    cancellationToken);
+
+        var excludedTenantIds =
+            await _configurationResolver
+                .GetExcludedTenantIdsAsync(
                     BackupAggregatorModule.ModuleCommand,
                     cancellationToken);
 
         return await ExecuteAsync(
-            itemNumber,
+            itemNumbers,
             _identitySource,
             _evidenceSourceFactory,
             _inventoryRuntimeFactory,
             asOfDate,
-            cancellationToken);
+            cancellationToken,
+            excludedTenantIds);
     }
 
     private static async Task<ScopedBackupInventoryReviewResult>
         ExecuteAsync(
-            string itemNumber,
+            IReadOnlyCollection<string> itemNumbers,
             IMonitoringIdentitySource identitySource,
             Func<CancellationToken,
                 Task<ISmartSubscriptionEvidenceSource>>
@@ -143,7 +150,8 @@ public sealed class BackupAggregatorScopedWorkflow
             Func<CancellationToken, Task<ScopedInventoryRuntime>>
                 inventoryRuntimeFactory,
             DateOnly asOfDate,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            IReadOnlySet<string>? excludedTenantIds = null)
     {
         // Fails closed here when no production source exists.
         var identities =
@@ -158,7 +166,7 @@ public sealed class BackupAggregatorScopedWorkflow
                 cancellationToken);
 
         var observations =
-            new SmartSubscriptionEntitlementEvaluator(itemNumber)
+            new SmartSubscriptionEntitlementEvaluator(itemNumbers)
                 .Evaluate(
                     evidence.Headers,
                     evidence.Lines,
@@ -175,7 +183,11 @@ public sealed class BackupAggregatorScopedWorkflow
 
             var selection =
                 new MonitoringTenantSelector()
-                    .Select(tenants, observations, identities);
+                    .Select(
+                        tenants,
+                        observations,
+                        identities,
+                        excludedTenantIds);
 
             return await runtime.ReviewService
                 .ReviewSelectedTenantsAsync(

@@ -12,7 +12,19 @@ public sealed class SmartSubscriptionEntitlementEvaluator
 {
     private const int MaxReportedStatusLength = 40;
 
-    public string MonitoringItemNumber { get; }
+    /// <summary>
+    /// First configured item number; kept for single-item callers.
+    /// </summary>
+    public string MonitoringItemNumber =>
+        MonitoringItemNumbers[0];
+
+    /// <summary>
+    /// Every item number that confers monitoring entitlement,
+    /// normalized for comparison.
+    /// </summary>
+    public IReadOnlyList<string> MonitoringItemNumbers { get; }
+
+    private readonly HashSet<string> _itemNumberSet;
 
     /// <summary>
     /// Provisional line-type value that confirms an item line.
@@ -31,24 +43,59 @@ public sealed class SmartSubscriptionEntitlementEvaluator
         string monitoringItemNumber,
         string itemLineType = "Item",
         SmartSubscriptionStatusVocabulary? vocabulary = null)
+        : this(
+            RequireSingle(monitoringItemNumber),
+            itemLineType,
+            vocabulary)
+    {
+    }
+
+    public SmartSubscriptionEntitlementEvaluator(
+        IReadOnlyCollection<string> monitoringItemNumbers,
+        string itemLineType = "Item",
+        SmartSubscriptionStatusVocabulary? vocabulary = null)
     {
         Vocabulary =
             vocabulary
             ?? SmartSubscriptionStatusVocabulary.English;
 
-        ArgumentException.ThrowIfNullOrWhiteSpace(
-            monitoringItemNumber
-        );
+        ArgumentNullException.ThrowIfNull(monitoringItemNumbers);
 
         ArgumentException.ThrowIfNullOrWhiteSpace(
             itemLineType
         );
 
-        MonitoringItemNumber =
-            monitoringItemNumber.Trim();
+        _itemNumberSet =
+            SubscriptionItemNumbers.ToSet(monitoringItemNumbers);
+
+        if (_itemNumberSet.Count == 0
+            || monitoringItemNumbers.Any(
+                number => string.IsNullOrWhiteSpace(number)))
+        {
+            throw new ArgumentException(
+                "At least one non-blank monitoring item number is required, " +
+                "and none may be blank.",
+                nameof(monitoringItemNumbers));
+        }
+
+        MonitoringItemNumbers =
+            monitoringItemNumbers
+                .Select(SubscriptionItemNumbers.Normalize)
+                .Distinct(SubscriptionItemNumbers.Comparer)
+                .ToArray();
 
         ItemLineType =
             itemLineType.Trim();
+    }
+
+    private static string[] RequireSingle(
+        string monitoringItemNumber)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(
+            monitoringItemNumber
+        );
+
+        return [monitoringItemNumber];
     }
 
     public IReadOnlyList<MonitoringEntitlementObservation> Evaluate(
@@ -81,10 +128,8 @@ public sealed class SmartSubscriptionEntitlementEvaluator
             lines
                 .Where(
                     line =>
-                        string.Equals(
-                            line.ItemNumber?.Trim(),
-                            MonitoringItemNumber,
-                            StringComparison.OrdinalIgnoreCase
+                        _itemNumberSet.Contains(
+                            line.ItemNumber ?? string.Empty
                         )
                 )
                 .GroupBy(
@@ -223,20 +268,25 @@ public sealed class SmartSubscriptionEntitlementEvaluator
                  * Any other value, including values whose meaning is
                  * unverified, is reported as it was received.
                  */
-                var reason =
+                var suspended =
                     string.Equals(
                         status,
                         Vocabulary.Suspended,
-                        StringComparison.OrdinalIgnoreCase)
+                        StringComparison.OrdinalIgnoreCase);
+
+                var reason =
+                    suspended
                         ? "Subscription is suspended; monitoring responsibility is unverified."
                         : $"Subscription status {DescribeUnknownStatus(status)} " +
                           "is not recognized or confirmed active.";
 
                 observations.Add(
-                    Review(
+                    new MonitoringEntitlementObservation(
                         subscriptionNumber,
                         header.CustomerNumber,
-                        reason
+                        MonitoringEntitlementAssessment.NeedsReview,
+                        reason,
+                        suspended
                     )
                 );
 

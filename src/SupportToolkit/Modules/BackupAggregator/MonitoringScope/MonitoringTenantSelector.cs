@@ -39,6 +39,18 @@ public sealed record MonitoringTenantSelectionResult(
     IReadOnlyList<MonitoringTenantSelectionFinding> Tenants,
     IReadOnlyList<MonitoringEntitlementObservation> UnmatchedEvidence)
 {
+    /// <summary>
+    /// Customer tenants deliberately left out of the selection, such as
+    /// the operator's own tenant.
+    /// </summary>
+    public int ExcludedTenantCount { get; init; }
+
+    /// <summary>
+    /// Configuration problems that make the selection untrustworthy.
+    /// Any notice keeps the scope from being reported as complete.
+    /// </summary>
+    public IReadOnlyList<string> Notices { get; init; } = [];
+
     public IReadOnlyList<TenantDto> InventoryCandidates =>
         Tenants
             .Where(
@@ -81,14 +93,66 @@ public sealed class MonitoringTenantSelector
     public MonitoringTenantSelectionResult Select(
         IReadOnlyList<TenantDto> acronisTenants,
         IReadOnlyList<MonitoringEntitlementObservation> observations,
-        IReadOnlyList<ResolvedMonitoringCustomerIdentity> identities)
+        IReadOnlyList<ResolvedMonitoringCustomerIdentity> identities,
+        IReadOnlySet<string>? excludedTenantIds = null)
     {
         ArgumentNullException.ThrowIfNull(acronisTenants);
         ArgumentNullException.ThrowIfNull(observations);
         ArgumentNullException.ThrowIfNull(identities);
 
+        // Excluded tenants are not customers: they are neither
+        // candidates nor unclassified.
+        var excluded =
+            (excludedTenantIds ?? new HashSet<string>())
+                .Select(id => id.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var notices =
+            new List<string>();
+
+        var detection =
+            OperatorTenantDetector.Detect(acronisTenants);
+
+        var ownId =
+            detection.TenantId;
+
+        var ownTenantReviewed = false;
+
+        if (detection.Notice is not null)
+        {
+            notices.Add(detection.Notice);
+        }
+
+        if (!string.IsNullOrEmpty(ownId))
+        {
+            var hasBusinessCentralLink =
+                identities.Any(
+                    identity => string.Equals(
+                        identity.AcronisTenantId?.Trim(),
+                        ownId,
+                        StringComparison.OrdinalIgnoreCase));
+
+            if (hasBusinessCentralLink)
+            {
+                // Our own company should have no Business Central
+                // customer; a link means the detection is probably
+                // wrong. The tenant is kept and reviewed, never hidden.
+                ownTenantReviewed = true;
+
+                notices.Add(
+                    "The tenant matching the partner name has a " +
+                    "Business Central identity and was not excluded.");
+            }
+            else
+            {
+                excluded.Add(ownId);
+            }
+        }
+
         var customers =
             acronisTenants
+                .Where(
+                    tenant => !excluded.Contains(tenant.Id?.Trim() ?? string.Empty))
                 .Where(
                     tenant =>
                         string.Equals(
@@ -128,6 +192,23 @@ public sealed class MonitoringTenantSelector
 
         foreach (var tenant in customers)
         {
+            if (ownTenantReviewed
+                && string.Equals(
+                    tenant.Id?.Trim(),
+                    ownId,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                findings.Add(
+                    Review(
+                        tenant,
+                        "Tenant matching the partner name has a Business " +
+                        "Central identity; not treated as the operator's own."
+                    )
+                );
+
+                continue;
+            }
+
             if (!Guid.TryParse(tenant.Id, out _))
             {
                 findings.Add(
@@ -227,10 +308,22 @@ public sealed class MonitoringTenantSelector
                 continue;
             }
 
+            /*
+             * Entitlement is per customer: a clean Active subscription
+             * decides, and a cleanly Suspended sibling does not override
+             * it. Any other review reason still blocks the decision.
+             */
+            var hasActive =
+                customerEvidence.Any(
+                    observation =>
+                        observation.Assessment
+                        == MonitoringEntitlementAssessment.ActiveCandidate);
+
             if (customerEvidence.Any(
                     observation =>
                         observation.Assessment
-                        == MonitoringEntitlementAssessment.NeedsReview))
+                        == MonitoringEntitlementAssessment.NeedsReview
+                        && !(hasActive && observation.IsSuspended)))
             {
                 findings.Add(
                     Review(
@@ -242,10 +335,7 @@ public sealed class MonitoringTenantSelector
                 continue;
             }
 
-            if (customerEvidence.All(
-                    observation =>
-                        observation.Assessment
-                        == MonitoringEntitlementAssessment.ActiveCandidate))
+            if (hasActive)
             {
                 findings.Add(
                     new MonitoringTenantSelectionFinding(
@@ -319,10 +409,23 @@ public sealed class MonitoringTenantSelector
                 )
                 .ToArray();
 
+        var excludedCount =
+            acronisTenants.Count(
+                tenant =>
+                    string.Equals(
+                        tenant.Kind,
+                        "customer",
+                        StringComparison.OrdinalIgnoreCase)
+                    && excluded.Contains(tenant.Id?.Trim() ?? string.Empty));
+
         return new MonitoringTenantSelectionResult(
             findings.AsReadOnly(),
             unmatchedEvidence
-        );
+        )
+        {
+            ExcludedTenantCount = excludedCount,
+            Notices = notices.AsReadOnly()
+        };
     }
 
     private static MonitoringTenantSelectionFinding Review(

@@ -29,7 +29,8 @@ public sealed record ScopedBackupInventoryReviewResult(
         && Selection.InventoryCandidates.Count > 0
         && Selection.NeedsReviewCount == 0
         && Selection.UnclassifiedCount == 0
-        && Selection.UnmatchedEvidence.Count == 0;
+        && Selection.UnmatchedEvidence.Count == 0
+        && Selection.Notices.Count == 0;
 
     public bool IsOverallComplete =>
         IsInventoryComplete

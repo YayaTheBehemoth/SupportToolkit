@@ -35,6 +35,8 @@ public sealed class ConsoleScopedReviewReporter
         output.WriteLine(
             "Unmatched subscriptions: " +
             selection.UnmatchedEvidence.Count);
+        output.WriteLine(
+            $"Excluded tenants: {selection.ExcludedTenantCount}");
 
         var unresolved =
             selection.Tenants
@@ -46,11 +48,17 @@ public sealed class ConsoleScopedReviewReporter
                 .ToList();
 
         if (unresolved.Count > 0
-            || selection.UnmatchedEvidence.Count > 0)
+            || selection.UnmatchedEvidence.Count > 0
+            || selection.Notices.Count > 0)
         {
             output.WriteLine();
             output.WriteLine("UNRESOLVED SCOPE");
             output.WriteLine("----------------");
+
+            foreach (var notice in selection.Notices)
+            {
+                output.WriteLine($"  Notice: {notice}");
+            }
 
             foreach (var finding in unresolved)
             {

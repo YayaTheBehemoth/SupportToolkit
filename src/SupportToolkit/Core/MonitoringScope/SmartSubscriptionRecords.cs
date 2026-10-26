@@ -86,5 +86,6 @@ public sealed record MonitoringEntitlementObservation(
     string SubscriptionNumber,
     string? CustomerNumber,
     MonitoringEntitlementAssessment Assessment,
-    string Reason
+    string Reason,
+    bool IsSuspended = false
 );

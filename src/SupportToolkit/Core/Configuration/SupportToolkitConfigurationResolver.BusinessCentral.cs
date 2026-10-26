@@ -1,3 +1,5 @@
+using SupportToolkit.Core.MonitoringScope;
+
 namespace SupportToolkit.Core.Configuration;
 
 public sealed partial class SupportToolkitConfigurationResolver
@@ -110,6 +112,82 @@ public sealed partial class SupportToolkitConfigurationResolver
     /// Resolves the monitoring item number a module uses to find its
     /// service in subscription lines.
     /// </summary>
+    public async Task<IReadOnlyList<string>> GetMonitoringItemNumbersAsync(
+        string moduleCommand,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(moduleCommand);
+
+        var settings =
+            await GetMonitoringScopeSettingsAsync(
+                moduleCommand,
+                cancellationToken);
+
+        var listed =
+            (settings?.MonitoringItemNumbers ?? [])
+                .Where(number => !string.IsNullOrWhiteSpace(number))
+                .ToArray();
+
+        if (listed.Length > 0)
+        {
+            return listed;
+        }
+
+        // Still fails closed when nothing is configured; the provisional
+        // default is only offered by the configure command.
+        var active =
+            GetRequiredActiveProfile(
+                await _configurationStore.LoadAsync(cancellationToken));
+
+        return
+        [
+            RequireConfiguredValue(
+                settings?.MonitoringItemNumber ?? string.Empty,
+                $"Monitoring item number for '{moduleCommand}' in " +
+                $"profile '{active.Name}'")
+        ];
+    }
+
+    public async Task<IReadOnlySet<string>> GetExcludedTenantIdsAsync(
+        string moduleCommand,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(moduleCommand);
+
+        var settings =
+            await GetMonitoringScopeSettingsAsync(
+                moduleCommand,
+                cancellationToken);
+
+        return (settings?.ExcludedTenantIds ?? [])
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private async Task<ModuleMonitoringScopeConfiguration?>
+        GetMonitoringScopeSettingsAsync(
+            string moduleCommand,
+            CancellationToken cancellationToken)
+    {
+        var configuration =
+            await _configurationStore.LoadAsync(
+                cancellationToken
+            );
+
+        return GetRequiredActiveProfile(configuration)
+            .Profile.MonitoringScope
+            .FirstOrDefault(
+                pair =>
+                    string.Equals(
+                        pair.Key,
+                        moduleCommand,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+            )
+            .Value;
+    }
+
     public async Task<string> GetMonitoringItemNumberAsync(
         string moduleCommand,
         CancellationToken cancellationToken = default)

@@ -107,7 +107,21 @@ public sealed class ModuleMonitoringScopeConfiguration
     /// </summary>
     public string MonitoringItemNumber { get; set; } =
         string.Empty;
-}
+
+    /// <summary>
+    /// Item numbers that confer monitoring entitlement. When empty,
+    /// the single MonitoringItemNumber applies. Neither being set is a
+    /// configuration error; there is no implicit default.
+    /// </summary>
+    public List<string> MonitoringItemNumbers { get; set; } =
+        [];
+
+    /// <summary>
+    /// Acronis tenant IDs that are never reconciled, such as the
+    /// operator's own tenant.
+    /// </summary>
+    public List<string> ExcludedTenantIds { get; set; } =
+        [];}
 
 /// <summary>
 /// Non-secret Business Central connection metadata.

@@ -103,29 +103,46 @@ try
             "acronis-tenants",
             StringComparison.OrdinalIgnoreCase))
     {
+        var options =
+            args.Skip(2).ToArray();
+
         var validArguments =
-            (args.Length == 3 || args.Length == 4)
-            && string.Equals(
-                args[2],
+            options.Length >= 1
+            && options.Length <= 3
+            && options.Contains(
                 "--production",
-                StringComparison.OrdinalIgnoreCase)
-            && (args.Length == 3
-                || string.Equals(
-                    args[3],
-                    "--names",
-                    StringComparison.OrdinalIgnoreCase));
+                StringComparer.OrdinalIgnoreCase)
+            && options.All(
+                option =>
+                    option.Equals(
+                        "--production",
+                        StringComparison.OrdinalIgnoreCase)
+                    || option.Equals(
+                        "--names",
+                        StringComparison.OrdinalIgnoreCase)
+                    || option.Equals(
+                        "--structure",
+                        StringComparison.OrdinalIgnoreCase))
+            && options.Distinct(
+                StringComparer.OrdinalIgnoreCase).Count()
+                == options.Length;
 
         if (!validArguments)
         {
             Console.Error.WriteLine(
                 "Usage: SupportToolkit dev acronis-tenants " +
-                "--production [--names]");
+                "--production [--names] [--structure]");
             return 1;
         }
 
         return await tenantDirectoryCommand.RunAsync(
             Console.Out,
-            showNames: args.Length == 4);
+            showNames: options.Contains(
+                "--names",
+                StringComparer.OrdinalIgnoreCase),
+            showStructure: options.Contains(
+                "--structure",
+                StringComparer.OrdinalIgnoreCase));
     }
 
     /*
