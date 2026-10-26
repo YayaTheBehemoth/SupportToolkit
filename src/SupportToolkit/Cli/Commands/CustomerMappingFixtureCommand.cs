@@ -109,6 +109,46 @@ public sealed class CustomerMappingFixtureCommand
         }
 
         /*
+         * Loose-name preview. Runs against a throwaway copy of the
+         * suggestions so the main flow and its counts are unchanged.
+         */
+        var previewRepository =
+            new InMemoryCustomerMappingRepository();
+
+        foreach (var added in suggestions.Added)
+        {
+            await previewRepository.AddAsync(
+                added,
+                cancellationToken
+            );
+        }
+
+        var loose =
+            await new CustomerMappingCandidateRanker(previewRepository)
+                .RankAsync(
+                    parties.Acronis,
+                    parties.BusinessCentral,
+                    cancellationToken
+                );
+
+        output.WriteLine();
+        output.WriteLine("LOOSE NAME PREVIEW (NOT STORED)");
+        output.WriteLine("-------------------------------");
+
+        foreach (var candidate in loose.Candidates)
+        {
+            output.WriteLine(
+                $"  {candidate.AcronisTenantId} -> " +
+                $"{candidate.BcCustomerNo} | {candidate.Tier}"
+            );
+        }
+
+        output.WriteLine(
+            $"  Would suggest: {loose.Added.Count}, " +
+            $"for manual review: {loose.Exceptions.Count}"
+        );
+
+        /*
          * Simulated reviewer decisions:
          * Acronis tenants carry name only, so every suggestion is a
          * name match. The reviewer rejects one, confirms the rest and

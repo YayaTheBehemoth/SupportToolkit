@@ -9,7 +9,13 @@ public enum CustomerMatchExceptionKind
     /// <summary>
     /// Different keys link a party to different partners.
     /// </summary>
-    KeyConflict
+    KeyConflict,
+
+    /// <summary>
+    /// A unique but weak loose-name candidate that is not suggested
+    /// automatically.
+    /// </summary>
+    WeakNameCandidate
 }
 
 /// <summary>

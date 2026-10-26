@@ -25,7 +25,13 @@ public enum CustomerMatchMethod
     Cvr,
     EmailDomain,
     Name,
-    Manual
+    Manual,
+
+    /// <summary>
+    /// Loose name similarity, weaker than an exact normalized name.
+    /// Appended so existing values keep their numbers.
+    /// </summary>
+    LooseName
 }
 
 /// <summary>

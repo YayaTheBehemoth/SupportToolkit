@@ -108,7 +108,7 @@ try
 
         var validArguments =
             options.Length >= 1
-            && options.Length <= 3
+            && options.Length <= 5
             && options.Contains(
                 "--production",
                 StringComparer.OrdinalIgnoreCase)
@@ -122,6 +122,12 @@ try
                         StringComparison.OrdinalIgnoreCase)
                     || option.Equals(
                         "--structure",
+                        StringComparison.OrdinalIgnoreCase)
+                    || option.Equals(
+                        "--fields",
+                        StringComparison.OrdinalIgnoreCase)
+                    || option.Equals(
+                        "--full",
                         StringComparison.OrdinalIgnoreCase))
             && options.Distinct(
                 StringComparer.OrdinalIgnoreCase).Count()
@@ -131,7 +137,7 @@ try
         {
             Console.Error.WriteLine(
                 "Usage: SupportToolkit dev acronis-tenants " +
-                "--production [--names] [--structure]");
+                "--production [--names] [--structure] [--fields] [--full]");
             return 1;
         }
 
@@ -142,6 +148,12 @@ try
                 StringComparer.OrdinalIgnoreCase),
             showStructure: options.Contains(
                 "--structure",
+                StringComparer.OrdinalIgnoreCase),
+            showFields: options.Contains(
+                "--fields",
+                StringComparer.OrdinalIgnoreCase),
+            fullDetail: options.Contains(
+                "--full",
                 StringComparer.OrdinalIgnoreCase));
     }
 

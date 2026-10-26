@@ -2,6 +2,7 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using SupportToolkit.Core.Configuration;
+using SupportToolkit.Core.CustomerMapping.Matching;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Providers.Acronis.Tenants;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
@@ -41,6 +42,8 @@ public sealed class AcronisTenantDirectoryDevCommand
         TextWriter output,
         bool showNames,
         bool showStructure = false,
+        bool showFields = false,
+        bool fullDetail = false,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -101,13 +104,15 @@ public sealed class AcronisTenantDirectoryDevCommand
          */
         var tenants =
             await provider.GetTenantsAsync(
+                fullDetail ? "full" : "basic",
                 cancellationToken);
 
         return WriteReport(
             output,
             tenants,
             showNames,
-            showStructure);
+            showStructure,
+            showFields);
     }
 
     /// <summary>
@@ -120,7 +125,8 @@ public sealed class AcronisTenantDirectoryDevCommand
         TextWriter output,
         IReadOnlyList<TenantDto> tenants,
         bool showNames,
-        bool showStructure = false)
+        bool showStructure = false,
+        bool showFields = false)
     {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(tenants);
@@ -296,6 +302,11 @@ public sealed class AcronisTenantDirectoryDevCommand
             WriteStructure(output, validRows, showNames);
         }
 
+        if (showFields)
+        {
+            WriteFieldProfile(output, customers);
+        }
+
         output.WriteLine();
         output.WriteLine(
             "Scope: configured Acronis API client's tenant subtree.");
@@ -376,6 +387,361 @@ public sealed class AcronisTenantDirectoryDevCommand
                 $"enabled={(tenant.Enabled?.ToString() ?? "?"),-5} " +
                 $"{name}");
         }
+    }
+
+    /// <summary>
+    /// Count-only profile of which fields customer tenants actually
+    /// carry, to see whether a match key beyond the name exists.
+    /// No field value is printed: only counts, field names and JSON
+    /// value kinds. Reflects the data already fetched (lod=basic), so
+    /// empty contacts here do not prove the API has none.
+    /// </summary>
+    private static void WriteFieldProfile(
+        TextWriter output,
+        IReadOnlyList<TenantDto> customers)
+    {
+        output.WriteLine();
+        output.WriteLine("Field profile (customer tenants, counts only)");
+        output.WriteLine("---------------------------------------------");
+        output.WriteLine($"Customer tenants profiled: {customers.Count}");
+
+        output.WriteLine(
+            "customer_id present:  " +
+            customers.Count(
+                tenant => !string.IsNullOrWhiteSpace(tenant.CustomerId)));
+
+        output.WriteLine(
+            "contacts non-empty:   " +
+            customers.Count(tenant => tenant.Contacts.Count > 0));
+
+        output.WriteLine(
+            "offering_items non-empty: " +
+            customers.Count(tenant => tenant.OfferingItems.Count > 0));
+
+        output.WriteLine();
+        output.WriteLine("Unrecognized top-level fields (name: tenants, kinds)");
+
+        var extra =
+            customers
+                .SelectMany(
+                    tenant => tenant.AdditionalProperties
+                        .Select(pair => (pair.Key, pair.Value.ValueKind)))
+                .GroupBy(item => item.Key, StringComparer.Ordinal)
+                .OrderBy(group => group.Key, StringComparer.Ordinal)
+                .ToList();
+
+        if (extra.Count == 0)
+        {
+            output.WriteLine("  (none)");
+        }
+
+        foreach (var group in extra)
+        {
+            output.WriteLine(
+                $"  {SafeName(group.Key)}: {group.Count()} " +
+                string.Join(
+                    "/",
+                    group.Select(item => item.ValueKind)
+                        .Distinct()
+                        .OrderBy(kind => kind.ToString())));
+        }
+
+        var contacts =
+            customers
+                .SelectMany(
+                    tenant => tenant.Contacts
+                        .Where(
+                            contact =>
+                                contact.ValueKind == JsonValueKind.Object)
+                        .Select(contact => (tenant, contact)))
+                .ToList();
+
+        output.WriteLine();
+        output.WriteLine($"Contact objects: {contacts.Count}");
+
+        foreach (var group in contacts
+            .SelectMany(
+                item => item.contact.EnumerateObject()
+                    .Select(property => (property.Name, property.Value.ValueKind)))
+            .GroupBy(item => item.Name, StringComparer.Ordinal)
+            .OrderBy(group => group.Key, StringComparer.Ordinal))
+        {
+            output.WriteLine(
+                $"  contact.{SafeName(group.Key)}: {group.Count()} " +
+                string.Join(
+                    "/",
+                    group.Select(item => item.ValueKind)
+                        .Distinct()
+                        .OrderBy(kind => kind.ToString())));
+        }
+
+        var emails =
+            contacts
+                .SelectMany(
+                    item => item.contact.EnumerateObject()
+                        .Where(
+                            property =>
+                                property.Value.ValueKind
+                                    == JsonValueKind.String
+                                && (property.Value.GetString() ?? "")
+                                    .Contains('@'))
+                        .Select(
+                            property => (
+                                item.tenant.Id,
+                                Domain: DomainOf(
+                                    property.Value.GetString()!))))
+                .Where(item => item.Domain.Length > 0)
+                .ToList();
+
+        var perTenantDomains =
+            emails
+                .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+                .Select(
+                    group => group
+                        .Select(item => item.Domain)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray())
+                .ToList();
+
+        var domainTenantCounts =
+            emails
+                .GroupBy(
+                    item => item.Domain,
+                    StringComparer.OrdinalIgnoreCase)
+                .Select(
+                    group => (
+                        Domain: group.Key,
+                        Tenants: group
+                            .Select(item => item.Id)
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .Count()))
+                .ToList();
+
+        output.WriteLine();
+        output.WriteLine(
+            $"Tenants with an e-mail-like value: {perTenantDomains.Count}");
+        output.WriteLine(
+            $"Distinct e-mail domains:           {domainTenantCounts.Count}");
+        output.WriteLine(
+            "Domains shared by >1 tenant:       " +
+            domainTenantCounts.Count(item => item.Tenants > 1));
+        output.WriteLine(
+            "Free-mail domains in use:          " +
+            domainTenantCounts.Count(
+                item => PartyKeyNormalizer.PublicMailDomains
+                    .Contains(item.Domain.ToLowerInvariant())));
+
+        WriteContactObjectProfile(output, customers);
+
+        output.WriteLine();
+        output.WriteLine(
+            "Name-only keys: duplicate names after trimming and case " +
+            "folding: " +
+            customers
+                .Where(tenant => !string.IsNullOrWhiteSpace(tenant.Name))
+                .GroupBy(
+                    tenant => tenant.Name.Trim(),
+                    StringComparer.OrdinalIgnoreCase)
+                .Sum(group => Math.Max(0, group.Count() - 1)));
+    }
+
+    /// <summary>
+    /// The tenants carry a singular "contact" object that the DTO does
+    /// not model. Reports which keys are filled, never their values.
+    /// </summary>
+    private static void WriteContactObjectProfile(
+        TextWriter output,
+        IReadOnlyList<TenantDto> customers)
+    {
+        var objects =
+            customers
+                .Select(
+                    tenant => (
+                        tenant.Id,
+                        Present: tenant.AdditionalProperties
+                            .TryGetValue("contact", out var element),
+                        Element: element))
+                .Where(
+                    item => item.Present
+                        && item.Element.ValueKind == JsonValueKind.Object)
+                .ToList();
+
+        output.WriteLine();
+        output.WriteLine($"'contact' objects: {objects.Count}");
+
+        var properties =
+            objects
+                .SelectMany(
+                    item => item.Element.EnumerateObject()
+                        .Select(
+                            property => (
+                                item.Id,
+                                property.Name,
+                                property.Value)))
+                .ToList();
+
+        foreach (var group in properties
+            .GroupBy(item => item.Name, StringComparer.Ordinal)
+            .OrderBy(group => group.Key, StringComparer.Ordinal))
+        {
+            var filled =
+                group.Count(
+                    item => item.Value.ValueKind switch
+                    {
+                        JsonValueKind.String =>
+                            !string.IsNullOrWhiteSpace(
+                                item.Value.GetString()),
+                        JsonValueKind.Null or JsonValueKind.Undefined =>
+                            false,
+                        _ => true
+                    });
+
+            var distinct =
+                group
+                    .Where(
+                        item => item.Value.ValueKind
+                            == JsonValueKind.String
+                            && !string.IsNullOrWhiteSpace(
+                                item.Value.GetString()))
+                    .Select(
+                        item => item.Value.GetString()!.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count();
+
+            output.WriteLine(
+                $"  contact.{SafeName(group.Key)}: present " +
+                $"{group.Count()}, filled {filled}, distinct {distinct}, " +
+                string.Join(
+                    "/",
+                    group.Select(item => item.Value.ValueKind)
+                        .Distinct()
+                        .OrderBy(kind => kind.ToString())));
+        }
+
+        var emailDomains =
+            properties
+                .Where(
+                    item => item.Value.ValueKind == JsonValueKind.String
+                        && (item.Value.GetString() ?? "").Contains('@'))
+                .Select(
+                    item => (
+                        item.Id,
+                        Domain: DomainOf(item.Value.GetString()!)))
+                .Where(item => item.Domain.Length > 0)
+                .ToList();
+
+        var domains =
+            emailDomains
+                .GroupBy(
+                    item => item.Domain,
+                    StringComparer.OrdinalIgnoreCase)
+                .Select(
+                    group => (
+                        Domain: group.Key,
+                        Tenants: group
+                            .Select(item => item.Id)
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .Count()))
+                .ToList();
+
+        output.WriteLine(
+            "  tenants with an e-mail-like value: " +
+            emailDomains
+                .Select(item => item.Id)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count());
+        output.WriteLine(
+            $"  distinct e-mail domains: {domains.Count}");
+        output.WriteLine(
+            "  domains shared by >1 tenant: " +
+            domains.Count(item => item.Tenants > 1));
+        output.WriteLine(
+            "  free-mail domains in use: " +
+            domains.Count(
+                item => PartyKeyNormalizer.PublicMailDomains
+                    .Contains(item.Domain.ToLowerInvariant())));
+
+        foreach (var key in new[] { "aan", "phone" })
+        {
+            WriteValueShape(
+                output,
+                key,
+                properties
+                    .Where(item => item.Name == key)
+                    .Select(item => item.Value));
+        }
+    }
+
+    /// <summary>
+    /// Shape of a filled string field: lengths and character classes
+    /// only, so it can be compared with another system's identifiers
+    /// without printing any value.
+    /// </summary>
+    private static void WriteValueShape(
+        TextWriter output,
+        string key,
+        IEnumerable<JsonElement> values)
+    {
+        var filled =
+            values
+                .Where(value => value.ValueKind == JsonValueKind.String)
+                .Select(value => (value.GetString() ?? string.Empty).Trim())
+                .Where(text => text.Length > 0)
+                .ToList();
+
+        output.WriteLine();
+        output.WriteLine($"  shape of contact.{key} ({filled.Count} filled):");
+
+        if (filled.Count == 0)
+        {
+            return;
+        }
+
+        output.WriteLine(
+            "    digits only: " +
+            filled.Count(text => text.All(char.IsDigit)));
+        output.WriteLine(
+            "    exactly 8 digits: " +
+            filled.Count(
+                text => text.Length == 8 && text.All(char.IsDigit)));
+        output.WriteLine(
+            "    contains letters: " +
+            filled.Count(text => text.Any(char.IsLetter)));
+        output.WriteLine(
+            "    contains spaces or symbols: " +
+            filled.Count(
+                text => text.Any(
+                    character => !char.IsLetterOrDigit(character))));
+
+        output.WriteLine(
+            "    lengths: " +
+            string.Join(
+                ", ",
+                filled
+                    .GroupBy(text => text.Length)
+                    .OrderBy(group => group.Key)
+                    .Select(group => $"{group.Key}x{group.Count()}")));
+    }
+
+    private static string DomainOf(
+        string value)
+    {
+        var at = value.LastIndexOf('@');
+
+        return at < 0
+            ? string.Empty
+            : value[(at + 1)..].Trim().TrimEnd('>', ' ', '.');
+    }
+
+    // Field names come from the service, so keep them printable and short.
+    private static string SafeName(
+        string name)
+    {
+        var cleaned =
+            new string(
+                name.Where(c => !char.IsControl(c)).Take(40).ToArray());
+
+        return cleaned;
     }
 
     private static string Short(
