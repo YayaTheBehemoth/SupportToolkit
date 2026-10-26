@@ -11,6 +11,8 @@
       "example-sandbox": {
         "subdomain": "example",
         "clientId": "example-zendesk-client-id",
+        "submitterId": 900000000001,
+        "requesterId": 900000000001,
         "destinations": {
           "dev": { "groupId": 111111 },
           "operations": { "groupId": 222222 }

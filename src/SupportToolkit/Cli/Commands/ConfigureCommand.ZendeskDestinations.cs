@@ -268,36 +268,46 @@ public sealed partial class ConfigureCommand
     private static long ReadZendeskGroupId(
         long existingGroupId)
     {
+        return ReadPositiveZendeskId(
+            "Zendesk group ID",
+            existingGroupId
+        );
+    }
+
+    private static long ReadPositiveZendeskId(
+        string label,
+        long existingValue)
+    {
         while (true)
         {
             Console.Write(
-                existingGroupId > 0
-                    ? $"Zendesk group ID [{existingGroupId}]: "
-                    : "Zendesk group ID: "
+                existingValue > 0
+                    ? $"{label} [{existingValue}]: "
+                    : $"{label}: "
             );
 
             var input =
                 Console.ReadLine();
 
             if (string.IsNullOrWhiteSpace(input)
-                && existingGroupId > 0)
+                && existingValue > 0)
             {
-                return existingGroupId;
+                return existingValue;
             }
 
             if (long.TryParse(
                     input?.Trim(),
                     NumberStyles.None,
                     CultureInfo.InvariantCulture,
-                    out var groupId
+                    out var value
                 )
-                && groupId > 0)
+                && value > 0)
             {
-                return groupId;
+                return value;
             }
 
             Console.WriteLine(
-                "Enter a positive numeric Zendesk group ID."
+                $"Enter a positive numeric {label}."
             );
         }
     }

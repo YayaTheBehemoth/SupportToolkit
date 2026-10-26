@@ -1,4 +1,5 @@
 
+using System.Globalization;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Providers.Acronis.Transport;
@@ -279,6 +280,12 @@ public sealed partial class ConfigureCommand
                 $"  Group ID: {resolved.GroupId}");
 
             Console.WriteLine(
+                $"  Submitter user ID: {resolved.SubmitterId}");
+
+            Console.WriteLine(
+                $"  Requester user ID: {resolved.RequesterId}");
+
+            Console.WriteLine(
                 "  Configuration: valid locally");
         }
         catch (InvalidOperationException exception)
@@ -496,6 +503,12 @@ public sealed partial class ConfigureCommand
                 Console.WriteLine(
                     $"    Client secret: {DisplaySecretStatus(secretConfigured)}");
 
+                Console.WriteLine(
+                    $"    Submitter ID:  {DisplayZendeskUserId(connection.SubmitterId)}");
+
+                Console.WriteLine(
+                    $"    Requester ID:  {DisplayZendeskUserId(connection.RequesterId)}");
+
                 if (connection.Destinations.Count == 0)
                 {
                     Console.WriteLine(
@@ -519,5 +532,16 @@ public sealed partial class ConfigureCommand
         }
 
         Console.WriteLine();
+    }
+
+    private static string DisplayZendeskUserId(
+        long? userId)
+    {
+        return userId switch
+        {
+            null => "not configured (required for ticket submission)",
+            <= 0 => $"{userId} (invalid; must be positive)",
+            _ => userId.Value.ToString(CultureInfo.InvariantCulture)
+        };
     }
 }

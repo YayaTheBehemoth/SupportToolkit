@@ -123,6 +123,14 @@ public sealed partial class ConfigureCommand
                 $"Client ID: {DisplayValue(connection.ClientId)}"
             );
 
+            Console.WriteLine(
+                $"Submitter user ID: {DisplayZendeskUserId(connection.SubmitterId)}"
+            );
+
+            Console.WriteLine(
+                $"Requester user ID: {DisplayZendeskUserId(connection.RequesterId)}"
+            );
+
             Console.WriteLine();
 
             if (ReadConfirmation(
@@ -131,6 +139,22 @@ public sealed partial class ConfigureCommand
                 ))
             {
                 ConfigureZendeskMetadata(
+                    connection
+                );
+            }
+            else if (!HasValidZendeskTicketIdentity(
+                connection))
+            {
+                /*
+                 * Connections saved before these settings existed
+                 * cannot submit tickets until both IDs are set.
+                 */
+                Console.WriteLine(
+                    "This connection has no valid submitter and " +
+                    "requester user IDs, which ticket submission requires."
+                );
+
+                ConfigureZendeskTicketIdentity(
                     connection
                 );
             }

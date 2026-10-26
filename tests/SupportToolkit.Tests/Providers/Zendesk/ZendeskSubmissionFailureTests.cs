@@ -129,7 +129,8 @@ public class ZendeskSubmissionFailureTests
 
         return new ZendeskTicketProvider(
             apiClient,
-            groupId: 12345);
+            groupId: 12345,
+            ZendeskTestHttpSupport.Identity());
     }
 
     private static TicketDraft Draft()

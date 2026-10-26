@@ -161,6 +161,97 @@ public class SupportToolkitConfigurationResolverTests
         Assert.Equal("fixture-secret", resolved.ClientSecret);
         Assert.Equal("dev", resolved.DestinationName);
         Assert.Equal(111111L, resolved.GroupId);
+        Assert.Equal(900000000001L, resolved.SubmitterId);
+        Assert.Equal(900000000002L, resolved.RequesterId);
+    }
+
+    [Theory]
+    [InlineData(true, "submitter", "submitterId")]
+    [InlineData(false, "requester", "requesterId")]
+    public async Task GetZendeskConnectionAsync_MissingTicketUserId_FailsClosed(
+        bool clearSubmitter,
+        string role,
+        string settingName)
+    {
+        var configuration = CreateZendeskConfiguration();
+
+        var connection =
+            configuration.Connections.Zendesk["sandbox"];
+
+        if (clearSubmitter)
+        {
+            connection.SubmitterId = null;
+        }
+        else
+        {
+            connection.RequesterId = null;
+        }
+
+        var resolver = CreateResolver(
+            configuration,
+            ZendeskSecrets()
+        );
+
+        var exception = await Assert.ThrowsAsync<
+            InvalidOperationException>(
+            () => resolver.GetZendeskConnectionAsync()
+        );
+
+        Assert.Contains($"no {role} user ID", exception.Message);
+
+        Assert.Contains(
+            $"connections.zendesk.sandbox.{settingName}",
+            exception.Message
+        );
+    }
+
+    [Theory]
+    [InlineData(0L, 900000000002L, "submitter")]
+    [InlineData(-1L, 900000000002L, "submitter")]
+    [InlineData(900000000001L, 0L, "requester")]
+    [InlineData(900000000001L, -1L, "requester")]
+    public async Task GetZendeskConnectionAsync_NonPositiveTicketUserId_FailsClosed(
+        long submitterId,
+        long requesterId,
+        string role)
+    {
+        var configuration = CreateZendeskConfiguration();
+
+        configuration.Connections.Zendesk["sandbox"].SubmitterId =
+            submitterId;
+
+        configuration.Connections.Zendesk["sandbox"].RequesterId =
+            requesterId;
+
+        var resolver = CreateResolver(
+            configuration,
+            ZendeskSecrets()
+        );
+
+        var exception = await Assert.ThrowsAsync<
+            InvalidOperationException>(
+            () => resolver.GetZendeskConnectionAsync()
+        );
+
+        Assert.Contains($"invalid {role} user ID", exception.Message);
+    }
+
+    [Fact]
+    public async Task GetZendeskConnectionAsync_SubmitterAndRequesterStaySeparate()
+    {
+        var configuration = CreateZendeskConfiguration();
+
+        configuration.Connections.Zendesk["sandbox"].RequesterId =
+            900000000003;
+
+        var resolved =
+            await CreateResolver(
+                configuration,
+                ZendeskSecrets()
+            ).GetZendeskConnectionAsync();
+
+        Assert.Equal(900000000001L, resolved.SubmitterId);
+        Assert.Equal(900000000003L, resolved.RequesterId);
     }
 
     [Fact]
@@ -406,6 +497,10 @@ public class SupportToolkitConfigurationResolverTests
             {
                 Subdomain = "fixture",
                 ClientId = "fixture-client",
+
+                // Fictional Zendesk user IDs.
+                SubmitterId = 900000000001,
+                RequesterId = 900000000002,
 
                 Destinations = new Dictionary<
                     string,

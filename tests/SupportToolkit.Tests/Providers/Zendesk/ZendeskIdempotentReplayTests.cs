@@ -84,7 +84,8 @@ public class ZendeskIdempotentReplayTests
         var provider =
             new ZendeskTicketProvider(
                 apiClient,
-                111111);
+                111111,
+                ZendeskTestHttpSupport.Identity());
 
         var ticket =
             await provider.CreateTicketAsync(

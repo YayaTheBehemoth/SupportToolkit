@@ -360,6 +360,76 @@ public class JsonSupportToolkitConfigurationStoreTests
         }
     }
 
+    [Fact]
+    public async Task LegacyZendeskConnection_LoadsWithoutTicketUserIds_AndRoundTrips()
+    {
+        var root =
+            Directory.CreateTempSubdirectory(
+                "supporttoolkit-config-test-"
+            );
+
+        try
+        {
+            var path =
+                Path.Combine(
+                    root.FullName,
+                    "local.config.json"
+                );
+
+            // A connection saved before submitter/requester existed.
+            await File.WriteAllTextAsync(
+                path,
+                """
+                {
+                  "connections": {
+                    "zendesk": {
+                      "sandbox": {
+                        "subdomain": "fixture",
+                        "clientId": "fixture-client",
+                        "destinations": { "dev": { "groupId": 111111 } }
+                      }
+                    }
+                  }
+                }
+                """
+            );
+
+            var store =
+                new JsonSupportToolkitConfigurationStore(path);
+
+            var configuration =
+                await store.LoadAsync();
+
+            var connection =
+                configuration.Connections.Zendesk["sandbox"];
+
+            Assert.Null(connection.SubmitterId);
+            Assert.Null(connection.RequesterId);
+
+            connection.SubmitterId = 900000000001;
+            connection.RequesterId = 900000000002;
+
+            await store.SaveAsync(configuration);
+
+            var saved =
+                await File.ReadAllTextAsync(path);
+
+            Assert.Contains("\"submitterId\": 900000000001", saved);
+            Assert.Contains("\"requesterId\": 900000000002", saved);
+
+            var reloaded =
+                (await store.LoadAsync())
+                    .Connections.Zendesk["sandbox"];
+
+            Assert.Equal(900000000001L, reloaded.SubmitterId);
+            Assert.Equal(900000000002L, reloaded.RequesterId);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
     private static void CreateSolutionMarker(
         string directory)
     {
