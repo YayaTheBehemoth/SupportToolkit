@@ -10,7 +10,9 @@ namespace SupportToolkit.Core.MonitoringScope;
 /// The exact Business Central API representation is not known.
 ///
 /// CustomerNumber is the sell-to customer, used as a provisional
-/// monitoring customer. This choice is not validated business logic.
+/// monitoring customer. This choice is not validated business logic;
+/// the header field that identifies the customer is still to be
+/// confirmed from the API page's $metadata.
 /// BillToCustomerNumber is preserved so a difference can be reviewed.
 ///
 /// BlockedValue is the raw "blocked" evidence. Null means the source
@@ -51,15 +53,17 @@ public sealed record SmartSubscriptionLine(
 ///
 /// The source status column is language dependent. English is the
 /// pinned request language; observed values were "Active",
-/// "Suspended" and "Open". The meaning of "Open" is unverified and is
-/// deliberately not mapped.
+/// "Suspended" and "Open". "Open" is recognized as a value so it can
+/// be reported, but its meaning is unverified and no policy treats it
+/// as active or inactive.
 /// </summary>
 public sealed record SmartSubscriptionStatusVocabulary(
     string Active,
-    string Suspended)
+    string Suspended,
+    string? Open = null)
 {
     public static SmartSubscriptionStatusVocabulary English { get; } =
-        new("Active", "Suspended");
+        new("Active", "Suspended", "Open");
 }
 
 /// <summary>

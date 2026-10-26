@@ -195,6 +195,39 @@ try
     }
 
     /*
+     * Fixture-only customer mapping and shadow reconciliation.
+     *
+     * No external providers are accessed and nothing is persisted.
+     */
+    if (args.Length >= 2
+        && string.Equals(
+            args[0],
+            "dev",
+            StringComparison.OrdinalIgnoreCase)
+        && string.Equals(
+            args[1],
+            "customer-mapping",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        if (args.Length != 2)
+        {
+            Console.Error.WriteLine(
+                "Usage: SupportToolkit dev customer-mapping"
+            );
+
+            return 1;
+        }
+
+        return await new CustomerMappingFixtureCommand()
+            .RunAsync(
+                Console.Out,
+                DateOnly.FromDateTime(
+                    DateTime.Today
+                )
+            );
+    }
+
+    /*
      * Fixture-only scoped BackupAggregator execution.
      *
      * Uses synthetic tenant selection and in-memory inventory
@@ -316,6 +349,7 @@ static void PrintUsage(
 
     Console.WriteLine("  dev monitoring-scope");
     Console.WriteLine("  dev scoped-backup-review");
+    Console.WriteLine("  dev customer-mapping");
     Console.WriteLine();
     Console.WriteLine("Modules:");
 
