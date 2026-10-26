@@ -36,10 +36,15 @@ public sealed class TicketingProductionSession
     public static TicketingProductionSession Create(
         ZendeskOptions options,
         long groupId,
+        ZendeskTicketIdentity identity,
         OperationalLogger logger)
     {
         ArgumentNullException.ThrowIfNull(
             options
+        );
+
+        ArgumentNullException.ThrowIfNull(
+            identity
         );
 
         ArgumentNullException.ThrowIfNull(
@@ -88,7 +93,8 @@ public sealed class TicketingProductionSession
         var ticketProvider =
             new ZendeskTicketProvider(
                 apiClient,
-                groupId
+                groupId,
+                identity
             );
 
         return new TicketingProductionSession(

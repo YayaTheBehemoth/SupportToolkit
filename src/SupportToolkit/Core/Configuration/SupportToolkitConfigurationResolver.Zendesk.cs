@@ -100,6 +100,28 @@ public sealed partial class SupportToolkitConfigurationResolver
             );
         }
 
+        /*
+         * Without explicit IDs Zendesk attributes tickets to the user
+         * the token acts as. Fail closed rather than fall back to it.
+         */
+        var submitterId =
+            RequireZendeskUserId(
+                connection.SubmitterId,
+                connectionName,
+                "submitter",
+                "submitterId",
+                active.Name
+            );
+
+        var requesterId =
+            RequireZendeskUserId(
+                connection.RequesterId,
+                connectionName,
+                "requester",
+                "requesterId",
+                active.Name
+            );
+
         var configuredSubdomain =
             RequireConfiguredValue(
                 connection.Subdomain,
@@ -174,7 +196,40 @@ public sealed partial class SupportToolkitConfigurationResolver
             clientId,
             clientSecret,
             destinationName,
-            destination.GroupId
+            destination.GroupId,
+            submitterId,
+            requesterId
         );
+    }
+
+    private static long RequireZendeskUserId(
+        long? value,
+        string connectionName,
+        string role,
+        string settingName,
+        string profileName)
+    {
+        if (value is null)
+        {
+            throw new InvalidOperationException(
+                $"Zendesk connection '{connectionName}' has no " +
+                $"{role} user ID. Ticket submission requires an " +
+                "explicit Zendesk user ID. Run SupportToolkit " +
+                $"configure profile {profileName} or set " +
+                $"connections.zendesk.{connectionName}.{settingName} " +
+                "in the configuration file."
+            );
+        }
+
+        if (value <= 0)
+        {
+            throw new InvalidOperationException(
+                $"Zendesk connection '{connectionName}' has an " +
+                $"invalid {role} user ID. A positive Zendesk user " +
+                "ID is required."
+            );
+        }
+
+        return value.Value;
     }
 }

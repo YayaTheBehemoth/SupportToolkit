@@ -85,6 +85,8 @@ public class ZendeskDestinationConfirmationTests
             {
                 Subdomain = "fixture-trial",
                 ClientId = "fixture-client",
+                SubmitterId = 900000000001,
+                RequesterId = 900000000002,
                 Destinations = new Dictionary<string, ZendeskDestinationConfiguration>
                 {
                     ["dev"] = new ZendeskDestinationConfiguration
