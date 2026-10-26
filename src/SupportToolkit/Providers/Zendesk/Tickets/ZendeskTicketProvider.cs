@@ -24,14 +24,20 @@ public sealed class ZendeskTicketProvider : ITicketProvider
 
     private readonly ZendeskApiClient _apiClient;
     private readonly long _groupId;
+    private readonly ZendeskTicketIdentity _identity;
 
     public ZendeskTicketProvider(
         ZendeskApiClient apiClient,
-        long groupId)
+        long groupId,
+        ZendeskTicketIdentity identity)
     {
         _apiClient =
             apiClient
             ?? throw new ArgumentNullException(nameof(apiClient));
+
+        _identity =
+            identity
+            ?? throw new ArgumentNullException(nameof(identity));
 
         if (groupId <= 0)
         {
@@ -73,6 +79,8 @@ public sealed class ZendeskTicketProvider : ITicketProvider
                     {
                         Subject = draft.Subject,
                         GroupId = _groupId,
+                        SubmitterId = _identity.SubmitterId,
+                        RequesterId = _identity.RequesterId,
 
                         Comment =
                             new ZendeskTicketCommentDto

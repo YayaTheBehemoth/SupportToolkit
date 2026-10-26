@@ -17,6 +17,12 @@ internal sealed class ZendeskCreateTicketDto
     [JsonPropertyName("group_id")]
     public required long GroupId { get; init; }
 
+    [JsonPropertyName("submitter_id")]
+    public required long SubmitterId { get; init; }
+
+    [JsonPropertyName("requester_id")]
+    public required long RequesterId { get; init; }
+
     [JsonPropertyName("comment")]
     public required ZendeskTicketCommentDto Comment { get; init; }
 }

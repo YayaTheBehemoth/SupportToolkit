@@ -1,10 +1,19 @@
 using System.Net;
 using System.Text;
+using SupportToolkit.Providers.Zendesk.Tickets;
 
 namespace SupportToolkit.Tests.Providers.Zendesk;
 
 internal static class ZendeskTestHttpSupport
 {
+    // Fictional Zendesk user IDs.
+    public const long FixtureSubmitterId = 900000000001L;
+
+    public const long FixtureRequesterId = 900000000002L;
+
+    public static ZendeskTicketIdentity Identity() =>
+        new(FixtureSubmitterId, FixtureRequesterId);
+
     public static HttpClient CreateClient(
         Func<HttpRequestMessage, Task<HttpResponseMessage>> respond)
     {

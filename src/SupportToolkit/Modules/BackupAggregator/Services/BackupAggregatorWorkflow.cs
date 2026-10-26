@@ -8,6 +8,7 @@ using SupportToolkit.Core.Ticketing.Services;
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Modules.BackupAggregator.Ticketing;
 using SupportToolkit.Providers.Acronis.Transport;
+using SupportToolkit.Providers.Zendesk.Tickets;
 using SupportToolkit.Providers.Zendesk.Transport;
 
 namespace SupportToolkit.Modules.BackupAggregator.Services;
@@ -315,6 +316,10 @@ public sealed class BackupAggregatorWorkflow
             TicketingProductionSession.Create(
                 zendeskOptions,
                 resolvedConnection.GroupId,
+                new ZendeskTicketIdentity(
+                    resolvedConnection.SubmitterId,
+                    resolvedConnection.RequesterId
+                ),
                 logger
             );
 

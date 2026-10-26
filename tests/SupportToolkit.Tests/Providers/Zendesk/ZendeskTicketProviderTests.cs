@@ -137,6 +137,20 @@ public class ZendeskTicketProviderTests
                                 .GetInt64()
                         );
 
+                        Assert.Equal(
+                            ZendeskTestHttpSupport.FixtureSubmitterId,
+                            ticket
+                                .GetProperty("submitter_id")
+                                .GetInt64()
+                        );
+
+                        Assert.Equal(
+                            ZendeskTestHttpSupport.FixtureRequesterId,
+                            ticket
+                                .GetProperty("requester_id")
+                                .GetInt64()
+                        );
+
                         var comment =
                             ticket.GetProperty("comment");
 
@@ -190,7 +204,8 @@ public class ZendeskTicketProviderTests
         var provider =
             new ZendeskTicketProvider(
                 apiClient,
-                groupId
+                groupId,
+                ZendeskTestHttpSupport.Identity()
             );
 
         var draft =
@@ -294,7 +309,8 @@ public class ZendeskTicketProviderTests
                     httpClient,
                     CreateOptions()
                 ),
-                groupId
+                groupId,
+                ZendeskTestHttpSupport.Identity()
             );
 
         var result =
@@ -341,7 +357,61 @@ public class ZendeskTicketProviderTests
         Assert.Throws<ArgumentOutOfRangeException>(
             () => new ZendeskTicketProvider(
                 apiClient,
-                groupId
+                groupId,
+                ZendeskTestHttpSupport.Identity()
+            )
+        );
+
+        Assert.Equal(0, requestCount);
+    }
+
+    [Theory]
+    [InlineData(0L, 900000000002L, "submitterId")]
+    [InlineData(-1L, 900000000002L, "submitterId")]
+    [InlineData(900000000001L, 0L, "requesterId")]
+    [InlineData(900000000001L, -5L, "requesterId")]
+    public void Identity_NonPositiveIds_AreRejected(
+        long submitterId,
+        long requesterId,
+        string parameterName)
+    {
+        var exception =
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => new ZendeskTicketIdentity(
+                    submitterId,
+                    requesterId
+                )
+            );
+
+        Assert.Equal(parameterName, exception.ParamName);
+    }
+
+    [Fact]
+    public void Constructor_MissingIdentity_ThrowsBeforeAnyHttpRequest()
+    {
+        var requestCount = 0;
+
+        using var httpClient = ZendeskTestHttpSupport.CreateClient(
+                request =>
+                {
+                    requestCount++;
+
+                    return Task.FromResult(
+                        new HttpResponseMessage(
+                            HttpStatusCode.InternalServerError
+                        )
+                    );
+                }
+            );
+
+        Assert.Throws<ArgumentNullException>(
+            () => new ZendeskTicketProvider(
+                new ZendeskApiClient(
+                    httpClient,
+                    CreateOptions()
+                ),
+                111111,
+                null!
             )
         );
 

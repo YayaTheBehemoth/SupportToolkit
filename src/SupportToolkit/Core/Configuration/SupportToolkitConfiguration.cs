@@ -151,6 +151,10 @@ public sealed class BusinessCentralConnectionConfiguration
 ///
 /// Destinations are scoped to this Zendesk instance, preventing
 /// profiles from accidentally sharing group IDs across instances.
+///
+/// SubmitterId and RequesterId are the Zendesk user IDs created tickets
+/// are attributed to. Both are required for ticket submission; null
+/// means not configured. They are user IDs within this instance.
 /// </summary>
 public sealed class ZendeskConnectionConfiguration
 {
@@ -159,6 +163,10 @@ public sealed class ZendeskConnectionConfiguration
 
     public string ClientId { get; set; } =
         string.Empty;
+
+    public long? SubmitterId { get; set; }
+
+    public long? RequesterId { get; set; }
 
     public Dictionary<string, ZendeskDestinationConfiguration> Destinations
     {

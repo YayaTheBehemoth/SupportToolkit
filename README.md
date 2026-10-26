@@ -302,6 +302,7 @@ dotnet run --project src\SupportToolkit -- backup-aggregator ticket submit
 Submission requires:
 
 - A configured Zendesk connection.
+- Positive submitter and requester user IDs on that connection.
 - A selected destination with a valid group ID.
 - Valid Zendesk credentials.
 - A complete backup review suitable for ticket generation.
@@ -357,7 +358,7 @@ Provider connections contain reusable integration metadata.
 
 An Acronis connection defines the API datacenter and client identity.
 
-A Zendesk connection defines the Zendesk instance and client identity.
+A Zendesk connection defines the Zendesk instance and client identity. It also defines the Zendesk users that created tickets are attributed to. See [Ticket submitter and requester](#ticket-submitter-and-requester).
 
 Multiple profiles may reference the same connection without duplicating its credentials.
 
@@ -370,6 +371,47 @@ A destination maps to a Zendesk group ID within that instance.
 For example, separate destinations may be configured for development testing and operational ticket routing.
 
 Selecting a destination does not create a ticket. It only determines where an explicitly submitted ticket will be routed.
+
+### Ticket submitter and requester
+
+Every Zendesk connection requires two non-secret settings:
+
+| Setting | Zendesk field | Meaning |
+|---|---|---|
+| `submitterId` | `submitter_id` | User ID of the agent the ticket and its first comment are submitted as. |
+| `requesterId` | `requester_id` | User ID of the ticket's requester. |
+
+Both must be positive Zendesk user IDs within the connection's instance. They may be the same user, but they are configured separately.
+
+Without these fields Zendesk attributes the ticket to the user the OAuth token acts as. With the `client_credentials` grant, that is the user who created the OAuth client. SupportToolkit therefore always sends both and never falls back to the token's identity.
+
+If either value is missing or not positive, ticket preview of the destination and submission fail locally before any Zendesk request. `configure status` shows the reason.
+
+Set them with the configuration wizard:
+
+```cmd
+dotnet run --project src\SupportToolkit -- configure profile <profile>
+```
+
+The wizard asks for them when creating a connection or updating its metadata, and automatically when an existing connection lacks them.
+
+Alternatively, edit the configuration file directly:
+
+```json
+"zendesk": {
+  "example-sandbox": {
+    "subdomain": "example",
+    "clientId": "example-zendesk-client-id",
+    "submitterId": 900000000001,
+    "requesterId": 900000000001,
+    "destinations": { "dev": { "groupId": 111111 } }
+  }
+}
+```
+
+**Upgrading:** Zendesk connections saved by earlier versions do not have these settings. Ticket submission through them is unavailable until both are added.
+
+These settings are not part of the ticket idempotency key.
 
 ### Managing profiles
 
@@ -417,6 +459,7 @@ The status command distinguishes:
 - Saved profile settings.
 - Selected Acronis and Zendesk connections.
 - Zendesk destination and group routing.
+- Zendesk ticket submitter and requester user IDs.
 - Environment overrides.
 - Locally detectable missing or invalid configuration.
 
@@ -692,6 +735,8 @@ Ticket creation is an explicit write operation.
 A configured connection alone does not authorize automatic ticket creation.
 
 Submission requires valid destination routing, and the interactive console additionally requests confirmation.
+
+Tickets are always attributed to explicitly configured submitter and requester user IDs, never implicitly to the OAuth token's identity.
 
 ### Credentials
 

@@ -93,6 +93,47 @@ public sealed partial class ConfigureCommand
                 "Client ID",
                 connection.ClientId
             );
+
+        ConfigureZendeskTicketIdentity(
+            connection
+        );
+    }
+
+    /// <summary>
+    /// Prompts for the Zendesk user IDs tickets are attributed to.
+    /// Both are required; there is no fallback to the OAuth identity.
+    /// </summary>
+    private static void ConfigureZendeskTicketIdentity(
+        ZendeskConnectionConfiguration connection)
+    {
+        Console.WriteLine(
+            "Tickets are attributed to these Zendesk user IDs. " +
+            "The submitter must be an agent."
+        );
+
+        var submitterId =
+            ReadPositiveZendeskId(
+                "Submitter user ID",
+                connection.SubmitterId ?? 0
+            );
+
+        connection.SubmitterId =
+            submitterId;
+
+        connection.RequesterId =
+            ReadPositiveZendeskId(
+                "Requester user ID",
+                connection.RequesterId > 0
+                    ? connection.RequesterId.Value
+                    : submitterId
+            );
+    }
+
+    private static bool HasValidZendeskTicketIdentity(
+        ZendeskConnectionConfiguration connection)
+    {
+        return connection.SubmitterId > 0
+            && connection.RequesterId > 0;
     }
 
     private static string GetDefaultConnectionName(
