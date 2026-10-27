@@ -6,6 +6,7 @@ using SupportToolkit.Core.Logging;
 using SupportToolkit.Core.Ticketing.Models;
 using SupportToolkit.Core.Ticketing.Services;
 using SupportToolkit.Modules.BackupAggregator.Models;
+using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.Ticketing;
 using SupportToolkit.Providers.Acronis.Transport;
 using SupportToolkit.Providers.Zendesk.Tickets;
@@ -134,6 +135,80 @@ public sealed class BackupAggregatorWorkflow
             .Create(
                 report
             );
+    }
+
+    /// <summary>
+    /// Builds a ticket draft from a completed scoped review.
+    ///
+    /// A ticket asserts that every monitored tenant was reviewed, so a
+    /// scoped review that is incomplete (an unmatched tenant, an
+    /// unresolved scope, a failed tenant review) produces no draft at
+    /// all, and the reasons are stated.
+    /// </summary>
+    public TicketDraft CreateScopedTicketDraft(
+        ScopedBackupInventoryReviewResult result)
+    {
+        ArgumentNullException.ThrowIfNull(
+            result
+        );
+
+        var blockers =
+            result.TicketBlockers;
+
+        if (blockers.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "No ticket can be created because the monitored review " +
+                "is not complete: " +
+                string.Join(" ", blockers)
+            );
+        }
+
+        return new BackupReviewTicketDraftFactory()
+            .Create(
+                result.Inventory,
+                result.TicketScopeNote
+            );
+    }
+
+    /// <summary>
+    /// Submits a ticket for a completed scoped review. Same gate and
+    /// destination rules as the full review.
+    /// </summary>
+    public async Task<CreatedTicket>
+        SubmitScopedTicketAsync(
+            ScopedBackupInventoryReviewResult result,
+            CancellationToken cancellationToken = default)
+    {
+        return await SubmitTicketDraftAsync(
+            CreateScopedTicketDraft(
+                result
+            ),
+            cancellationToken
+        );
+    }
+
+    /// <summary>
+    /// Interactive submission of a scoped review: fails closed if the
+    /// destination selected for the confirmation prompt has changed.
+    /// </summary>
+    public async Task<CreatedTicket>
+        SubmitScopedTicketToConfirmedDestinationAsync(
+            ScopedBackupInventoryReviewResult result,
+            ZendeskTicketDestinationPreview confirmedDestination,
+            CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(
+            confirmedDestination
+        );
+
+        return await SubmitTicketDraftAsync(
+            CreateScopedTicketDraft(
+                result
+            ),
+            cancellationToken,
+            confirmedDestination
+        );
     }
 
     /// <summary>

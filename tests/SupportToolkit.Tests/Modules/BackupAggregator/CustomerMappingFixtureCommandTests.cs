@@ -40,7 +40,7 @@ public class CustomerMappingFixtureCommandTests
 
         // Summary partitions the five synthetic tenants exactly once.
         Assert.Contains("MONITORING SCOPE REPORT", report);
-        Assert.Contains("Acronis customer tenants:  5", report);
+        Assert.Contains("Acronis tenants:           5", report);
         Assert.Contains("  In scope this run:       1", report);
         Assert.Contains("  Excluded:                1", report);
         Assert.Contains("  Needs scope review:      1", report);

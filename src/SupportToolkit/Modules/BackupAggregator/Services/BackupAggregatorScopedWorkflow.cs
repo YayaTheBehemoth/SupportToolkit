@@ -1,10 +1,12 @@
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.CustomerMapping;
+using SupportToolkit.Core.CustomerMapping.Matching;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Core.MonitoringScope;
 using SupportToolkit.Core.Reconciliation;
 using SupportToolkit.Modules.BackupAggregator.Fixtures;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
+using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 using SupportToolkit.Providers.Acronis.Transport;
 using SupportToolkit.Providers.BusinessCentral;
 using SupportToolkit.Providers.BusinessCentral.Subscriptions;
@@ -29,7 +31,7 @@ public sealed class BackupAggregatorScopedWorkflow
     private readonly SupportToolkitConfigurationResolver
         _configurationResolver;
 
-    private readonly IMonitoringIdentitySource _identitySource;
+    private readonly IMonitoringIdentitySource? _identitySource;
 
     private readonly ICustomerMappingRepository? _mappingRepository;
 
@@ -37,7 +39,14 @@ public sealed class BackupAggregatorScopedWorkflow
         Task<ISmartSubscriptionEvidenceSource>> _evidenceSourceFactory;
 
     private readonly Func<CancellationToken,
+        Task<ICustomerNameSource>> _nameSourceFactory;
+
+    private readonly Func<CancellationToken,
         Task<ScopedInventoryRuntime>> _inventoryRuntimeFactory;
+
+    // One Business Central bundle per workflow, so the evidence and
+    // the names share a single sign-in.
+    private Task<BusinessCentralProviderBundle>? _businessCentralBundle;
 
     public BackupAggregatorScopedWorkflow(
         SupportToolkitConfigurationResolver configurationResolver,
@@ -48,7 +57,10 @@ public sealed class BackupAggregatorScopedWorkflow
         Func<CancellationToken,
             Task<ScopedInventoryRuntime>>?
             inventoryRuntimeFactory = null,
-        ICustomerMappingRepository? mappingRepository = null)
+        ICustomerMappingRepository? mappingRepository = null,
+        Func<CancellationToken,
+            Task<ICustomerNameSource>>?
+            nameSourceFactory = null)
     {
         _configurationResolver =
             configurationResolver
@@ -59,20 +71,21 @@ public sealed class BackupAggregatorScopedWorkflow
             mappingRepository;
 
         /*
-         * With a mapping repository, identities are its Confirmed
-         * mappings and reconciliation runs over the same mappings.
-         * Without one, production still fails closed before any
-         * external request.
+         * An explicitly supplied identity source decides identities
+         * as before (fixtures, tests). Otherwise they are resolved
+         * automatically each run from Business Central customers and
+         * Acronis tenants, with any stored mappings taking precedence.
          */
         _identitySource =
-            identitySource
-            ?? (mappingRepository is null
-                ? new UnavailableMonitoringIdentitySource()
-                : new ConfirmedMappingIdentitySource(mappingRepository));
+            identitySource;
 
         _evidenceSourceFactory =
             evidenceSourceFactory
             ?? CreateBusinessCentralEvidenceSourceAsync;
+
+        _nameSourceFactory =
+            nameSourceFactory
+            ?? CreateBusinessCentralNameSourceAsync;
 
         _inventoryRuntimeFactory =
             inventoryRuntimeFactory
@@ -96,10 +109,10 @@ public sealed class BackupAggregatorScopedWorkflow
     /// Fixture mode uses synthetic subscriptions, tenants and
     /// inventory and makes no external request.
     ///
-    /// Production order is deliberate: local configuration and the
-    /// identity source are checked before any sign-in or API request,
-    /// so an unavailable identity source fails with no external
-    /// activity.
+    /// Production order is deliberate: local configuration is read
+    /// before any sign-in or API request, so a missing setting fails
+    /// with no external activity. Identities are then resolved from
+    /// the evidence and the tenants, never assumed.
     /// </summary>
     public async Task<ScopedBackupInventoryReviewResult> ReviewAsync(
         DateOnly asOfDate,
@@ -125,6 +138,7 @@ public sealed class BackupAggregatorScopedWorkflow
                 new ConfirmedMappingIdentitySource(fixtureMappings),
                 _ => Task.FromResult<ISmartSubscriptionEvidenceSource>(
                     new FixtureSmartSubscriptionEvidenceSource()),
+                null,
                 _ => Task.FromResult(
                     new ScopedInventoryRuntime(
                         new BackupInventoryReviewService(
@@ -151,15 +165,23 @@ public sealed class BackupAggregatorScopedWorkflow
                     BackupAggregatorModule.ModuleCommand,
                     cancellationToken);
 
+        var serviceItemNumbers =
+            await _configurationResolver
+                .GetServiceItemNumbersAsync(
+                    BackupAggregatorModule.ModuleCommand,
+                    cancellationToken);
+
         return await ExecuteAsync(
             itemNumbers,
             _identitySource,
             _evidenceSourceFactory,
+            _nameSourceFactory,
             _inventoryRuntimeFactory,
             asOfDate,
             cancellationToken,
             excludedTenantIds,
-            _mappingRepository);
+            _mappingRepository,
+            serviceItemNumbers);
     }
 
     /// <summary>
@@ -191,52 +213,98 @@ public sealed class BackupAggregatorScopedWorkflow
     private static async Task<ScopedBackupInventoryReviewResult>
         ExecuteAsync(
             IReadOnlyCollection<string> itemNumbers,
-            IMonitoringIdentitySource identitySource,
+            IMonitoringIdentitySource? identitySource,
             Func<CancellationToken,
                 Task<ISmartSubscriptionEvidenceSource>>
                 evidenceSourceFactory,
+            Func<CancellationToken, Task<ICustomerNameSource>>?
+                nameSourceFactory,
             Func<CancellationToken, Task<ScopedInventoryRuntime>>
                 inventoryRuntimeFactory,
             DateOnly asOfDate,
             CancellationToken cancellationToken,
             IReadOnlySet<string>? excludedTenantIds = null,
-            ICustomerMappingRepository? mappingRepository = null)
+            ICustomerMappingRepository? mappingRepository = null,
+            IReadOnlyCollection<string>? serviceItemNumbers = null)
     {
-        // Fails closed here when no production source exists.
-        var identities =
-            await identitySource.GetIdentitiesAsync(
-                cancellationToken);
+        // An explicit identity source decides before any external read.
+        var explicitIdentities =
+            identitySource is null
+                ? null
+                : await identitySource.GetIdentitiesAsync(
+                    cancellationToken);
 
-        var evidenceSource =
-            await evidenceSourceFactory(cancellationToken);
-
-        var evidence =
-            await evidenceSource.GetEvidenceAsync(
-                cancellationToken);
-
-        var observations =
-            new SmartSubscriptionEntitlementEvaluator(itemNumbers)
-                .Evaluate(
-                    evidence.Headers,
-                    evidence.Lines,
-                    asOfDate);
+        // The shared scope service decides who is entitled for this
+        // module's items; what that narrows is decided below.
+        var scope =
+            await new MonitoringScopeService(
+                await evidenceSourceFactory(cancellationToken))
+                .ResolveAsync(
+                    itemNumbers,
+                    asOfDate,
+                    cancellationToken,
+                    serviceItemNumbers);
 
         var runtime =
             await inventoryRuntimeFactory(cancellationToken);
 
         using (runtime.Lifetime)
         {
+            // Every tenant, not only customers: recognizing the
+            // operator's own company needs its partner tenant.
             var tenants =
                 await runtime.ReviewService
-                    .GetCustomerTenantsAsync(cancellationToken);
+                    .GetAllTenantsAsync(cancellationToken);
+
+            IReadOnlyList<ResolvedMonitoringCustomerIdentity> identities;
+            ICustomerMappingRepository? reconciliationMappings;
+            AutomaticMappingSummary? automatic = null;
+            string? nameFailure = null;
+
+            if (explicitIdentities is not null)
+            {
+                identities = explicitIdentities;
+                reconciliationMappings = mappingRepository;
+            }
+            else
+            {
+                var resolved =
+                    await ResolveIdentitiesAsync(
+                        scope,
+                        tenants,
+                        nameSourceFactory,
+                        mappingRepository,
+                        excludedTenantIds,
+                        cancellationToken);
+
+                identities = resolved.Identities;
+                reconciliationMappings = resolved.Mappings;
+                automatic = resolved.Summary;
+                nameFailure = resolved.Summary.NameFailure;
+            }
 
             var selection =
                 new MonitoringTenantSelector()
                     .Select(
                         tenants,
-                        observations,
+                        scope.Observations,
                         identities,
                         excludedTenantIds);
+
+            if (nameFailure is not null)
+            {
+                selection =
+                    selection with
+                    {
+                        Notices =
+                        [
+                            .. selection.Notices,
+                            "Business Central customer names could not " +
+                            "be read, so tenants could not be matched " +
+                            "by name."
+                        ]
+                    };
+            }
 
             var result =
                 await runtime.ReviewService
@@ -250,20 +318,26 @@ public sealed class BackupAggregatorScopedWorkflow
              * source exists yet, which the report states.
              */
             var reconciliation =
-                mappingRepository is null
+                reconciliationMappings is null
                     ? null
                     : new ReconciliationEngine()
                         .Reconcile(
-                            await mappingRepository.GetAllAsync(
+                            await reconciliationMappings.GetAllAsync(
                                 cancellationToken),
-                            evidence.Headers,
-                            evidence.Lines,
+                            scope.Evidence.Headers,
+                            scope.Evidence.Lines,
                             AcronisTenantObservations.FromCustomerTenants(
                                 tenants),
                             asOfDate,
                             SubscriptionItemNumbers.ToSet(itemNumbers),
+                            // Excluded tenants, and the operator's own
+                            // tenant, which has no customer to match.
                             selection.ExcludedTenants
                                 .Select(excluded => excluded.Tenant.Id)
+                                .Concat(
+                                    selection.Tenants
+                                        .Where(finding => finding.IsOperatorTenant)
+                                        .Select(finding => finding.Tenant.Id))
                                 .ToHashSet(StringComparer.OrdinalIgnoreCase),
                             monitoredTenantIds: null);
 
@@ -273,13 +347,154 @@ public sealed class BackupAggregatorScopedWorkflow
                     MonitoringScopeReportBuilder.Build(
                         asOfDate,
                         itemNumbers.ToArray(),
-                        observations,
+                        scope.Observations,
                         selection,
                         reconciliation,
                         monitoredEvidenceSupplied: false,
                         tenants)
+                    with
+                    {
+                        AutomaticMappings = automatic
+                    }
             };
         }
+    }
+
+    /// <summary>
+    /// Resolves Business Central customers to Acronis tenants for this
+    /// run. Stored mappings are copied into a run-local repository, so
+    /// human decisions win and automatic decisions are never written
+    /// back.
+    /// </summary>
+    private static async Task<AutomaticResolution> ResolveIdentitiesAsync(
+        MonitoringScopeResult scope,
+        IReadOnlyList<TenantDto> tenants,
+        Func<CancellationToken, Task<ICustomerNameSource>>? nameSourceFactory,
+        ICustomerMappingRepository? storedMappings,
+        IReadOnlySet<string>? excludedTenantIds,
+        CancellationToken cancellationToken)
+    {
+        // Every customer of the service is matched, entitled or not:
+        // a tenant of a customer with the backup but no monitoring
+        // add-on is then decided (not entitled) rather than unresolved.
+        var customerNumbers =
+            scope.ServiceCustomerNumbers;
+
+        var names =
+            nameSourceFactory is null
+                ? new ScopedCustomerParties(
+                    customerNumbers
+                        .Select(number => new CustomerParty(number))
+                        .ToArray(),
+                    customerNumbers.Count,
+                    0,
+                    "No customer name source is configured.")
+                : await (await nameSourceFactory(cancellationToken))
+                    .GetCustomerPartiesAsync(
+                        customerNumbers.ToArray(),
+                        cancellationToken);
+
+        var excluded =
+            excludedTenantIds
+            ?? new HashSet<string>();
+
+        var acronisParties =
+            AcronisCustomerParties.ForResolution(tenants)
+                .Parties
+                .Where(
+                    party => !excluded.Contains(party.Id.Trim()))
+                .ToArray();
+
+        var runRepository =
+            new InMemoryCustomerMappingRepository();
+
+        if (storedMappings is not null)
+        {
+            foreach (var mapping in await storedMappings
+                .GetAllAsync(cancellationToken))
+            {
+                await runRepository.AddAsync(
+                    mapping,
+                    cancellationToken);
+            }
+        }
+
+        var resolution =
+            await new AutoCustomerMappingResolver()
+                .ResolveAsync(
+                    acronisParties,
+                    names.Parties,
+                    runRepository,
+                    cancellationToken);
+
+        var identities =
+            await new ConfirmedMappingIdentitySource(runRepository)
+                .GetIdentitiesAsync(cancellationToken);
+
+        var nameOf =
+            names.Parties.ToDictionary(
+                party => party.Id.Trim(),
+                party => party.Name,
+                StringComparer.OrdinalIgnoreCase);
+
+        // A gap is an entitled customer with no tenant. Customers that
+        // only hold the service item are expected to have none.
+        var gaps =
+            resolution.UnmatchedBcCustomerNumbers
+                .Where(
+                    number => scope.Customers.ContainsKey(number.Trim())
+                        && scope.StateOf(number)
+                            != CustomerEntitlementState.Inactive)
+                .Select(
+                    number => new ScopeCustomerGap(
+                        number,
+                        nameOf.GetValueOrDefault(number.Trim()),
+                        scope.StateOf(number)))
+                .ToArray();
+
+        var summary =
+            new AutomaticMappingSummary(
+                resolution.Accepted
+                    .GroupBy(mapping => mapping.MatchMethod)
+                    .ToDictionary(
+                        group => group.Key,
+                        group => group.Count()),
+                resolution.PendingReview.Count,
+                resolution.Exceptions.Count,
+                gaps,
+                names.CustomersWithoutName,
+                names.CustomersWithConflictingNames,
+                names.Failure)
+            {
+                EntitledWithoutServiceItem =
+                    scope.EntitledWithoutServiceItem
+                        .Select(
+                            number => new ScopeCustomerGap(
+                                number,
+                                nameOf.GetValueOrDefault(number.Trim()),
+                                scope.StateOf(number)))
+                        .ToArray()
+            };
+
+        return new AutomaticResolution(
+            identities,
+            runRepository,
+            summary);
+    }
+
+    private sealed record AutomaticResolution(
+        IReadOnlyList<ResolvedMonitoringCustomerIdentity> Identities,
+        ICustomerMappingRepository Mappings,
+        AutomaticMappingSummary Summary);
+
+    private Task<BusinessCentralProviderBundle>
+        GetBusinessCentralBundleAsync(
+            CancellationToken cancellationToken)
+    {
+        return _businessCentralBundle ??=
+            BusinessCentralProviderFactory.CreateAsync(
+                _configurationResolver,
+                cancellationToken);
     }
 
     private async Task<ISmartSubscriptionEvidenceSource>
@@ -287,13 +502,22 @@ public sealed class BackupAggregatorScopedWorkflow
             CancellationToken cancellationToken)
     {
         var bundle =
-            await BusinessCentralProviderFactory.CreateAsync(
-                _configurationResolver,
-                cancellationToken);
+            await GetBusinessCentralBundleAsync(cancellationToken);
 
         return new BusinessCentralSmartSubscriptionEvidenceSource(
             bundle.Provider,
             BusinessCentralSourceContext.From(bundle.Options));
+    }
+
+    private async Task<ICustomerNameSource>
+        CreateBusinessCentralNameSourceAsync(
+            CancellationToken cancellationToken)
+    {
+        var bundle =
+            await GetBusinessCentralBundleAsync(cancellationToken);
+
+        return new BusinessCentralCustomerNameSource(
+            bundle.Provider);
     }
 
     private async Task<ScopedInventoryRuntime>

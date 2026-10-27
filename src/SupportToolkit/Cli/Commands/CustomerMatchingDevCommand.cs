@@ -8,8 +8,6 @@ using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Providers.BusinessCentral;
 using SupportToolkit.Providers.BusinessCentral.Subscriptions;
-using SupportToolkit.Providers.BusinessCentral.Subscriptions.Dtos;
-using SupportToolkit.Providers.BusinessCentral.Transport;
 
 namespace SupportToolkit.Cli.Commands;
 
@@ -18,9 +16,8 @@ namespace SupportToolkit.Cli.Commands;
 ///
 /// Reads the entitled Business Central customers and the Acronis
 /// customer tenants, runs the automatic resolver and reports how many
-/// would map automatically, need review or stay unmatched, and whether
-/// the Acronis account number equals Business Central customer
-/// numbers. Nothing is stored or written anywhere.
+/// would map automatically, need review or stay unmatched. Nothing is
+/// stored or written anywhere.
 ///
 /// Counts only by default. Names and customer numbers print only with
 /// an explicit --names request, for local review.
@@ -50,7 +47,8 @@ public sealed class CustomerMatchingDevCommand
     public async Task<int> RunAsync(
         TextWriter output,
         bool showNames,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool explainUnmatched = false)
     {
         ArgumentNullException.ThrowIfNull(output);
 
@@ -66,45 +64,29 @@ public sealed class CustomerMatchingDevCommand
 
         output.WriteLine("Reading Business Central (read-only)...");
 
-        var evidence =
-            await new BusinessCentralSmartSubscriptionEvidenceSource(
-                bundle.Provider,
-                BusinessCentralSourceContext.From(bundle.Options))
-                .GetEvidenceAsync(cancellationToken);
+        // The same shared services the scoped review uses, so this
+        // dry run cannot drift from what the review will decide.
+        var scope =
+            await new MonitoringScopeService(
+                new BusinessCentralSmartSubscriptionEvidenceSource(
+                    bundle.Provider,
+                    BusinessCentralSourceContext.From(bundle.Options)))
+                .ResolveAsync(
+                    itemNumbers,
+                    DateOnly.FromDateTime(DateTime.Today),
+                    cancellationToken,
+                    await _configurationResolver
+                        .GetServiceItemNumbersAsync(
+                            BackupAggregatorModule.ModuleCommand,
+                            cancellationToken));
 
-        var observations =
-            new SmartSubscriptionEntitlementEvaluator(itemNumbers)
-                .Evaluate(
-                    evidence.Headers,
-                    evidence.Lines,
-                    DateOnly.FromDateTime(DateTime.Today));
-
-        var customerNumbers =
-            observations
-                .Select(observation => observation.CustomerNumber)
-                .Where(number => !string.IsNullOrWhiteSpace(number))
-                .Select(number => number!.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-
-        IReadOnlyList<BusinessCentralHeaderCustomerNameDto?> nameRows = [];
-        string? nameFailure = null;
-
-        try
-        {
-            nameRows =
-                await bundle.Provider.GetHeaderCustomerNamesAsync(
-                    cancellationToken);
-        }
-        catch (BusinessCentralApiException exception)
-        {
-            nameFailure = exception.Message;
-        }
+        var observations = scope.Observations;
 
         var bcParties =
-            BusinessCentralCustomerPartyMapper.Map(
-                customerNumbers,
-                nameRows);
+            await new BusinessCentralCustomerNameSource(bundle.Provider)
+                .GetCustomerPartiesAsync(
+                    scope.ServiceCustomerNumbers.ToArray(),
+                    cancellationToken);
 
         output.WriteLine("Reading Acronis tenants (read-only)...");
 
@@ -131,19 +113,234 @@ public sealed class CustomerMatchingDevCommand
             output,
             observations,
             bcParties,
-            nameFailure,
             acronis,
             result,
             showNames);
 
+        if (explainUnmatched)
+        {
+            // Every customer with a subscription, matched or not, so a
+            // similar customer outside the matched set can be found.
+            var allCustomerNumbers =
+                scope.Evidence.Headers
+                    .Select(header => header.CustomerNumber)
+                    .Where(number => !string.IsNullOrWhiteSpace(number))
+                    .Select(number => number!.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+            var allCustomers =
+                await new BusinessCentralCustomerNameSource(bundle.Provider)
+                    .GetCustomerPartiesAsync(
+                        allCustomerNumbers,
+                        cancellationToken);
+
+            WriteDiagnoses(
+                output,
+                Explain(
+                    acronis,
+                    bcParties,
+                    allCustomers,
+                    scope.Evidence,
+                    result),
+                showNames);
+        }
+
         return 0;
+    }
+
+    /// <summary>
+    /// Why each tenant without an accepted link got none.
+    /// </summary>
+    public static IReadOnlyList<UnmatchedPartyDiagnosis> Explain(
+        AcronisPartyBuild acronis,
+        ScopedCustomerParties matched,
+        ScopedCustomerParties allCustomers,
+        SmartSubscriptionEvidence evidence,
+        AutoMappingResult result)
+    {
+        var acceptedTenants =
+            result.Accepted
+                .Select(mapping => mapping.AcronisTenantId.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var linkedCustomers =
+            result.Accepted
+                .Select(mapping => mapping.BcCustomerNo.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // A weak candidate is not an ambiguity; only genuine refusals
+        // to choose between candidates count as flagged.
+        var flagged =
+            result.Exceptions
+                .Where(
+                    exception => exception.Kind
+                        != CustomerMatchExceptionKind.WeakNameCandidate)
+                .SelectMany(exception => exception.AcronisTenantIds)
+                .Select(id => id.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var customerBySubscription =
+            evidence.Headers
+                .Where(
+                    header => !string.IsNullOrWhiteSpace(
+                            header.SubscriptionNumber)
+                        && !string.IsNullOrWhiteSpace(
+                            header.CustomerNumber))
+                .GroupBy(
+                    header => header.SubscriptionNumber.Trim(),
+                    StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() == 1)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.Single().CustomerNumber!.Trim(),
+                    StringComparer.OrdinalIgnoreCase);
+
+        IReadOnlyDictionary<string, IReadOnlyList<string>> items =
+            evidence.Lines
+                .Where(
+                    line => customerBySubscription.ContainsKey(
+                        line.SubscriptionNumber.Trim()))
+                .GroupBy(
+                    line => customerBySubscription[
+                        line.SubscriptionNumber.Trim()],
+                    StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => (IReadOnlyList<string>)group
+                        .Select(line => line.ItemNumber.Trim())
+                        .Where(item => item.Length > 0)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(item => item, StringComparer.OrdinalIgnoreCase)
+                        .ToArray(),
+                    StringComparer.OrdinalIgnoreCase);
+
+        return UnmatchedPartyDiagnostics.Diagnose(
+            acronis.Parties
+                .Where(party => !acceptedTenants.Contains(party.Id.Trim()))
+                .ToArray(),
+            allCustomers.Parties,
+            matched.Parties
+                .Select(party => party.Id.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase),
+            linkedCustomers,
+            flagged,
+            items);
+    }
+
+    public static void WriteDiagnoses(
+        TextWriter output,
+        IReadOnlyList<UnmatchedPartyDiagnosis> diagnoses,
+        bool showNames)
+    {
+        output.WriteLine();
+        output.WriteLine("WHY TENANTS WENT UNMATCHED");
+        output.WriteLine("--------------------------");
+        output.WriteLine(
+            $"Tenants without an accepted customer: {diagnoses.Count}");
+
+        foreach (var group in diagnoses
+            .GroupBy(diagnosis => diagnosis.Reason)
+            .OrderBy(group => group.Key))
+        {
+            output.WriteLine(
+                $"  {Describe(group.Key)}: {group.Count()}");
+        }
+
+        if (!showNames)
+        {
+            output.WriteLine();
+            output.WriteLine(
+                "Use --names to see each tenant and its closest customers.");
+            return;
+        }
+
+        foreach (var diagnosis in diagnoses)
+        {
+            output.WriteLine();
+            output.WriteLine(
+                $"Acronis {Short(diagnosis.PartyId)} " +
+                $"{NameOrNone(diagnosis.PartyName)} -> " +
+                Describe(diagnosis.Reason));
+
+            output.WriteLine(
+                "    sees: " + Forensics(diagnosis.PartyName));
+
+            if (diagnosis.Candidates.Count == 0)
+            {
+                output.WriteLine(
+                    "    no customer with a similar name");
+            }
+
+            foreach (var candidate in diagnosis.Candidates)
+            {
+                output.WriteLine(
+                    $"    BC {candidate.CustomerId} " +
+                    $"{NameOrNone(candidate.CustomerName)} " +
+                    $"[{candidate.Tier}] " +
+                    (candidate.InMatchedSet
+                        ? "matched set"
+                        : "NOT in matched set") +
+                    ", items: " +
+                    (candidate.Items.Count == 0
+                        ? "none"
+                        : string.Join(", ", candidate.Items)));
+
+                output.WriteLine(
+                    "        sees: " + Forensics(candidate.CustomerName));
+            }
+        }
+    }
+
+    private static string Describe(
+        UnmatchedReason reason)
+    {
+        return reason switch
+        {
+            UnmatchedReason.AmbiguousOrConflicting =>
+                "ambiguous or conflicting candidates",
+            UnmatchedReason.OnlyWeakNameOverlap =>
+                "only a weak name overlap",
+            UnmatchedReason.CandidateTakenByAnotherParty =>
+                "best customer already linked to another tenant",
+            UnmatchedReason.SimilarCustomerNotInScope =>
+                "similar customer holds none of the service items",
+            UnmatchedReason.NoSimilarCustomer =>
+                "no similar customer in Business Central",
+            _ => reason.ToString()
+        };
+    }
+
+    /// <summary>
+    /// The compact form the matcher compares, plus anything odd in the
+    /// raw name.
+    /// </summary>
+    private static string Forensics(
+        string? name)
+    {
+        var inspected = NameForensics.Inspect(name);
+
+        return
+            $"\"{inspected.Compact}\"" +
+            (inspected.Oddities.Count == 0
+                ? string.Empty
+                : "; odd: " + string.Join(", ", inspected.Oddities));
+    }
+
+    private static string NameOrNone(
+        string? name)
+    {
+        return string.IsNullOrWhiteSpace(name)
+            ? "(no name)"
+            : JsonSerializer.Serialize(
+                name,
+                NameJsonOptions);
     }
 
     public static void WriteReport(
         TextWriter output,
         IReadOnlyList<MonitoringEntitlementObservation> observations,
-        BusinessCentralCustomerParties bc,
-        string? nameFailure,
+        ScopedCustomerParties bc,
         AcronisPartyBuild acronis,
         AutoMappingResult result,
         bool showNames)
@@ -161,13 +358,19 @@ public sealed class CustomerMatchingDevCommand
             $"needs review " +
             $"{observations.Count(o => o.Assessment == MonitoringEntitlementAssessment.NeedsReview)})");
         output.WriteLine(
-            $"  entitled customers:       {bc.Parties.Count}");
+            $"  customers matched:        {bc.Parties.Count} " +
+            "(entitled, or holding a service item)");
+        output.WriteLine(
+            "  of which entitled:        " +
+            CustomerEntitlementActivity.Classify(observations).Count);
         output.WriteLine(
             $"  with a name:              {bc.CustomersWithName}");
         output.WriteLine(
             $"  without a name:           {bc.CustomersWithoutName}");
         output.WriteLine(
             $"  conflicting names:        {bc.CustomersWithConflictingNames}");
+
+        var nameFailure = bc.Failure;
 
         if (nameFailure is not null)
         {
@@ -231,11 +434,14 @@ public sealed class CustomerMatchingDevCommand
                 ? state
                 : CustomerEntitlementState.NeedsReview;
 
+        // Only entitled customers can be gaps; a customer that merely
+        // holds a service item is expected to have no tenant.
         var gaps =
             result.UnmatchedBcCustomerNumbers
                 .Where(
-                    number => StateOf(number)
-                        != CustomerEntitlementState.Inactive)
+                    number => entitlement.ContainsKey(number.Trim())
+                        && StateOf(number)
+                            != CustomerEntitlementState.Inactive)
                 .ToArray();
 
         output.WriteLine(
@@ -261,7 +467,7 @@ public sealed class CustomerMatchingDevCommand
 
     private static void WriteWorksheet(
         TextWriter output,
-        BusinessCentralCustomerParties bc,
+        ScopedCustomerParties bc,
         AcronisPartyBuild acronis,
         AutoMappingResult result,
         IReadOnlyList<string> bcGaps,

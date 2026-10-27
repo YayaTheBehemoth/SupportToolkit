@@ -248,7 +248,7 @@ public class MonitoringTenantSelectorTests
     }
 
     [Fact]
-    public void NonCustomerTenants_AreNotInventoryCandidates()
+    public void PartnerAndUnitTenants_AreNeverMatchedToACustomer()
     {
         var partner =
             new TenantDto
@@ -258,15 +258,27 @@ public class MonitoringTenantSelectorTests
                 Kind = "partner"
             };
 
+        var unit =
+            new TenantDto
+            {
+                Id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                Name = "Synthetic Unit",
+                Kind = "unit"
+            };
+
         var result =
             _selector.Select(
-                [partner],
+                [partner, unit],
                 [Active("BC-001")],
                 [
-                    new("BC-001", partner.Id)
+                    new("BC-001", partner.Id),
+                    new("BC-001", unit.Id)
                 ]
             );
 
+        // Neither is a candidate: partner tenants cannot be reviewed
+        // and units are not customers. An identity link to either never
+        // counts as a customer match, so the evidence stays unmatched.
         Assert.Empty(result.Tenants);
         Assert.Single(result.UnmatchedEvidence);
     }

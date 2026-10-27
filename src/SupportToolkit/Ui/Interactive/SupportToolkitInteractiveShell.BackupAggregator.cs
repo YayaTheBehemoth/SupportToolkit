@@ -1,8 +1,9 @@
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.ErrorHandling;
+using SupportToolkit.Core.Logging;
 using SupportToolkit.Core.Ticketing.Models;
 using SupportToolkit.Core.Ticketing.Reporting;
-using SupportToolkit.Modules.BackupAggregator.Models;
+using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Modules.BackupHealth.Models;
@@ -13,10 +14,17 @@ namespace SupportToolkit.Ui.Interactive;
 
 public sealed partial class SupportToolkitInteractiveShell
 {
+    /// <summary>
+    /// The interactive BackupAggregator offers the monitored review
+    /// only: the tenants Business Central entitles, plus the
+    /// operator's own. The unmonitored all-tenant review and its
+    /// ticket remain available as command-line operations for
+    /// development; they are not part of the operator's menu.
+    /// </summary>
     private async Task RunBackupAggregatorMenuAsync(
         CancellationToken cancellationToken)
     {
-        AggregatedBackupReport? currentFullReview =
+        ScopedBackupInventoryReviewResult? currentScopedReview =
             null;
 
         while (true)
@@ -30,7 +38,8 @@ public sealed partial class SupportToolkitInteractiveShell
                     );
 
             var scopedAvailable =
-                await IsScopedReviewAvailableAsync(
+                mode == SupportToolkitMode.Fixture
+                || await IsScopedReviewAvailableAsync(
                     cancellationToken);
 
             Console.WriteLine(
@@ -44,46 +53,65 @@ public sealed partial class SupportToolkitInteractiveShell
             Console.WriteLine();
 
             Console.WriteLine(
-                $"Mode:        {FormatMode(mode)}"
+                $"Mode:             {FormatMode(mode)}"
             );
 
+            if (!scopedAvailable)
+            {
+                Console.WriteLine();
+
+                Console.WriteLine(
+                    "The monitored review needs a Business Central " +
+                    "connection in the active profile."
+                );
+
+                Console.WriteLine(
+                    "Select one with 'configure', or use fixture mode."
+                );
+
+                Console.WriteLine();
+
+                Console.WriteLine(
+                    "1. Back"
+                );
+
+                Console.WriteLine();
+
+                ReadMenuChoice(
+                    minimum:
+                        1,
+                    maximum:
+                        1
+                );
+
+                Console.WriteLine();
+
+                return;
+            }
+
             Console.WriteLine(
-                $"Full review: {FormatReviewState(currentFullReview)}"
+                "Monitored review: " +
+                FormatScopedReviewState(currentScopedReview)
             );
 
             Console.WriteLine();
 
             Console.WriteLine(
-                currentFullReview is null
-                    ? "1. Review all tenants"
-                    : "1. Refresh full review"
+                currentScopedReview is null
+                    ? "1. Review monitored tenants (Business Central)"
+                    : "1. Refresh monitored review"
             );
 
             Console.WriteLine(
-                "2. Review one tenant"
+                "2. Preview ticket"
             );
 
             Console.WriteLine(
-                "3. Preview ticket"
+                "3. Submit ticket"
             );
 
             Console.WriteLine(
-                "4. Submit ticket"
-            );
-
-            var backChoice = 5;
-
-            if (scopedAvailable)
-            {
-                Console.WriteLine(
-                    "5. Review monitored tenants (Business Central)"
-                );
-
-                backChoice = 6;
-            }
-
-            Console.WriteLine(
-                $"{backChoice}. Back"
+                "4. Back"
             );
 
             Console.WriteLine();
@@ -93,7 +121,7 @@ public sealed partial class SupportToolkitInteractiveShell
                     minimum:
                         1,
                     maximum:
-                        backChoice
+                        4
                 );
 
             Console.WriteLine();
@@ -101,37 +129,23 @@ public sealed partial class SupportToolkitInteractiveShell
             switch (choice)
             {
                 case 1:
-                    currentFullReview =
-                        await ReviewAllTenantsAsync(
+                    currentScopedReview =
+                        await ReviewScopedAsync(
                             cancellationToken
                         );
 
                     break;
 
                 case 2:
-                    await ReviewOneTenantAsync(
-                        cancellationToken
+                    PreviewScopedTicket(
+                        currentScopedReview
                     );
 
                     break;
 
                 case 3:
-                    PreviewTicket(
-                        currentFullReview
-                    );
-
-                    break;
-
-                case 4:
-                    await SubmitTicketAsync(
-                        currentFullReview,
-                        cancellationToken
-                    );
-
-                    break;
-
-                case 5 when scopedAvailable:
-                    await ReviewScopedAsync(
+                    await SubmitScopedTicketAsync(
+                        currentScopedReview,
                         cancellationToken
                     );
 
@@ -144,9 +158,9 @@ public sealed partial class SupportToolkitInteractiveShell
     }
 
     /// <summary>
-    /// The scoped review is offered only when the active profile
-    /// selects a Business Central connection. Any configuration
-    /// problem simply hides it; the regular menu is unaffected.
+    /// The monitored review is offered when the active profile selects
+    /// a Business Central connection. Any configuration problem
+    /// simply hides it.
     /// </summary>
     private async Task<bool> IsScopedReviewAvailableAsync(
         CancellationToken cancellationToken)
@@ -167,12 +181,31 @@ public sealed partial class SupportToolkitInteractiveShell
         }
     }
 
-    private async Task ReviewScopedAsync(
-        CancellationToken cancellationToken)
+    private static string FormatScopedReviewState(
+        ScopedBackupInventoryReviewResult? review)
+    {
+        if (review is null)
+        {
+            return "not run";
+        }
+
+        return
+            $"{review.Inventory.TenantCount} tenant(s), " +
+            $"{review.Inventory.FindingsCount} finding(s), " +
+            (review.IsOverallComplete
+                ? "complete"
+                : "incomplete");
+    }
+
+    private async Task<ScopedBackupInventoryReviewResult?>
+        ReviewScopedAsync(
+            CancellationToken cancellationToken)
     {
         WriteProgress(
             "Loading monitoring scope and backup data..."
         );
+
+        ScopedBackupInventoryReviewResult? reviewed = null;
 
         try
         {
@@ -183,13 +216,29 @@ public sealed partial class SupportToolkitInteractiveShell
                         cancellationToken
                     );
 
-            new ConsoleScopedReviewReporter()
+            new ConsoleScopedReviewReporter(
+                    OperationalLogger.FromEnvironment().DebugEnabled)
                 .Write(Console.Out, result);
 
             Console.WriteLine();
 
             _backupAggregatorReporter
                 .Write(result.Inventory);
+
+            reviewed = result;
+
+            if (result.TicketBlockers.Count > 0)
+            {
+                Console.WriteLine();
+
+                Console.WriteLine(
+                    "A ticket cannot be created from this review yet:");
+
+                foreach (var blocker in result.TicketBlockers)
+                {
+                    Console.WriteLine($"  - {blocker}");
+                }
+            }
         }
         catch (OperationCanceledException)
         {
@@ -203,117 +252,46 @@ public sealed partial class SupportToolkitInteractiveShell
         }
 
         Pause();
+
+        return reviewed;
     }
 
-    private async Task<AggregatedBackupReport?>
-        ReviewAllTenantsAsync(
-            CancellationToken cancellationToken)
-    {
-        WriteProgress(
-            "Loading backup data..."
-        );
-
-        try
-        {
-            var report =
-                await _backupAggregatorWorkflow
-                    .ReviewAllTenantsAsync(
-                        cancellationToken
-                    );
-
-            Console.WriteLine();
-
-            _backupAggregatorReporter
-                .Write(
-                    report
-                );
-
-            Pause();
-
-            return report;
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            WriteError(
-                exception
-            );
-
-            Pause();
-
-            return null;
-        }
-    }
-
-    private async Task ReviewOneTenantAsync(
+    private async Task SubmitScopedTicketAsync(
+        ScopedBackupInventoryReviewResult? currentScopedReview,
         CancellationToken cancellationToken)
     {
-        Console.Write(
-            "Tenant name: "
-        );
-
-        var tenantName =
-            Console.ReadLine();
-
-        if (string.IsNullOrWhiteSpace(
-                tenantName))
+        if (currentScopedReview is null)
         {
-            Console.WriteLine();
+            WriteScopedReviewRequired();
 
-            Console.WriteLine(
-                "Tenant review cancelled."
-            );
-
-            Console.WriteLine();
+            Pause();
 
             return;
         }
 
-        Console.WriteLine();
+        var inventory = currentScopedReview.Inventory;
 
-        WriteProgress(
-            "Loading backup data..."
-        );
-
-        try
-        {
-            var report =
-                await _backupAggregatorWorkflow
-                    .ReviewTenantAsync(
-                        tenantName,
-                        cancellationToken
-                    );
-
-            Console.WriteLine();
-
-            _backupAggregatorReporter
-                .Write(
-                    report
-                );
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            WriteError(
-                exception
-            );
-        }
-
-        Pause();
+        await ConfirmAndSubmitTicketAsync(
+            () => _backupAggregatorWorkflow
+                .CreateScopedTicketDraft(currentScopedReview),
+            $"Review: {inventory.TenantCount}/" +
+            $"{inventory.TenantsAttempted} monitored tenants, " +
+            $"{inventory.FindingsCount} findings, " +
+            $"{inventory.UnknownRowsCount} unclassified",
+            (destination, token) => _backupAggregatorWorkflow
+                .SubmitScopedTicketToConfirmedDestinationAsync(
+                    currentScopedReview,
+                    destination,
+                    token),
+            cancellationToken);
     }
 
-    private void PreviewTicket(
-        AggregatedBackupReport? currentFullReview)
+    private void PreviewScopedTicket(
+        ScopedBackupInventoryReviewResult? currentScopedReview)
     {
-        if (currentFullReview is null)
+        if (currentScopedReview is null)
         {
-            WriteFullReviewRequired();
+            WriteScopedReviewRequired();
 
             Pause();
 
@@ -322,15 +300,10 @@ public sealed partial class SupportToolkitInteractiveShell
 
         try
         {
-            var draft =
-                _backupAggregatorWorkflow
-                    .CreateTicketDraft(
-                        currentFullReview
-                    );
-
             _ticketDraftPreviewer
                 .Write(
-                    draft
+                    _backupAggregatorWorkflow
+                        .CreateScopedTicketDraft(currentScopedReview)
                 );
         }
         catch (Exception exception)
@@ -343,26 +316,35 @@ public sealed partial class SupportToolkitInteractiveShell
         Pause();
     }
 
-    private async Task SubmitTicketAsync(
-        AggregatedBackupReport? currentFullReview,
+    private static void WriteScopedReviewRequired()
+    {
+        Console.WriteLine(
+            "Run the monitored review first (option 1), then try again."
+        );
+
+        Console.WriteLine();
+    }
+
+    /// <summary>
+    /// The confirmation-and-submission flow: validate the draft and the
+    /// destination before prompting, confirm, then submit to exactly
+    /// the confirmed destination.
+    /// </summary>
+    private async Task ConfirmAndSubmitTicketAsync(
+        Action validateDraft,
+        string reviewSummary,
+        Func<ZendeskTicketDestinationPreview,
+            CancellationToken,
+            Task<CreatedTicket>> submit,
         CancellationToken cancellationToken)
     {
-        if (currentFullReview is null)
-        {
-            WriteFullReviewRequired();
-
-            Pause();
-
-            return;
-        }
-
         ZendeskTicketDestinationPreview destination;
 
         try
         {
             // Fail before prompting if the report is incomplete or the
             // selected Zendesk destination/credentials are invalid.
-            _backupAggregatorWorkflow.CreateTicketDraft(currentFullReview);
+            validateDraft();
 
             destination =
                 await _backupAggregatorWorkflow.GetTicketSubmissionTargetAsync(
@@ -385,11 +367,7 @@ public sealed partial class SupportToolkitInteractiveShell
         Console.WriteLine($"Zendesk instance: https://{destination.InstanceHost}");
         Console.WriteLine($"Destination alias: {destination.DestinationName}");
         Console.WriteLine($"Zendesk group ID: {destination.GroupId}");
-        Console.WriteLine(
-            $"Review: {currentFullReview.TenantCount}/" +
-            $"{currentFullReview.TenantsAttempted} tenants, " +
-            $"{currentFullReview.FindingsCount} findings, " +
-            $"{currentFullReview.UnknownRowsCount} unclassified");
+        Console.WriteLine(reviewSummary);
         Console.WriteLine();
 
         if (!ReadConfirmation(
@@ -420,12 +398,10 @@ public sealed partial class SupportToolkitInteractiveShell
         try
         {
             var ticket =
-                await _backupAggregatorWorkflow
-                    .SubmitTicketToConfirmedDestinationAsync(
-                        currentFullReview,
-                        destination,
-                        cancellationToken
-                    );
+                await submit(
+                    destination,
+                    cancellationToken
+                );
 
             Console.WriteLine();
 

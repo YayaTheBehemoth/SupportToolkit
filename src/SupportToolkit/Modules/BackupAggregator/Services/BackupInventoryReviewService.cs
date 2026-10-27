@@ -116,6 +116,18 @@ public sealed class BackupInventoryReviewService
     }
 
     /// <summary>
+    /// Every tenant of any kind, for callers that need the hierarchy.
+    /// Does not review anything.
+    /// </summary>
+    public Task<IReadOnlyList<TenantDto>> GetAllTenantsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return _tenantResolver.GetAllTenantsAsync(
+            cancellationToken
+        );
+    }
+
+    /// <summary>
     /// Preserves the existing unscoped all-tenant behavior.
     ///
     /// Monitoring entitlement is not applied to this operation.

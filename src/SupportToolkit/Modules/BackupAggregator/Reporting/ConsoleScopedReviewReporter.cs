@@ -12,6 +12,18 @@ namespace SupportToolkit.Modules.BackupAggregator.Reporting;
 /// </summary>
 public sealed class ConsoleScopedReviewReporter
 {
+    private readonly bool _detailed;
+
+    /// <param name="detailed">
+    /// Whether the scope report lists every detail section. The
+    /// default view is the summary and the tenants in scope.
+    /// </param>
+    public ConsoleScopedReviewReporter(
+        bool detailed = false)
+    {
+        _detailed = detailed;
+    }
+
     public void Write(
         TextWriter output,
         ScopedBackupInventoryReviewResult result)
@@ -24,7 +36,7 @@ public sealed class ConsoleScopedReviewReporter
         if (result.ScopeReport is not null)
         {
             new ConsoleMonitoringScopeReporter()
-                .Write(output, result.ScopeReport);
+                .Write(output, result.ScopeReport, _detailed);
 
             WriteCompleteness(output, result);
             return;
@@ -109,7 +121,11 @@ public sealed class ConsoleScopedReviewReporter
             "Only selected tenants were reviewed. The unscoped " +
             "review and ticketing are unchanged;");
         output.WriteLine(
-            "no ticket can be created from a scoped review.");
+            result.IsOverallComplete
+                ? "this review is complete, so a ticket can be " +
+                  "previewed and created from it."
+                : "a ticket can be created only when the overall " +
+                  "review is complete.");
     }
 
     private static string YesNo(

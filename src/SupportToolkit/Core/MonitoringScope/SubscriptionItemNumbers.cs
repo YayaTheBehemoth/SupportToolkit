@@ -12,12 +12,6 @@ namespace SupportToolkit.Core.MonitoringScope;
 /// </summary>
 public static class SubscriptionItemNumbers
 {
-    /// <summary>
-    /// Provisional entitlement list, pending business sign-off.
-    /// </summary>
-    public static IReadOnlyList<string> DefaultMonitoringItemNumbers { get; } =
-        ["BAASOVERVÅG"];
-
     public static IEqualityComparer<string> Comparer { get; } =
         new ItemNumberComparer();
 

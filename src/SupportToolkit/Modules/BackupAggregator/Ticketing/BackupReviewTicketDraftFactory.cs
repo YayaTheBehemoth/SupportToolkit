@@ -16,8 +16,13 @@ namespace SupportToolkit.Modules.BackupAggregator.Ticketing;
 /// </summary>
 public sealed class BackupReviewTicketDraftFactory
 {
+    /// <param name="scopeNote">
+    /// Optional line saying what the review covered, for reviews
+    /// limited to a subset of tenants. Omitted for a full review.
+    /// </param>
     public TicketDraft Create(
-        AggregatedBackupReport report)
+        AggregatedBackupReport report,
+        string? scopeNote = null)
     {
         ArgumentNullException.ThrowIfNull(
             report
@@ -36,7 +41,8 @@ public sealed class BackupReviewTicketDraftFactory
 
             Body =
                 BuildBody(
-                    report
+                    report,
+                    scopeNote
                 )
         };
     }
@@ -88,7 +94,8 @@ public sealed class BackupReviewTicketDraftFactory
     }
 
     private static string BuildBody(
-        AggregatedBackupReport report)
+        AggregatedBackupReport report,
+        string? scopeNote)
     {
         var builder =
             new StringBuilder();
@@ -98,6 +105,21 @@ public sealed class BackupReviewTicketDraftFactory
         );
 
         builder.AppendLine();
+
+        if (!string.IsNullOrWhiteSpace(scopeNote))
+        {
+            builder.AppendLine(
+                "SCOPE"
+            );
+
+            builder.AppendLine(
+                Inline(
+                    scopeNote
+                )
+            );
+
+            builder.AppendLine();
+        }
 
         AppendSummary(
             builder,

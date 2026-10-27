@@ -182,7 +182,7 @@ try
             args.Skip(2).ToArray();
 
         var validMatchingArguments =
-            (matchingOptions.Length == 1 || matchingOptions.Length == 2)
+            matchingOptions.Length is >= 1 and <= 3
             && matchingOptions.Contains(
                 "--production",
                 StringComparer.OrdinalIgnoreCase)
@@ -193,6 +193,9 @@ try
                         StringComparison.OrdinalIgnoreCase)
                     || option.Equals(
                         "--names",
+                        StringComparison.OrdinalIgnoreCase)
+                    || option.Equals(
+                        "--why",
                         StringComparison.OrdinalIgnoreCase))
             && matchingOptions.Distinct(
                 StringComparer.OrdinalIgnoreCase).Count()
@@ -202,7 +205,7 @@ try
         {
             Console.Error.WriteLine(
                 "Usage: SupportToolkit dev customer-matching " +
-                "--production [--names]");
+                "--production [--names] [--why]");
 
             return 1;
         }
@@ -213,6 +216,9 @@ try
                 Console.Out,
                 showNames: matchingOptions.Contains(
                     "--names",
+                    StringComparer.OrdinalIgnoreCase),
+                explainUnmatched: matchingOptions.Contains(
+                    "--why",
                     StringComparer.OrdinalIgnoreCase));
     }
 
@@ -406,7 +412,7 @@ static void PrintUsage(
     Console.WriteLine("  dev scoped-backup-review");
     Console.WriteLine("  dev customer-mapping");
     Console.WriteLine(
-        "  dev customer-matching --production [--names]");
+        "  dev customer-matching --production [--names] [--why]");
     Console.WriteLine();
     Console.WriteLine("Modules:");
 

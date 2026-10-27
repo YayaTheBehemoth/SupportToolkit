@@ -17,9 +17,11 @@ namespace SupportToolkit.Tests;
 /// </summary>
 public class MonitoringReconciliationCasesTests
 {
-    private const string Entitled = "BAASOVERVÅG";
-    private const string EntitledDecomposed = "BAASOVERVÅG";
-    private const string BackupOnly = "BAAS";
+    // Fictional item numbers. The entitled one has a non-ASCII letter;
+    // its decomposed twin stores that letter as base letter plus accent.
+    private const string Entitled = "EXAMPLE-ADDÅN";
+    private const string EntitledDecomposed = "EXAMPLE-ADDÅN";
+    private const string BackupOnly = "EXAMPLE-BACKUP";
     private const string SpacedItem = "SECURE BACKUP";
 
     private const string TenantA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
@@ -64,20 +66,12 @@ public class MonitoringReconciliationCasesTests
                 [Entitled, "  "]));
     }
 
-    [Fact]
-    public void DefaultList_IsTheMonitoringAddOnOnly()
-    {
-        Assert.Equal(
-            [Entitled],
-            SubscriptionItemNumbers.DefaultMonitoringItemNumbers);
-    }
-
     // Case 2
 
     [Theory]
     [InlineData(EntitledDecomposed)]
     [InlineData("  " + Entitled + "  ")]
-    [InlineData("baasovervåg")]
+    [InlineData("example-addån")]
     public void ItemNumbers_MatchAcrossNormalizationTrimAndCase(
         string lineItem)
     {
@@ -525,7 +519,7 @@ public class MonitoringReconciliationCasesTests
     private const string OwnCustomerName = "Synthetic Operator ";
 
     [Fact]
-    public void OperatorCustomerTenant_IsExcludedByPartnerName()
+    public void OperatorCustomerTenant_IsIncluded_AndThePartnerIsNot()
     {
         var result =
             new MonitoringTenantSelector()
@@ -539,13 +533,18 @@ public class MonitoringReconciliationCasesTests
                     [],
                     []);
 
-        Assert.Equal(TenantA, Assert.Single(result.Tenants).Tenant.Id);
-        Assert.Equal(1, result.ExcludedTenantCount);
+        // The customer-kind tenant is the operator's own and is the one
+        // reviewed. The partner tenant only identifies it and never
+        // appears as a finding (Acronis refuses to review it).
+        Assert.Equal(TenantA, Assert.Single(Customers(result)).Tenant.Id);
+        Assert.Equal(OwnTenant, Assert.Single(OperatorFindings(result)).Tenant.Id);
+        Assert.DoesNotContain(result.Tenants, finding => finding.Tenant.Id == TenantB);
+        Assert.Equal(0, result.ExcludedTenantCount);
         Assert.Empty(result.Notices);
     }
 
     [Fact]
-    public void PartnerAndUnitTenants_NeverReachSelectionOrObservations()
+    public void PartnerAndUnitTenants_AloneNeverBecomeFindingsOrObservations()
     {
         var tenants =
             new[]
@@ -554,9 +553,10 @@ public class MonitoringReconciliationCasesTests
                 Tenant(TenantA, "Synthetic Customer", "unit")
             };
 
-        Assert.Empty(
-            new MonitoringTenantSelector()
-                .Select(tenants, [], []).Tenants);
+        var result =
+            new MonitoringTenantSelector().Select(tenants, [], []);
+
+        Assert.Empty(result.Tenants);
 
         Assert.Empty(
             AcronisTenantObservations.FromCustomerTenants(tenants));
@@ -570,14 +570,167 @@ public class MonitoringReconciliationCasesTests
                 .Select(
                     [
                         Tenant(TenantB, OwnName, "partner"),
-                        Tenant(OwnTenant, "Synthetic Operator Holding")
+                        Tenant(OwnTenant, "Synthetic Operations")
                     ],
                     [],
                     []);
 
-        Assert.Single(result.Tenants);
+        Assert.Single(Customers(result));
         Assert.Equal(0, result.ExcludedTenantCount);
     }
+
+    [Theory]
+    [InlineData("Synthetic Operator Holding ApS")]
+    [InlineData("SYNTHETIC-OPERATOR")]
+    [InlineData("synthetic operator a/s")]
+    public void LegalFormAndGenericWordDifferences_StillMatchThePartner(
+        string customerName)
+    {
+        var detection =
+            OperatorTenantDetector.Detect(
+            [
+                Tenant(TenantB, OwnName, "partner"),
+                Tenant(OwnTenant, customerName),
+                Tenant(TenantA, "Northwind Traders")
+            ]);
+
+        Assert.Equal(OwnTenant, detection.TenantId);
+        Assert.Null(detection.Notice);
+    }
+
+    [Fact]
+    public void IdenticalMatch_BeatsAContainedName()
+    {
+        var detection =
+            OperatorTenantDetector.Detect(
+            [
+                Tenant(TenantB, "Synthetic Operator Nordic", "partner"),
+                Tenant(OwnTenant, "Synthetic Operator Nordic"),
+                Tenant(TenantA, "Synthetic Operator")
+            ]);
+
+        Assert.Equal(OwnTenant, detection.TenantId);
+    }
+
+    [Fact]
+    public void ContainedNameAlone_IsAcceptedWhenItIsTheOnlyMatch()
+    {
+        var detection =
+            OperatorTenantDetector.Detect(
+            [
+                Tenant(TenantB, "Synthetic Operator Nordic", "partner"),
+                Tenant(OwnTenant, "Synthetic Operator"),
+                Tenant(TenantA, "Northwind Traders")
+            ]);
+
+        Assert.Equal(OwnTenant, detection.TenantId);
+    }
+
+    [Fact]
+    public void TwoEquallyGoodMatches_ExcludeNothingAndSay()
+    {
+        var detection =
+            OperatorTenantDetector.Detect(
+            [
+                Tenant(TenantB, OwnName, "partner"),
+                Tenant(OwnTenant, "Synthetic Operator"),
+                Tenant(TenantA, "Synthetic Operator ApS")
+            ]);
+
+        Assert.Null(detection.TenantId);
+        Assert.NotNull(detection.Notice);
+    }
+
+    [Fact]
+    public void OperatorTenant_IsAlwaysIncluded_WithoutAnyBusinessCentralEvidence()
+    {
+        var result =
+            new MonitoringTenantSelector()
+                .Select(
+                    [
+                        Tenant(TenantB, OwnName, "partner"),
+                        Tenant(OwnTenant, OwnCustomerName),
+                        Tenant(TenantA, "Northwind Traders")
+                    ],
+                    [],
+                    []);
+
+        var own = Assert.Single(OperatorFindings(result));
+
+        Assert.Equal(OwnTenant, own.Tenant.Id);
+        Assert.Equal(
+            MonitoringTenantSelectionStatus.CandidateForInventory,
+            own.Status);
+        Assert.Contains(OwnTenant, result.InventoryCandidates.Select(t => t.Id));
+        Assert.DoesNotContain(TenantB, result.InventoryCandidates.Select(t => t.Id));
+        Assert.Null(own.CustomerNumber);
+
+        // A real customer stays decided by evidence, which is missing.
+        Assert.Equal(
+            MonitoringTenantSelectionStatus.Unclassified,
+            Assert.Single(Customers(result)).Status);
+    }
+
+    [Fact]
+    public void ConfiguredExclusion_BeatsTheAlwaysIncludedOperatorTenant()
+    {
+        var result =
+            new MonitoringTenantSelector()
+                .Select(
+                    [
+                        Tenant(TenantB, OwnName, "partner"),
+                        Tenant(OwnTenant, OwnCustomerName)
+                    ],
+                    [],
+                    [],
+                    new HashSet<string> { OwnTenant });
+
+        Assert.Empty(result.Tenants);
+        Assert.Equal(1, result.ExcludedTenantCount);
+        Assert.Equal(
+            MonitoringTenantExclusionReason.Configured,
+            Assert.Single(result.ExcludedTenants).Reason);
+    }
+
+    [Fact]
+    public void OperatorTenantWithoutAValidUuid_NeedsReviewInsteadOfBeingReviewed()
+    {
+        var result =
+            new MonitoringTenantSelector()
+                .Select(
+                    [
+                        Tenant(TenantB, OwnName, "partner"),
+                        Tenant("not-a-uuid", OwnCustomerName)
+                    ],
+                    [],
+                    []);
+
+        Assert.Equal(
+            MonitoringTenantSelectionStatus.NeedsReview,
+            Assert.Single(result.Tenants).Status);
+        Assert.Empty(result.InventoryCandidates);
+    }
+
+    [Fact]
+    public void NoPartnerAnchor_MeansNoTenantIsTreatedAsTheOperator()
+    {
+        var result =
+            new MonitoringTenantSelector()
+                .Select([Tenant(OwnTenant, OwnCustomerName)], [], []);
+
+        Assert.Empty(OperatorFindings(result));
+        Assert.Equal(
+            MonitoringTenantSelectionStatus.Unclassified,
+            Assert.Single(result.Tenants).Status);
+    }
+
+    private static IEnumerable<MonitoringTenantSelectionFinding> Customers(
+        MonitoringTenantSelectionResult result) =>
+        result.Tenants.Where(finding => !finding.IsOperatorTenant);
+
+    private static IEnumerable<MonitoringTenantSelectionFinding> OperatorFindings(
+        MonitoringTenantSelectionResult result) =>
+        result.Tenants.Where(finding => finding.IsOperatorTenant);
 
     [Fact]
     public void NoPartnerTenant_ExcludesNothing()
@@ -604,13 +757,13 @@ public class MonitoringReconciliationCasesTests
                     [],
                     []);
 
-        Assert.Equal(2, result.Tenants.Count);
+        Assert.Equal(2, Customers(result).Count());
         Assert.Equal(0, result.ExcludedTenantCount);
         Assert.Single(result.Notices);
     }
 
     [Fact]
-    public void OperatorMatchWithBusinessCentralIdentity_IsReviewedNotHidden()
+    public void OperatorMatchWithBusinessCentralIdentity_IsNotTreatedAsTheOperator()
     {
         var observations =
             new SmartSubscriptionEntitlementEvaluator([Entitled])
@@ -629,12 +782,15 @@ public class MonitoringReconciliationCasesTests
                     observations,
                     [new("BC-1", OwnTenant)]);
 
-        var finding = Assert.Single(result.Tenants);
+        var finding = Assert.Single(Customers(result));
 
         Assert.Equal(
             MonitoringTenantSelectionStatus.NeedsReview,
             finding.Status);
 
+        // With a Business Central identity it is judged like any
+        // customer, never silently included as the operator's own.
+        Assert.Empty(OperatorFindings(result));
         Assert.Empty(result.InventoryCandidates);
         Assert.Equal(0, result.ExcludedTenantCount);
         Assert.Single(result.Notices);

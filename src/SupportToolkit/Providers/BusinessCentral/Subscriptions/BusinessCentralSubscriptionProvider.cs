@@ -13,7 +13,8 @@ namespace SupportToolkit.Providers.BusinessCentral.Subscriptions;
 /// asks only for the DTO fields through $select.
 /// </summary>
 public sealed class BusinessCentralSubscriptionProvider
-    : IBusinessCentralSubscriptionProvider
+    : IBusinessCentralSubscriptionProvider,
+      IBusinessCentralCustomerNameProvider
 {
     private const string HeadersEntitySet =
         "smartSubscriptionHeaders";

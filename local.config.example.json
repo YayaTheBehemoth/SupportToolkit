@@ -18,6 +18,18 @@
           "operations": { "groupId": 222222 }
         }
       }
+    },
+    "businessCentral": {
+      "example-bc": {
+        "tenantId": "00000000-0000-0000-0000-000000000001",
+        "clientId": "00000000-0000-0000-0000-000000000002",
+        "environment": "example-environment",
+        "companyId": "00000000-0000-0000-0000-000000000003",
+        "companyName": "Example Company",
+        "apiPublisher": "example",
+        "apiGroup": "subscriptions",
+        "apiVersion": "v1.0"
+      }
     }
   },
   "profiles": {
@@ -37,6 +49,20 @@
     },
     "readonly-validation": {
       "acronisConnection": "example-production",
+      "modules": {
+        "backup-aggregator": "production",
+        "backup-health": "fixture"
+      }
+    },
+    "scoped-review": {
+      "acronisConnection": "example-production",
+      "businessCentralConnection": "example-bc",
+      "monitoringScope": {
+        "backup-aggregator": {
+          "monitoringItemNumber": "EXAMPLE-ADDON",
+          "serviceItemNumbers": ["EXAMPLE-BACKUP", "EXAMPLE-BACKUP-2"]
+        }
+      },
       "modules": {
         "backup-aggregator": "production",
         "backup-health": "fixture"

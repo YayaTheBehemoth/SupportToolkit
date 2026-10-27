@@ -32,6 +32,36 @@ public class CustomerMappingCandidateRankerTests
     }
 
     [Fact]
+    public async Task NameWithATypo_IsSuggestedAsNearExact()
+    {
+        var result =
+            await new CustomerMappingCandidateRanker(
+                new InMemoryCustomerMappingRepository())
+                .RankAsync(
+                    [new("t1", "Northwind Traders")],
+                    [new("BC-1", "Northwnd Traders ApS")]);
+
+        var suggestion = Assert.Single(result.Added);
+
+        Assert.Equal(0.4, suggestion.MatchScore);
+        Assert.Contains("NearExact", suggestion.Notes);
+    }
+
+    [Fact]
+    public async Task CustomersDifferingOnlyByNumber_AreNeverSuggested()
+    {
+        var result =
+            await new CustomerMappingCandidateRanker(
+                new InMemoryCustomerMappingRepository())
+                .RankAsync(
+                    [new("t1", "Hansen Byg 1")],
+                    [new("BC-2", "Hansen Byg 2")]);
+
+        Assert.Empty(result.Added);
+        Assert.Empty(result.Candidates);
+    }
+
+    [Fact]
     public async Task UniqueExactAfterNormalization_IsSuggested()
     {
         var result =

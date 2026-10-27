@@ -23,7 +23,7 @@ public sealed record LooseNameRankingResult(
 /// or Confirmed mapping, and Rejected pairs, are skipped, so a
 /// stronger key is never overridden. A Suggested record is written
 /// only when a pair is the unique best candidate for both sides at an
-/// Exact or Containment tier. Every other candidate, including every
+/// Exact, NearExact or Containment tier. Every other candidate, including every
 /// Overlap, is reported as an exception for a person to resolve.
 ///
 /// Nothing is confirmed here.
@@ -53,6 +53,7 @@ public sealed class CustomerMappingCandidateRanker
         return tier switch
         {
             LooseNameTier.Exact => 0.45,
+            LooseNameTier.NearExact => 0.4,
             LooseNameTier.Containment => 0.35,
             LooseNameTier.Overlap => 0.2,
             _ => throw new ArgumentOutOfRangeException(nameof(tier))
@@ -174,7 +175,9 @@ public sealed class CustomerMappingCandidateRanker
 
             if (unique
                 && candidate.Tier
-                    is LooseNameTier.Exact or LooseNameTier.Containment)
+                    is LooseNameTier.Exact
+                        or LooseNameTier.NearExact
+                        or LooseNameTier.Containment)
             {
                 var suggestion =
                     new CustomerMappingRecord(

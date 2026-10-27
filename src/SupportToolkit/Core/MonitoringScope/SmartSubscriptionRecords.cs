@@ -5,7 +5,7 @@ namespace SupportToolkit.Core.MonitoringScope;
 /// Normalized SMARTsubscription header evidence.
 ///
 /// Observed source:
-/// SMART Subscription Header, table 71581506.
+/// Subscription header record.
 ///
 /// The exact Business Central API representation is not known.
 ///
@@ -32,7 +32,7 @@ public sealed record SmartSubscriptionHeader(
 /// Normalized SMARTsubscription line evidence.
 ///
 /// Observed source:
-/// SMART Subscription Line, table 71581507.
+/// Subscription line record.
 ///
 /// SubscriptionNumber corresponds to the source field "Nr.".
 /// ItemNumber corresponds to the source field "Nummer".

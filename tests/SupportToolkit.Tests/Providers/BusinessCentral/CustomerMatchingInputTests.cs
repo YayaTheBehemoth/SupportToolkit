@@ -95,7 +95,7 @@ public class CustomerMatchingInputTests
     public async Task Report_PrintsCountsOnlyUnlessNamesAreRequested()
     {
         var bc =
-            new BusinessCentralCustomerParties(
+            new ScopedCustomerParties(
                 [new("BC-9", "Secret Corp")],
                 0,
                 0);
@@ -113,7 +113,7 @@ public class CustomerMatchingInputTests
         var hidden = new StringWriter();
 
         CustomerMatchingDevCommand.WriteReport(
-            hidden, [], bc, null, acronis, result, false);
+            hidden, [], bc, acronis, result, false);
 
         var text = hidden.ToString();
 
@@ -124,7 +124,7 @@ public class CustomerMatchingInputTests
         var shown = new StringWriter();
 
         CustomerMatchingDevCommand.WriteReport(
-            shown, [], bc, null, acronis, result, true);
+            shown, [], bc, acronis, result, true);
 
         Assert.Contains("\"Secret Corp\"", shown.ToString());
         Assert.Contains("BC BC-9", shown.ToString());
@@ -146,7 +146,7 @@ public class CustomerMatchingInputTests
                     AsOf);
 
         var bc =
-            new BusinessCentralCustomerParties(
+            new ScopedCustomerParties(
                 [
                     new("BC-ACTIVE", "Active Corp"),
                     new("BC-SUSPENDED", "Suspended Corp"),
@@ -166,7 +166,7 @@ public class CustomerMatchingInputTests
         var counts = new StringWriter();
 
         CustomerMatchingDevCommand.WriteReport(
-            counts, observations, bc, null, acronis, result, false);
+            counts, observations, bc, acronis, result, false);
 
         Assert.Contains(
             "BC customers with no candidate tenant: 2 (active 1, unclear 1)",
@@ -175,7 +175,7 @@ public class CustomerMatchingInputTests
         var worksheet = new StringWriter();
 
         CustomerMatchingDevCommand.WriteReport(
-            worksheet, observations, bc, null, acronis, result, true);
+            worksheet, observations, bc, acronis, result, true);
 
         var text = worksheet.ToString();
 
@@ -189,10 +189,11 @@ public class CustomerMatchingInputTests
     public async Task Report_StatesWhenTheNamesCouldNotBeRead()
     {
         var bc =
-            new BusinessCentralCustomerParties(
+            new ScopedCustomerParties(
                 [new("BC-1", null)],
                 1,
-                0);
+                0,
+                "Bad request.\nnewline");
 
         var acronis =
             new AcronisPartyBuild([], false, null);
@@ -204,7 +205,7 @@ public class CustomerMatchingInputTests
         var writer = new StringWriter();
 
         CustomerMatchingDevCommand.WriteReport(
-            writer, [], bc, "Bad request.\nnewline", acronis, result, false);
+            writer, [], bc, acronis, result, false);
 
         Assert.Contains("NAME READ FAILED", writer.ToString());
         Assert.DoesNotContain("\nnewline", writer.ToString());

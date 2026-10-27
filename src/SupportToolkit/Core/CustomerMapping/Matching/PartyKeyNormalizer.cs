@@ -184,9 +184,13 @@ public static class PartyKeyNormalizer
             return NormalizedKey.Empty;
         }
 
+        // Composed form first, so the same letter stored in two ways
+        // (a single "å" or "a" plus a separate ring) compares equal.
         var name =
             Whitespace.Replace(
-                value.Trim().ToLowerInvariant(),
+                value.Trim()
+                    .Normalize(System.Text.NormalizationForm.FormC)
+                    .ToLowerInvariant(),
                 " "
             );
 

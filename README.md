@@ -12,6 +12,7 @@ SupportToolkit currently includes:
 - **BackupAggregator** — Consolidated Acronis backup inventory reviews.
 - **BackupHealth** — Acronis backup health evaluation.
 - **Zendesk ticketing** — Ticket generation and submission from backup reviews.
+- **Monitoring scope** *(feature branch)* — Business Central subscription entitlement decides which Acronis tenants are reviewed.
 - **Configuration management** — Reusable provider connections, runtime profiles, and secure credential storage.
 - **Interactive CLI** — Menu-driven workflows alongside commands suitable for scripting.
 
@@ -75,8 +76,13 @@ Direct CLI commands are also available for scripting and development.
 | `backup-aggregator inventory-review <tenant> \| --all` | Consolidated Acronis inventory review. | Read-only in production mode. |
 | `backup-aggregator ticket preview` | Generate and display a Zendesk ticket draft. | None. |
 | `backup-aggregator ticket submit` | Create a Zendesk ticket from a completed review. | **Writes to Zendesk.** |
+| `backup-aggregator scoped-review` *(feature branch)* | Review only tenants entitled to monitoring in Business Central, plus the operator's own tenant. | Read-only Acronis and Business Central calls; interactive Business Central sign-in. |
+| `backup-aggregator ticket preview --scoped` / `ticket submit --scoped` *(feature branch)* | Ticket from a complete scoped review. | `submit` **writes to Zendesk.** |
 | `backup-health` | Acronis backup health evaluation. | Read-only in production mode. |
 | `dev acronis-tenants --production [--names]` | Tenant discovery diagnostics. | Read-only Acronis calls. |
+| `dev bc-subscriptions [--production]` *(feature branch)* | Business Central subscription evidence diagnostics. | Read-only; `--production` signs in interactively. |
+| `dev customer-matching --production [--names] [--why]` *(feature branch)* | Dry run of the automatic customer-to-tenant matching. | Read-only Acronis and Business Central calls. |
+| `dev monitoring-scope`, `dev customer-mapping` *(feature branch)* | Fixture-only scope and mapping walkthroughs. | None. |
 
 Run any module with `--help` for its own usage text. Exit codes are listed per command below.
 
@@ -234,23 +240,28 @@ Acronis can report a Microsoft 365 Team and its associated Group as separate res
 - A matching Group without that evidence is consolidated with its Team, and its health evidence is merged rather than hidden behind a healthy Team.
 - Failed or unknown evidence on a consolidated entry stays visible.
 
-This rule is deliberately narrow. It reflects discrepancies observed in real customer data and is covered by synthetic regression tests, but it does not establish that every Acronis resource shape has been exercised. It was last changed in `v0.2.4`.
+This rule is deliberately narrow. It reflects discrepancies observed in live Acronis data and is covered by synthetic regression tests, but it does not establish that every Acronis resource shape has been exercised. It was last changed in `v0.2.4`.
 
 Acronis inventory counts and the Acronis portal's "protected workloads" figure can legitimately differ, because BackupAggregator reports every inventoried resource.
 
 ### Monitoring scope (feature branch)
 
-`backup-aggregator scoped-review` reviews only Acronis tenants whose Business Central customer is entitled to monitoring.
+`backup-aggregator scoped-review` reviews only Acronis tenants whose Business Central customer is entitled to monitoring, plus the operator's own tenant, which is billed to no one and is always included. It is recognized through its partner-kind tenant, which Acronis does not allow the toolkit to review, so the matching customer-kind tenant is the one reviewed.
 
 **Entitlement rule:** a customer is entitled when it has an Active, unblocked subscription with a line for one of the configured entitling items. The add-on item alone is enough; the base backup item isn't required. An entitling item that appears only on Suspended subscriptions does not entitle. A confirmed customer that isn't entitled and isn't monitored is consistent, not an exception.
 
-The run prints a full scope report:
+Customers are matched to Acronis tenants automatically on every run, by name, with nothing stored. Unique strong matches are accepted automatically; ambiguous or conflicting ones are left unmatched. Customers that hold one of the configured service items (for backups, the backup items themselves) are matched too, so a tenant whose customer has the backup but not the monitoring add-on is decided as not entitled instead of staying unresolved.
+
+The run prints a scope report. The default view shows the summary, any notices and the tenants in scope this run; with `SUPPORTTOOLKIT_DEBUG=true` it lists every section:
 
 1. **Summary.** The Acronis customer tenants are split into in scope, excluded, needs scope review and unscoped, and those four counts add up to the total. The summary also gives entitled customers, discrepancies, ambiguous results and unscoped Business Central records.
 2. **In scope this run.** Each tenant reviewed, with its Business Central customer and the entitling subscription and item.
-3. **Excluded.** Each tenant left out, with the reason: the operator's own tenant, excluded by configuration, or not entitled.
+3. **Excluded.** Each tenant left out, with the reason: excluded by configuration, or not entitled.
 4. **Discrepancies.** These are only computed, never ticketed.
 5. **Exceptions.** Tenants needing scope review, Ambiguous and Unscoped results, and configuration notices.
+6. **Automatic mapping.** Accepted links by method, pending and ambiguous cases, and entitled customers that have no Acronis tenant.
+
+**Tickets.** `backup-aggregator ticket preview --scoped` and `ticket submit --scoped` (and the matching interactive menu entries) build the same ticket as a full review, with a scope line, from the scoped review. A ticket is produced only when the whole scoped review is complete: every tenant matched or decided, no scope or notice left open, and no failed tenant review. Otherwise the reasons are printed and nothing is drafted or sent.
 
 The report is deliberately naive. Every discrepancy it finds is reported on every run. It doesn't track which ones are already known, accepted or being fixed; that judgment stays with the operator.
 
@@ -264,10 +275,38 @@ Settings live per module under the profile's `monitoringScope` section. The valu
 "monitoringScope": {
   "backup-aggregator": {
     "monitoringItemNumbers": [ "EXAMPLE-ADDON" ],
+    "serviceItemNumbers": [ "EXAMPLE-BACKUP", "EXAMPLE-BACKUP-2" ],
     "excludedTenantIds": [ "00000000-0000-0000-0000-000000000001" ]
   }
 }
 ```
+
+`serviceItemNumbers` is optional. Without it only entitled customers are matched, and tenants of other customers stay unresolved. A customer that is entitled but holds no service item is flagged as an inconsistency.
+
+**Business Central connection.** Add it with `configure`, or in `connections.businessCentral`. It is a public client with delegated sign-in: no secret is stored and there are no environment overrides. The values below are fictional:
+
+```json
+"businessCentral": {
+  "example-bc": {
+    "tenantId": "00000000-0000-0000-0000-000000000001",
+    "clientId": "00000000-0000-0000-0000-000000000002",
+    "environment": "example-environment",
+    "companyId": "00000000-0000-0000-0000-000000000003",
+    "companyName": "Example Company",
+    "apiPublisher": "example",
+    "apiGroup": "subscriptions",
+    "apiVersion": "v1.0"
+  }
+}
+```
+
+`companyName` is optional. Reference the connection from a profile with `businessCentralConnection`. Because the token cache is in memory, each run asks you to sign in again. See `local.config.example.json` for a complete profile.
+
+**How names are matched.** Matching ignores case, accents and punctuation (so `Å` and `aa` are the same), apostrophes and invisible characters, and stray spaces. Long names may differ by one typo, and words may differ by a short ending (`Northwind Traders` against `Northwind Trader`). Numbers must match exactly. A name that contains the other plus extra words (`Northwind Traders` against `Northwind Traders Holding`) is a containment match. Exact, near-exact and containment matches are accepted only when unique; weak overlaps, ambiguity and key conflicts are never accepted.
+
+**Diagnostics.** `dev customer-matching --production` prints the matching result as counts. `--names` adds runtime names, and `--why` explains each unmatched tenant (for example `Northwind Traders` against `Northwind  Traders ApS`, differing by stray spacing and an extra word). Output is for local use and must not be pasted into public places.
+
+Interactive mode offers only the scoped review. The unmonitored all-tenant review remains available as a command. On exit, the session's sign-in is dropped, and you are told to sign in again next time.
 
 ---
 
@@ -673,7 +712,7 @@ The main menu provides:
 - Configuration wizard
 - Debug logging toggle
 
-The BackupAggregator menu supports full reviews, individual tenant reviews, ticket previews, and destination-aware ticket submission.
+The BackupAggregator menu offers the monitored review (the tenants Business Central entitles, plus the operator's own), ticket preview, and destination-aware ticket submission from that review. It needs a Business Central connection in the active profile, or fixture mode. The all-tenant review and its ticket are not in the menu; they remain available as `inventory-review` and `ticket preview` / `ticket submit` on the command line for development.
 
 Interactive and raw CLI operations share the same application workflows.
 
@@ -697,6 +736,9 @@ src/
     ├── Core/
     │   ├── Configuration/
     │   ├── Secrets/
+    │   ├── MonitoringScope/      (feature branch)
+    │   ├── CustomerMapping/      (feature branch; Matching/ inside)
+    │   ├── Reconciliation/       (feature branch)
     │   ├── Ticketing/
     │   ├── Logging/
     │   ├── ErrorHandling/
@@ -706,6 +748,7 @@ src/
     │   ├── BackupAggregator/
     │   │   ├── Fixtures/
     │   │   ├── Models/
+    │   │   ├── MonitoringScope/  (feature branch)
     │   │   ├── Reporting/
     │   │   ├── Services/
     │   │   └── Ticketing/
@@ -718,6 +761,7 @@ src/
     │
     └── Providers/
         ├── Acronis/
+        ├── BusinessCentral/      (feature branch)
         └── Zendesk/
 
 tests/
@@ -738,6 +782,8 @@ Providers handle integration with external systems.
 Acronis integrations are separated by responsibility, including tenant discovery, Microsoft 365 resources, devices, and backup health data.
 
 Zendesk implements the shared ticket-provider capability.
+
+Business Central (feature branch) supplies subscription evidence and customer names through neutral Core contracts, so any module can scope itself by entitlement with its own item numbers.
 
 ### Core
 
@@ -768,6 +814,10 @@ A configured connection alone does not authorize automatic ticket creation.
 Submission requires valid destination routing, and the interactive console additionally requests confirmation.
 
 Tickets are always attributed to explicitly configured submitter and requester user IDs, never implicitly to the OAuth token's identity.
+
+### Business Central (feature branch)
+
+Business Central is read-only. Its transport permits only GET requests to an allowlist of subscription and customer-name endpoints, on a pinned host, authority and scope. Sign-in is delegated and interactive on every run; the access token lives in memory only, and no secret is stored.
 
 ### Credentials
 
@@ -815,6 +865,10 @@ The automated tests cover areas including:
 - Profile and configuration behavior.
 - Logging and exception diagnostics.
 - Acronis transport restrictions.
+- Monitoring entitlement, scope completeness and operator-tenant handling *(feature branch)*.
+- Customer-to-tenant name matching, automatic mapping and reconciliation *(feature branch)*.
+- Scoped tickets and their completeness gate *(feature branch)*.
+- Business Central transport restrictions and customer-name reads *(feature branch)*.
 
 Synthetic integration tests and live vendor validation are distinct forms of evidence.
 
@@ -868,7 +922,7 @@ Releases are published as Windows x64 prereleases on the [GitHub Releases page](
 
 | Version | Tagged commit date | Summary | Why |
 |---|---|---|---|
-| `v0.2.4` | 2026-10-19 | Corrected Teams and SharePoint workload accounting in BackupAggregator. | Real customer comparisons showed Team-associated Groups with their own protected SITE workload being collapsed into the Team, undercounting resources. |
+| `v0.2.4` | 2026-10-19 | Corrected Teams and SharePoint workload accounting in BackupAggregator. | Comparisons against live data showed Team-associated Groups with their own protected SITE workload being collapsed into the Team, undercounting resources. |
 | `v0.2.3` | 2026-10-17 | Stabilization baseline: provider contract and pagination hardening, fail-closed ticketing and configuration behavior, read-only `dev acronis-tenants` diagnostics, retired `allowWrites`, redacted diagnostics, reorganized configuration code, consolidated tests. | Live Acronis observations and a review of failure paths showed that incomplete or contradictory data must never read as a clean result. |
 | `v0.2.2` | 2026-10-13 | Zendesk destination routing, Teams backing-group normalization, configuration and debug controls in the interactive console. | Tickets needed to reach an explicitly chosen group without duplicating credentials across profiles. |
 | `v0.2.1` | 2026-10-11 | Windows-compatible ZIP packaging with extraction and startup checks in the release workflow. | The first ZIP did not open cleanly with Windows Explorer. |
@@ -889,7 +943,7 @@ Two feature branches contain work that is **not** in `main` or in any release:
 | Branch | Contents | Evidence boundary |
 |---|---|---|
 | `feature/compliance-investigation` | A synthetic Intune and Microsoft Graph compliance module: exception-first device list, setting-level evidence, device investigation and a consolidated multi-tenant `compliance report`. | Uses synthetic fixtures. No live Graph authorization, tenant coverage or case lifecycle automation has been established. |
-| `feature/business-central-monitoring-scope` | Monitoring-entitlement assessment from Business Central subscription records, tenant selection and an opt-in `backup-aggregator scoped-review`. Includes fixture commands and a read-only Business Central provider with delegated sign-in. Also adds an owned Acronis tenant to Business Central customer mapping model (suggest, confirm, reject, retire), count-only candidate key profiling, and a four-bucket shadow reconciliation engine. Scoped reviews print a full scope report (summary, in scope, excluded, discrepancies, exceptions), shown by `dev customer-mapping` and `backup-aggregator scoped-review`. | Fixture behavior is tested. Production read access, entitlement rules, a Business Central customer source and mapping storage are unresolved. Acronis tenants supply name only, so suggestions are name-based. Reconciliation creates no tickets, and the default review and ticketing paths are unchanged. |
+| `feature/business-central-monitoring-scope` | Monitoring-entitlement assessment from Business Central subscription records, tenant selection and an opt-in `backup-aggregator scoped-review`. Includes fixture commands and a read-only Business Central provider with delegated sign-in. Also adds an owned Acronis tenant to Business Central customer mapping model (suggest, confirm, reject, retire), count-only candidate key profiling, and a four-bucket shadow reconciliation engine. Scoped reviews print a full scope report (summary, in scope, excluded, discrepancies, exceptions), shown by `dev customer-mapping` and `backup-aggregator scoped-review`. | Fixture behavior is tested. Business Central read access and customer names were checked with read-only developer commands, but the scoped review has not been validated end to end against production. Entitlement rules (which items entitle a customer) await business confirmation, and mapping storage is unresolved. Acronis tenants supply name only, so customers are matched to tenants by name on every run, with unique strong matches accepted automatically and ambiguous or conflicting cases left unmatched. Reconciliation creates no tickets, and the default review and ticketing paths are unchanged. |
 
 Synthetic fixtures do not prove real API contracts, authorization or completeness.
 

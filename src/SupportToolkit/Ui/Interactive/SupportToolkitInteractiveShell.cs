@@ -139,7 +139,11 @@ public sealed partial class SupportToolkitInteractiveShell
                     break;
 
                 case 6:
-                    Console.WriteLine("Goodbye.");
+                    Console.WriteLine(
+                        "Shutting down. All session data has been " +
+                        "wiped: sign-ins, reviews and ticket drafts " +
+                        "are not kept, so you will have to log in " +
+                        "again and redo everything next time.");
                     return 0;
             }
         }
@@ -188,33 +192,6 @@ public sealed partial class SupportToolkitInteractiveShell
                 DebugEnvironmentVariable),
             "true",
             StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string FormatReviewState(
-        AggregatedBackupReport? review)
-    {
-        if (review is null)
-        {
-            return "not run";
-        }
-
-        return
-            $"{review.TenantCount} tenant(s), " +
-            $"{review.FindingsCount} finding(s)";
-    }
-
-    private static void WriteFullReviewRequired()
-    {
-        Console.WriteLine(
-            "A full tenant review is required first.");
-
-        Console.WriteLine();
-
-        Console.WriteLine(
-            "Run 'Review all tenants' before previewing " +
-            "or submitting a ticket.");
-
-        Console.WriteLine();
     }
 
     private static void WriteCreatedTicket(

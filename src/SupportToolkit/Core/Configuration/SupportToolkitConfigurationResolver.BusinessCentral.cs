@@ -148,6 +148,27 @@ public sealed partial class SupportToolkitConfigurationResolver
         ];
     }
 
+    /// <summary>
+    /// Items that show a customer has the underlying service, besides
+    /// the entitling items. Empty when not configured.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> GetServiceItemNumbersAsync(
+        string moduleCommand,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(moduleCommand);
+
+        var settings =
+            await GetMonitoringScopeSettingsAsync(
+                moduleCommand,
+                cancellationToken);
+
+        return (settings?.ServiceItemNumbers ?? [])
+            .Where(number => !string.IsNullOrWhiteSpace(number))
+            .Select(number => number.Trim())
+            .ToArray();
+    }
+
     public async Task<IReadOnlySet<string>> GetExcludedTenantIdsAsync(
         string moduleCommand,
         CancellationToken cancellationToken = default)

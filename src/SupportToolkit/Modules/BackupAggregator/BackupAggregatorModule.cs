@@ -1,5 +1,6 @@
 
 using SupportToolkit.Core.Configuration;
+using SupportToolkit.Core.Logging;
 using SupportToolkit.Core.Modules;
 using SupportToolkit.Core.Ticketing.Models;
 using SupportToolkit.Core.Ticketing.Reporting;
@@ -42,6 +43,16 @@ public sealed class BackupAggregatorModule
         {
             PrintUsage();
             return 0;
+        }
+
+        if (IsScopedTicketCommand(args, "preview"))
+        {
+            return await RunScopedTicketAsync(submit: false);
+        }
+
+        if (IsScopedTicketCommand(args, "submit"))
+        {
+            return await RunScopedTicketAsync(submit: true);
         }
 
         if (IsTicketPreviewCommand(args))
@@ -126,7 +137,8 @@ public sealed class BackupAggregatorModule
             await _scopedWorkflow.ReviewAsync(
                 DateOnly.FromDateTime(DateTime.Today));
 
-        new ConsoleScopedReviewReporter()
+        new ConsoleScopedReviewReporter(
+                OperationalLogger.FromEnvironment().DebugEnabled)
             .Write(Console.Out, result);
 
         Console.WriteLine();
@@ -136,6 +148,68 @@ public sealed class BackupAggregatorModule
         return result.IsOverallComplete
             ? 0
             : 2;
+    }
+
+    /// <summary>
+    /// Ticket preview or submission for the scoped review.
+    ///
+    /// Only a complete review produces a ticket. An incomplete one
+    /// prints why and exits with code 2, without any draft and without
+    /// contacting Zendesk.
+    /// </summary>
+    private async Task<int> RunScopedTicketAsync(
+        bool submit)
+    {
+        if (_scopedWorkflow is null)
+        {
+            Console.Error.WriteLine(
+                "Scoped review is not available in this host.");
+
+            return 1;
+        }
+
+        var result =
+            await _scopedWorkflow.ReviewAsync(
+                DateOnly.FromDateTime(DateTime.Today));
+
+        var blockers =
+            result.TicketBlockers;
+
+        if (blockers.Count > 0)
+        {
+            new ConsoleScopedReviewReporter(
+                    OperationalLogger.FromEnvironment().DebugEnabled)
+                .Write(Console.Out, result);
+
+            Console.Error.WriteLine();
+
+            Console.Error.WriteLine(
+                submit
+                    ? "No ticket was submitted. The monitored review " +
+                      "is not complete:"
+                    : "No ticket draft was produced. The monitored " +
+                      "review is not complete:");
+
+            foreach (var blocker in blockers)
+            {
+                Console.Error.WriteLine($"  - {blocker}");
+            }
+
+            return 2;
+        }
+
+        if (!submit)
+        {
+            WriteTicketPreview(
+                _workflow.CreateScopedTicketDraft(result));
+
+            return 0;
+        }
+
+        WriteCreatedTicket(
+            await _workflow.SubmitScopedTicketAsync(result));
+
+        return 0;
     }
 
     private async Task<int> RunTicketPreviewAsync()
@@ -208,6 +282,25 @@ public sealed class BackupAggregatorModule
                 StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsScopedTicketCommand(
+        string[] args,
+        string action)
+    {
+        return args.Length == 3
+            && string.Equals(
+                args[0],
+                "ticket",
+                StringComparison.OrdinalIgnoreCase)
+            && string.Equals(
+                args[1],
+                action,
+                StringComparison.OrdinalIgnoreCase)
+            && string.Equals(
+                args[2],
+                "--scoped",
+                StringComparison.OrdinalIgnoreCase);
+    }
+
     private static bool IsTicketPreviewCommand(
         string[] args)
     {
@@ -269,8 +362,15 @@ public sealed class BackupAggregatorModule
             "  SupportToolkit backup-aggregator scoped-review");
 
         Console.WriteLine(
+            "  SupportToolkit backup-aggregator ticket preview --scoped");
+
+        Console.WriteLine(
+            "  SupportToolkit backup-aggregator ticket submit --scoped");
+
+        Console.WriteLine(
             "Reviews only tenants the monitoring scope selects. " +
-            "Does not replace inventory-review and cannot create tickets.");
+            "Does not replace inventory-review. A ticket is produced " +
+            "only when the whole scoped review is complete.");
 
         Console.WriteLine();
 

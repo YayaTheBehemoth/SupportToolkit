@@ -41,35 +41,6 @@ public class BackupAggregatorScopedWorkflowTests
     }
 
     [Fact]
-    public async Task ProductionMode_FailsClosedBeforeAnyExternalActivity()
-    {
-        var evidenceCalls = 0;
-        var runtimeCalls = 0;
-
-        var workflow =
-            new BackupAggregatorScopedWorkflow(
-                Resolver(ProductionConfiguration()),
-                evidenceSourceFactory: _ =>
-                {
-                    evidenceCalls++;
-                    throw new InvalidOperationException("must not run");
-                },
-                inventoryRuntimeFactory: _ =>
-                {
-                    runtimeCalls++;
-                    throw new InvalidOperationException("must not run");
-                });
-
-        var exception =
-            await Assert.ThrowsAsync<InvalidOperationException>(
-                () => workflow.ReviewAsync(Today));
-
-        Assert.Contains("No production source", exception.Message);
-        Assert.Equal(0, evidenceCalls);
-        Assert.Equal(0, runtimeCalls);
-    }
-
-    [Fact]
     public async Task ProductionMode_UsesConfiguredItemNumber_AndDisposesRuntime()
     {
         var lifetime = new TrackingLifetime();
@@ -198,8 +169,12 @@ public class BackupAggregatorScopedWorkflowTests
             Assert.Equal(0, exit);
             Assert.Contains("MONITORING SCOPE REPORT", scoped);
             Assert.Contains("IN SCOPE THIS RUN (3)", scoped);
-            Assert.Contains("EXCLUDED (2)", scoped);
             Assert.Contains("Monitoring scope complete:   YES", scoped);
+
+            // The default view stays quiet: details need debug mode.
+            Assert.DoesNotContain("EXCLUDED (", scoped);
+            Assert.DoesNotContain("EXCEPTIONS", scoped);
+            Assert.Contains("SUPPORTTOOLKIT_DEBUG=true", scoped);
 
             // The default fixture shortcut is unchanged by the feature.
             writer.GetStringBuilder().Clear();
@@ -212,6 +187,71 @@ public class BackupAggregatorScopedWorkflowTests
         finally
         {
             Console.SetOut(original);
+        }
+    }
+
+    [Fact]
+    public async Task Module_ScopedTicketPreview_UsesTheCompleteScopedReview()
+    {
+        var resolver = Resolver(new SupportToolkitConfiguration());
+
+        var module =
+            new BackupAggregatorModule(
+                new BackupAggregatorWorkflow(resolver),
+                new BackupAggregatorScopedWorkflow(resolver));
+
+        var original = Console.Out;
+
+        try
+        {
+            using var writer = new StringWriter();
+            Console.SetOut(writer);
+
+            var exit =
+                await module.RunAsync(["ticket", "preview", "--scoped"]);
+
+            var text = writer.ToString();
+
+            Assert.Equal(0, exit);
+            Assert.Contains("SUPPORTTOOLKIT // BACKUP REVIEW", text);
+            Assert.Contains("SCOPE", text);
+            Assert.Contains("Monitored tenants only:", text);
+        }
+        finally
+        {
+            Console.SetOut(original);
+        }
+    }
+
+    [Fact]
+    public async Task Module_WithoutScopedWorkflow_RejectsScopedTicketCommands()
+    {
+        var resolver = Resolver(new SupportToolkitConfiguration());
+
+        var module =
+            new BackupAggregatorModule(
+                new BackupAggregatorWorkflow(resolver));
+
+        var originalError = Console.Error;
+
+        try
+        {
+            using var error = new StringWriter();
+            Console.SetError(error);
+
+            Assert.Equal(
+                1,
+                await module.RunAsync(["ticket", "preview", "--scoped"]));
+
+            Assert.Equal(
+                1,
+                await module.RunAsync(["ticket", "submit", "--scoped"]));
+
+            Assert.Contains("not available", error.ToString());
+        }
+        finally
+        {
+            Console.SetError(originalError);
         }
     }
 
@@ -265,7 +305,10 @@ public class BackupAggregatorScopedWorkflowTests
         var text = writer.ToString();
 
         Assert.Contains("Monitoring scope complete:   NO", text);
-        Assert.Contains("no ticket can be created", text);
+        Assert.Contains(
+            "a ticket can be created only when the overall review is " +
+            "complete",
+            text);
         Assert.Contains("UNRESOLVED SCOPE", text);
     }
 

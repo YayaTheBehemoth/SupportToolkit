@@ -6,36 +6,17 @@ namespace SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 /// Supplies resolved relationships between Business Central customers
 /// and Acronis tenants.
 ///
-/// How these relationships are discovered is an open problem. No
-/// name-based inference is performed anywhere.
+/// An explicitly supplied source decides identities on its own, which
+/// fixtures and tests use. Without one, the scoped review resolves
+/// identities itself on every run from Business Central customers and
+/// Acronis tenants (AutoCustomerMappingResolver), so production needs
+/// no source.
 /// </summary>
 public interface IMonitoringIdentitySource
 {
     Task<IReadOnlyList<ResolvedMonitoringCustomerIdentity>>
         GetIdentitiesAsync(
             CancellationToken cancellationToken = default);
-}
-
-/// <summary>
-/// Production placeholder until a reliable identity source exists.
-///
-/// Fails closed before any sign-in or API request, rather than
-/// scoping a review with unresolved identities.
-/// </summary>
-public sealed class UnavailableMonitoringIdentitySource
-    : IMonitoringIdentitySource
-{
-    public Task<IReadOnlyList<ResolvedMonitoringCustomerIdentity>>
-        GetIdentitiesAsync(
-            CancellationToken cancellationToken = default)
-    {
-        throw new InvalidOperationException(
-            "No production source is configured for Business Central " +
-            "customer to Acronis tenant identities, so a scoped " +
-            "review cannot be produced. The unscoped inventory " +
-            "review is unchanged."
-        );
-    }
 }
 
 /// <summary>

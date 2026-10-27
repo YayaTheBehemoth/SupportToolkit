@@ -13,9 +13,16 @@ namespace SupportToolkit.Modules.BackupAggregator.Reporting;
 /// </summary>
 public sealed class ConsoleMonitoringScopeReporter
 {
+    /// <summary>
+    /// Writes the report. The default view is the header, the summary,
+    /// any notices and the tenants in scope this run. With detailed
+    /// set, the automatic mappings, excluded tenants, discrepancies and
+    /// exceptions follow; the summary counts say whether any exist.
+    /// </summary>
     public void Write(
         TextWriter output,
-        MonitoringScopeReport report)
+        MonitoringScopeReport report,
+        bool detailed = true)
     {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(report);
@@ -31,10 +38,48 @@ public sealed class ConsoleMonitoringScopeReporter
                 : string.Join(", ", report.EntitlingItems)));
 
         WriteSummary(output, report);
+
+        if (!detailed)
+        {
+            // Warnings about the run itself are never hidden.
+            foreach (var notice in report.Notices)
+            {
+                output.WriteLine($"Notice: {notice}");
+            }
+
+            WriteInScope(output, report);
+
+            if (HasHiddenDetail(report))
+            {
+                output.WriteLine();
+                output.WriteLine(
+                    "More detail (automatic mappings, excluded tenants, " +
+                    "discrepancies, exceptions) is shown when " +
+                    "SUPPORTTOOLKIT_DEBUG=true.");
+            }
+
+            return;
+        }
+
+        WriteAutomaticMappings(output, report);
         WriteInScope(output, report);
         WriteExcluded(output, report);
         WriteDiscrepancies(output, report);
         WriteExceptions(output, report);
+    }
+
+    private static bool HasHiddenDetail(
+        MonitoringScopeReport report)
+    {
+        var mappings = report.AutomaticMappings;
+
+        return report.Excluded.Count > 0
+            || report.NeedsReview.Count > 0
+            || report.UnscopedTenants.Count > 0
+            || report.Discrepancies.Count > 0
+            || report.Ambiguous.Count > 0
+            || report.UnscopedRecords.Count > 0
+            || mappings is not null;
     }
 
     private static void WriteSummary(
@@ -44,7 +89,7 @@ public sealed class ConsoleMonitoringScopeReporter
         Heading(output, "SUMMARY");
 
         output.WriteLine(
-            $"Acronis customer tenants:  {report.AcronisCustomerTenants}");
+            $"Acronis tenants:           {report.AcronisCustomerTenants}");
         output.WriteLine(
             $"  In scope this run:       {report.InScope.Count}");
         output.WriteLine(
@@ -79,6 +124,78 @@ public sealed class ConsoleMonitoringScopeReporter
         }
     }
 
+    private static void WriteAutomaticMappings(
+        TextWriter output,
+        MonitoringScopeReport report)
+    {
+        var mappings = report.AutomaticMappings;
+
+        if (mappings is null)
+        {
+            return;
+        }
+
+        Heading(output, "AUTOMATIC MAPPING (recomputed every run)");
+
+        output.WriteLine(
+            $"Accepted automatically:    {mappings.Accepted}");
+
+        foreach (var method in mappings.AcceptedByMethod
+            .OrderBy(pair => pair.Key))
+        {
+            output.WriteLine(
+                $"  by {method.Key}: {method.Value}");
+        }
+
+        output.WriteLine(
+            $"Pending review:            {mappings.PendingReview}");
+        output.WriteLine(
+            $"Ambiguous or conflicting:  {mappings.Exceptions}");
+
+        if (mappings.NameFailure is not null)
+        {
+            output.WriteLine(
+                "BC customer names could not be read, so no name match " +
+                $"was possible: {mappings.NameFailure}");
+        }
+        else if (mappings.CustomersWithoutName > 0
+            || mappings.CustomersWithConflictingNames > 0)
+        {
+            output.WriteLine(
+                $"BC customers without a usable name: " +
+                $"{mappings.CustomersWithoutName} " +
+                $"(conflicting names: {mappings.CustomersWithConflictingNames})");
+        }
+
+        output.WriteLine(
+            "BC customers with no Acronis tenant (suspended or blocked " +
+            "ones are ignored): " +
+            mappings.CustomersWithoutTenant.Count);
+
+        foreach (var gap in mappings.CustomersWithoutTenant
+            .OrderBy(gap => gap.CustomerNumber, StringComparer.OrdinalIgnoreCase))
+        {
+            output.WriteLine(
+                $"  {gap.CustomerNumber} | " +
+                $"{gap.CustomerName ?? "<no name>"} | {gap.State}");
+        }
+
+        if (mappings.EntitledWithoutServiceItem.Count > 0)
+        {
+            output.WriteLine(
+                "Entitled customers without any service item " +
+                "(the add-on implies one): " +
+                mappings.EntitledWithoutServiceItem.Count);
+
+            foreach (var customer in mappings.EntitledWithoutServiceItem)
+            {
+                output.WriteLine(
+                    $"  {customer.CustomerNumber} | " +
+                    $"{customer.CustomerName ?? "<no name>"}");
+            }
+        }
+    }
+
     private static void WriteInScope(
         TextWriter output,
         MonitoringScopeReport report)
@@ -94,6 +211,15 @@ public sealed class ConsoleMonitoringScopeReporter
         foreach (var tenant in report.InScope
             .OrderBy(tenant => tenant.TenantName, StringComparer.OrdinalIgnoreCase))
         {
+            if (tenant.IsOperatorTenant)
+            {
+                output.WriteLine(
+                    $"  {tenant.TenantName} | " +
+                    "operator's own tenant (not billed, always included)");
+
+                continue;
+            }
+
             var entitling =
                 string.Join(
                     ", ",

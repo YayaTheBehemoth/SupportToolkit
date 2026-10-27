@@ -49,6 +49,13 @@ public sealed record MonitoringTenantSelectionFinding(
     public string? CustomerNumber { get; init; }
 
     /// <summary>
+    /// True for the operator's own customer-kind tenant. It is billed
+    /// to no one, so it is always included instead of being decided
+    /// by a Business Central entitlement.
+    /// </summary>
+    public bool IsOperatorTenant { get; init; }
+
+    /// <summary>
     /// What put an inventory candidate in scope. Empty otherwise.
     /// </summary>
     public IReadOnlyList<EntitlingSubscription> EntitlingSubscriptions
@@ -60,11 +67,6 @@ public sealed record MonitoringTenantSelectionFinding(
 
 public enum MonitoringTenantExclusionReason
 {
-    /// <summary>
-    /// Detected as the operator's own company.
-    /// </summary>
-    OperatorTenant,
-
     /// <summary>
     /// Listed in the profile's excluded tenant IDs.
     /// </summary>
@@ -185,6 +187,12 @@ public sealed class MonitoringTenantSelector
         var ownId =
             detection.TenantId;
 
+        // The operator's own customer-kind tenant, monitored but
+        // billed to no one. Null when none is recognized, when it has
+        // a Business Central identity, or when it is excluded by
+        // configuration, which always wins.
+        string? operatorTenantId = null;
+
         var ownTenantReviewed = false;
 
         if (detection.Notice is not null)
@@ -205,16 +213,17 @@ public sealed class MonitoringTenantSelector
             {
                 // Our own company should have no Business Central
                 // customer; a link means the detection is probably
-                // wrong. The tenant is kept and reviewed, never hidden.
+                // wrong. The tenant is then judged like any customer.
                 ownTenantReviewed = true;
 
                 notices.Add(
                     "The tenant matching the partner name has a " +
-                    "Business Central identity and was not excluded.");
+                    "Business Central identity, so it was not treated " +
+                    "as the operator's own.");
             }
-            else
+            else if (!configuredExclusions.Contains(ownId))
             {
-                excluded.Add(ownId);
+                operatorTenantId = ownId;
             }
         }
 
@@ -222,6 +231,11 @@ public sealed class MonitoringTenantSelector
             acronisTenants
                 .Where(
                     tenant => !excluded.Contains(tenant.Id?.Trim() ?? string.Empty))
+                .Where(
+                    tenant => !string.Equals(
+                        tenant.Id?.Trim(),
+                        operatorTenantId,
+                        StringComparison.OrdinalIgnoreCase))
                 .Where(
                     tenant =>
                         string.Equals(
@@ -470,6 +484,46 @@ public sealed class MonitoringTenantSelector
         }
 
         /*
+         * The operator's own company is monitored too but billed to no
+         * one, so it has no Business Central entitlement and is always
+         * included. Its customer-kind tenant is the one reviewed: the
+         * partner tenant is not reviewable and only identifies it. A
+         * configured exclusion still wins.
+         */
+        var operatorTenant =
+            operatorTenantId is null
+                ? null
+                : acronisTenants.FirstOrDefault(
+                    tenant => string.Equals(
+                            tenant.Id?.Trim(),
+                            operatorTenantId,
+                            StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(
+                            tenant.Kind,
+                            "customer",
+                            StringComparison.OrdinalIgnoreCase));
+
+        if (operatorTenant is not null)
+        {
+            findings.Add(
+                Guid.TryParse(operatorTenant.Id, out _)
+                    ? new MonitoringTenantSelectionFinding(
+                        operatorTenant,
+                        MonitoringTenantSelectionStatus.CandidateForInventory,
+                        "Operator's own tenant; not billed, so it is " +
+                        "always included."
+                    )
+                    {
+                        IsOperatorTenant = true
+                    }
+                    : Review(
+                        operatorTenant,
+                        "Operator's own tenant has no valid UUID."
+                    )
+            );
+        }
+
+        /*
          * An entitlement observation without a resolved relationship
          * to an existing Acronis customer tenant must remain visible.
          *
@@ -509,6 +563,12 @@ public sealed class MonitoringTenantSelector
                     StringComparer.OrdinalIgnoreCase
                 );
 
+        // A customer whose subscriptions are all suspended or blocked
+        // has no service to monitor, so having no tenant is expected
+        // and is not unmatched evidence.
+        var customerStates =
+            CustomerEntitlementActivity.Classify(observations);
+
         var unmatchedEvidence =
             observations
                 .Where(
@@ -516,14 +576,15 @@ public sealed class MonitoringTenantSelector
                         string.IsNullOrWhiteSpace(
                             observation.CustomerNumber
                         )
-                        || !linkedCustomerNumbers.Contains(
-                            observation.CustomerNumber.Trim()
-                        )
+                        || (!linkedCustomerNumbers.Contains(
+                                observation.CustomerNumber.Trim())
+                            && customerStates[
+                                observation.CustomerNumber.Trim()]
+                                != CustomerEntitlementState.Inactive)
                 )
                 .ToArray();
 
-        // An explicit configuration entry takes precedence over the
-        // detected operator tenant as the stated reason.
+        // Only tenants excluded by configuration are left out.
         var excludedTenants =
             acronisTenants
                 .Where(
@@ -540,10 +601,7 @@ public sealed class MonitoringTenantSelector
                     tenant =>
                         new ExcludedMonitoringTenant(
                             tenant,
-                            configuredExclusions.Contains(
-                                tenant.Id?.Trim() ?? string.Empty)
-                                ? MonitoringTenantExclusionReason.Configured
-                                : MonitoringTenantExclusionReason.OperatorTenant))
+                            MonitoringTenantExclusionReason.Configured))
                 .ToArray();
 
         return new MonitoringTenantSelectionResult(

@@ -1,33 +1,21 @@
 using SupportToolkit.Core.CustomerMapping.Matching;
+using SupportToolkit.Core.MonitoringScope;
 using SupportToolkit.Providers.BusinessCentral.Subscriptions.Dtos;
 
 namespace SupportToolkit.Providers.BusinessCentral.Subscriptions;
 
 /// <summary>
-/// Matching evidence for the Business Central side, plus counts that
-/// say how trustworthy it is.
-/// </summary>
-public sealed record BusinessCentralCustomerParties(
-    IReadOnlyList<CustomerParty> Parties,
-    int CustomersWithoutName,
-    int CustomersWithConflictingNames)
-{
-    public int CustomersWithName =>
-        Parties.Count - CustomersWithoutName;
-}
-
-/// <summary>
 /// Builds customer parties from the customer name carried on
 /// subscription header rows.
 ///
-/// The customer number is the party id and also its account number.
-/// A customer whose rows report different names keeps no name: an
-/// unresolved conflict is never turned into one guess. Names that
-/// differ only in case or spacing count as the same name.
+/// The customer number is the party id. A customer whose rows report
+/// different names keeps no name: an unresolved conflict is never
+/// turned into one guess. Names that differ only in case or spacing
+/// count as the same name.
 /// </summary>
 public static class BusinessCentralCustomerPartyMapper
 {
-    public static BusinessCentralCustomerParties Map(
+    public static ScopedCustomerParties Map(
         IEnumerable<string> customerNumbers,
         IReadOnlyList<BusinessCentralHeaderCustomerNameDto?> headerRows)
     {
@@ -96,7 +84,7 @@ public static class BusinessCentralCustomerPartyMapper
                     name));
         }
 
-        return new BusinessCentralCustomerParties(
+        return new ScopedCustomerParties(
             parties,
             withoutName,
             conflicting);

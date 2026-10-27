@@ -117,6 +117,18 @@ public sealed class ModuleMonitoringScopeConfiguration
         [];
 
     /// <summary>
+    /// Item numbers that show a customer has the underlying service
+    /// this module watches (for backups: the backup items themselves),
+    /// with or without the monitoring entitlement. A customer holding
+    /// one is a known customer of the service, so its tenant can be
+    /// matched and decided as not entitled instead of staying
+    /// unresolved. The entitling items count as service items too.
+    /// Optional; empty means only entitled customers are matched.
+    /// </summary>
+    public List<string> ServiceItemNumbers { get; set; } =
+        [];
+
+    /// <summary>
     /// Acronis tenant IDs that are never reconciled, such as the
     /// operator's own tenant.
     /// </summary>

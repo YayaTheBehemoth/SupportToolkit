@@ -26,3 +26,15 @@ public interface IBusinessCentralSubscriptionProvider
         CancellationToken cancellationToken = default
     );
 }
+
+/// <summary>
+/// Customer names carried on subscription header rows. A separate
+/// contract from the subscription data so that a renamed or missing
+/// name column fails this read alone.
+/// </summary>
+public interface IBusinessCentralCustomerNameProvider
+{
+    Task<IReadOnlyList<BusinessCentralHeaderCustomerNameDto?>>
+        GetHeaderCustomerNamesAsync(
+            CancellationToken cancellationToken = default);
+}

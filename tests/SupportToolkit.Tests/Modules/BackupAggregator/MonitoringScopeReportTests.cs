@@ -28,11 +28,11 @@ public class MonitoringScopeReportTests
     private static readonly DateOnly AsOf = new(2026, 10, 15);
 
     [Fact]
-    public void Selection_ListsExcludedTenantsWithReasons()
+    public void Selection_ListsOnlyConfiguredExclusions_AndKeepsTheOperatorIn()
     {
         var selection = Select();
 
-        Assert.Equal(2, selection.ExcludedTenantCount);
+        Assert.Equal(1, selection.ExcludedTenantCount);
 
         Assert.Contains(
             selection.ExcludedTenants,
@@ -40,21 +40,27 @@ public class MonitoringScopeReportTests
                 excluded.Tenant.Id == ConfiguredId
                 && excluded.Reason == MonitoringTenantExclusionReason.Configured);
 
-        Assert.Contains(
+        // The operator's own tenant is in scope, never excluded.
+        Assert.DoesNotContain(
             selection.ExcludedTenants,
-            excluded =>
-                excluded.Tenant.Id == OperatorId
-                && excluded.Reason == MonitoringTenantExclusionReason.OperatorTenant);
+            excluded => excluded.Tenant.Id == OperatorId);
+
+        Assert.Contains(
+            selection.InventoryCandidates,
+            tenant => tenant.Id == OperatorId);
     }
 
     [Fact]
-    public void Report_PartitionsEveryCustomerTenantExactlyOnce()
+    public void Report_PartitionsEveryTenantExactlyOnce()
     {
         var report = Build();
 
+        // Six customer-kind tenants, one of them the operator's own.
+        // The partner tenant only identifies it and is not reported.
         Assert.Equal(6, report.AcronisCustomerTenants);
-        Assert.Single(report.InScope);
-        Assert.Equal(3, report.Excluded.Count);
+        Assert.Equal(2, report.InScope.Count);
+        Assert.Single(report.InScope, tenant => tenant.IsOperatorTenant);
+        Assert.Equal(2, report.Excluded.Count);
         Assert.Single(report.NeedsReview);
         Assert.Single(report.UnscopedTenants);
 
@@ -71,7 +77,10 @@ public class MonitoringScopeReportTests
     [Fact]
     public void InScopeTenant_NamesCustomerAndEntitlingSubscription()
     {
-        var tenant = Assert.Single(Build().InScope);
+        var tenant =
+            Assert.Single(
+                Build().InScope,
+                inScope => !inScope.IsOperatorTenant);
 
         Assert.Equal("In Scope Co", tenant.TenantName);
         Assert.Equal("BC-IN", tenant.CustomerNumber);
@@ -79,6 +88,20 @@ public class MonitoringScopeReportTests
         Assert.Equal(
             new EntitlingSubscription("SUB-IN", Item),
             Assert.Single(tenant.EntitlingSubscriptions));
+    }
+
+    [Fact]
+    public void OperatorsOwnTenant_IsAlwaysInScopeWithoutAnyCustomer()
+    {
+        var tenant =
+            Assert.Single(
+                Build().InScope,
+                inScope => inScope.IsOperatorTenant);
+
+        Assert.Equal("Operator Co", tenant.TenantName);
+        Assert.Equal(OperatorId, tenant.TenantId);
+        Assert.Null(tenant.CustomerNumber);
+        Assert.Empty(tenant.EntitlingSubscriptions);
     }
 
     [Fact]
@@ -114,15 +137,15 @@ public class MonitoringScopeReportTests
         var output = writer.ToString();
 
         Assert.Contains("Entitling items: ADD-ON", output);
-        Assert.Contains("Acronis customer tenants:  6", output);
-        Assert.Contains("  In scope this run:       1", output);
-        Assert.Contains("  Excluded:                3", output);
+        Assert.Contains("Acronis tenants:           6", output);
+        Assert.Contains("  In scope this run:       2", output);
+        Assert.Contains("  Excluded:                2", output);
         Assert.Contains("Entitled BC customers:     1", output);
         Assert.Contains("Discrepancies (open):      2", output);
         Assert.Contains("monitored without entitlement", output);
 
         Assert.Contains("  In Scope Co | BC-IN | SUB-IN (ADD-ON)", output);
-        Assert.Contains("  Operator Co | Operator's own tenant.", output);
+        Assert.Contains("  Operator Co | operator's own tenant (not billed, always included)", output);
         Assert.Contains("  Configured Co | Excluded by configuration.", output);
 
         Assert.Contains(
@@ -137,6 +160,107 @@ public class MonitoringScopeReportTests
 
         Assert.Contains("  Needs scope review | Review Co |", output);
         Assert.Contains("  Unscoped tenant | Unmapped Co |", output);
+    }
+
+    [Fact]
+    public void QuietView_ShowsHeaderSummaryAndInScopeOnly()
+    {
+        using var writer =
+            new StringWriter(CultureInfo.InvariantCulture);
+
+        new ConsoleMonitoringScopeReporter()
+            .Write(writer, Build(), detailed: false);
+
+        var output = writer.ToString();
+
+        Assert.Contains("MONITORING SCOPE REPORT", output);
+        Assert.Contains("As of: ", output);
+        Assert.Contains("SUMMARY", output);
+        Assert.Contains("Discrepancies (open):      2", output);
+        Assert.Contains("IN SCOPE THIS RUN (2)", output);
+        Assert.Contains("  In Scope Co | BC-IN | SUB-IN (ADD-ON)", output);
+
+        Assert.DoesNotContain("EXCLUDED (", output);
+        Assert.DoesNotContain("DISCREPANCIES (", output);
+        Assert.DoesNotContain("EXCEPTIONS", output);
+        Assert.DoesNotContain("AUTOMATIC MAPPING", output);
+        Assert.DoesNotContain("Excluded by configuration", output);
+        Assert.Contains("SUPPORTTOOLKIT_DEBUG=true", output);
+    }
+
+    [Fact]
+    public void QuietView_NeverHidesNotices()
+    {
+        var report =
+            Build() with
+            {
+                Notices = ["Business Central customer names could not be read."]
+            };
+
+        using var writer =
+            new StringWriter(CultureInfo.InvariantCulture);
+
+        new ConsoleMonitoringScopeReporter()
+            .Write(writer, report, detailed: false);
+
+        Assert.Contains(
+            "Notice: Business Central customer names could not be read.",
+            writer.ToString());
+    }
+
+    [Fact]
+    public void QuietView_OmitsTheHintWhenThereIsNothingHidden()
+    {
+        var report =
+            Build() with
+            {
+                Excluded = [],
+                NeedsReview = [],
+                UnscopedTenants = [],
+                Discrepancies = [],
+                Ambiguous = [],
+                UnscopedRecords = []
+            };
+
+        using var writer =
+            new StringWriter(CultureInfo.InvariantCulture);
+
+        new ConsoleMonitoringScopeReporter()
+            .Write(writer, report, detailed: false);
+
+        Assert.DoesNotContain("SUPPORTTOOLKIT_DEBUG", writer.ToString());
+    }
+
+    [Fact]
+    public void DetailedView_IncludesTheAutomaticMappingSection()
+    {
+        var report =
+            Build() with
+            {
+                AutomaticMappings =
+                    new AutomaticMappingSummary(
+                        new Dictionary<CustomerMatchMethod, int>
+                        {
+                            [CustomerMatchMethod.LooseName] = 2
+                        },
+                        1,
+                        0,
+                        [new ScopeCustomerGap("BC-9", "Gap Co", CustomerEntitlementState.Active)],
+                        0,
+                        0,
+                        null)
+            };
+
+        using var writer =
+            new StringWriter(CultureInfo.InvariantCulture);
+
+        new ConsoleMonitoringScopeReporter().Write(writer, report);
+
+        var output = writer.ToString();
+
+        Assert.Contains("AUTOMATIC MAPPING", output);
+        Assert.Contains("  by LooseName: 2", output);
+        Assert.Contains("  BC-9 | Gap Co | Active", output);
     }
 
     [Fact]

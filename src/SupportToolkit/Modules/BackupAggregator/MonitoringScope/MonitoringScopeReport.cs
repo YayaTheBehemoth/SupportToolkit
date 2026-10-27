@@ -1,3 +1,4 @@
+using SupportToolkit.Core.CustomerMapping;
 using SupportToolkit.Core.MonitoringScope;
 using SupportToolkit.Core.Reconciliation;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
@@ -6,7 +7,6 @@ namespace SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 
 public enum ScopeExclusionReason
 {
-    OperatorTenant,
     Configured,
     NotEntitled
 }
@@ -18,7 +18,8 @@ public sealed record InScopeTenant(
     string TenantName,
     string TenantId,
     string? CustomerNumber,
-    IReadOnlyList<EntitlingSubscription> EntitlingSubscriptions
+    IReadOnlyList<EntitlingSubscription> EntitlingSubscriptions,
+    bool IsOperatorTenant = false
 );
 
 /// <summary>
@@ -75,6 +76,47 @@ public sealed record ScopeException(
 ///
 /// Tenant names are runtime data and appear only in runtime output.
 /// </summary>
+/// <summary>
+/// A Business Central customer that no Acronis tenant maps to. State
+/// is Active or NeedsReview: customers whose subscriptions are all
+/// suspended or blocked are not gaps and never appear here.
+/// </summary>
+public sealed record ScopeCustomerGap(
+    string CustomerNumber,
+    string? CustomerName,
+    CustomerEntitlementState State);
+
+/// <summary>
+/// What the automatic customer-to-tenant resolution decided this run.
+///
+/// Accepted links are recomputed every run and never stored. Pending
+/// suggestions and exceptions are the cases left for a person.
+/// </summary>
+public sealed record AutomaticMappingSummary(
+    IReadOnlyDictionary<CustomerMatchMethod, int> AcceptedByMethod,
+    int PendingReview,
+    int Exceptions,
+    IReadOnlyList<ScopeCustomerGap> CustomersWithoutTenant,
+    int CustomersWithoutName,
+    int CustomersWithConflictingNames,
+    string? NameFailure)
+{
+    public int Accepted =>
+        AcceptedByMethod.Values.Sum();
+
+    /// <summary>
+    /// Entitled customers that hold none of the configured service
+    /// items. The monitoring add-on implies the service itself, so
+    /// each is a data inconsistency worth a look. Empty when no
+    /// service items are configured.
+    /// </summary>
+    public IReadOnlyList<ScopeCustomerGap> EntitledWithoutServiceItem
+    {
+        get;
+        init;
+    } = [];
+}
+
 public sealed record MonitoringScopeReport(
     DateOnly AsOfDate,
     IReadOnlyList<string> EntitlingItems,
@@ -90,6 +132,11 @@ public sealed record MonitoringScopeReport(
     IReadOnlyList<ScopeException> UnscopedRecords,
     IReadOnlyList<string> Notices)
 {
+    /// <summary>
+    /// Set when identities were resolved automatically this run.
+    /// </summary>
+    public AutomaticMappingSummary? AutomaticMappings { get; init; }
+
     public int AcronisCustomerTenants =>
         InScope.Count
         + Excluded.Count
@@ -145,7 +192,8 @@ public static class MonitoringScopeReportBuilder
                             finding.Tenant.Name,
                             finding.Tenant.Id,
                             finding.CustomerNumber,
-                            finding.EntitlingSubscriptions))
+                            finding.EntitlingSubscriptions,
+                            finding.IsOperatorTenant))
                 .ToArray();
 
         var excluded =
@@ -155,14 +203,8 @@ public static class MonitoringScopeReportBuilder
                         new ExcludedScopeTenant(
                             excludedTenant.Tenant.Name,
                             excludedTenant.Tenant.Id,
-                            excludedTenant.Reason
-                                == MonitoringTenantExclusionReason.OperatorTenant
-                                ? ScopeExclusionReason.OperatorTenant
-                                : ScopeExclusionReason.Configured,
-                            excludedTenant.Reason
-                                == MonitoringTenantExclusionReason.OperatorTenant
-                                ? "Operator's own tenant."
-                                : "Excluded by configuration.",
+                            ScopeExclusionReason.Configured,
+                            "Excluded by configuration.",
                             null))
                 .Concat(
                     selection.Tenants
