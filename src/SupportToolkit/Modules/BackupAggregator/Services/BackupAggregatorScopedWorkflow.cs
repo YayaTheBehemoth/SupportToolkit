@@ -1,6 +1,8 @@
 using SupportToolkit.Core.Configuration;
+using SupportToolkit.Core.CustomerMapping;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Core.Reconciliation;
 using SupportToolkit.Modules.BackupAggregator.Fixtures;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Providers.Acronis.Transport;
@@ -29,6 +31,8 @@ public sealed class BackupAggregatorScopedWorkflow
 
     private readonly IMonitoringIdentitySource _identitySource;
 
+    private readonly ICustomerMappingRepository? _mappingRepository;
+
     private readonly Func<CancellationToken,
         Task<ISmartSubscriptionEvidenceSource>> _evidenceSourceFactory;
 
@@ -43,16 +47,28 @@ public sealed class BackupAggregatorScopedWorkflow
             evidenceSourceFactory = null,
         Func<CancellationToken,
             Task<ScopedInventoryRuntime>>?
-            inventoryRuntimeFactory = null)
+            inventoryRuntimeFactory = null,
+        ICustomerMappingRepository? mappingRepository = null)
     {
         _configurationResolver =
             configurationResolver
             ?? throw new ArgumentNullException(
                 nameof(configurationResolver));
 
+        _mappingRepository =
+            mappingRepository;
+
+        /*
+         * With a mapping repository, identities are its Confirmed
+         * mappings and reconciliation runs over the same mappings.
+         * Without one, production still fails closed before any
+         * external request.
+         */
         _identitySource =
             identitySource
-            ?? new UnavailableMonitoringIdentitySource();
+            ?? (mappingRepository is null
+                ? new UnavailableMonitoringIdentitySource()
+                : new ConfirmedMappingIdentitySource(mappingRepository));
 
         _evidenceSourceFactory =
             evidenceSourceFactory
@@ -99,10 +115,14 @@ public sealed class BackupAggregatorScopedWorkflow
             var inventory =
                 new HealthyFixtureInventoryProvider(asOfDate);
 
+            var fixtureMappings =
+                await CreateFixtureMappingRepositoryAsync(
+                    cancellationToken);
+
             return await ExecuteAsync(
                 [SmartSubscriptionFixtureFactory
                     .FixtureMonitoringItemNumber],
-                new FixtureMonitoringIdentitySource(),
+                new ConfirmedMappingIdentitySource(fixtureMappings),
                 _ => Task.FromResult<ISmartSubscriptionEvidenceSource>(
                     new FixtureSmartSubscriptionEvidenceSource()),
                 _ => Task.FromResult(
@@ -115,7 +135,8 @@ public sealed class BackupAggregatorScopedWorkflow
                             new BackupInventoryNormalizer()),
                         null)),
                 asOfDate,
-                cancellationToken);
+                cancellationToken,
+                mappingRepository: fixtureMappings);
         }
 
         var itemNumbers =
@@ -130,6 +151,12 @@ public sealed class BackupAggregatorScopedWorkflow
                     BackupAggregatorModule.ModuleCommand,
                     cancellationToken);
 
+        var acknowledgements =
+            await _configurationResolver
+                .GetAcknowledgementsAsync(
+                    BackupAggregatorModule.ModuleCommand,
+                    cancellationToken);
+
         return await ExecuteAsync(
             itemNumbers,
             _identitySource,
@@ -137,7 +164,35 @@ public sealed class BackupAggregatorScopedWorkflow
             _inventoryRuntimeFactory,
             asOfDate,
             cancellationToken,
-            excludedTenantIds);
+            excludedTenantIds,
+            _mappingRepository,
+            acknowledgements);
+    }
+
+    /// <summary>
+    /// Synthetic Confirmed mappings matching the fixture identities.
+    /// </summary>
+    private static async Task<ICustomerMappingRepository>
+        CreateFixtureMappingRepositoryAsync(
+            CancellationToken cancellationToken)
+    {
+        var repository =
+            new InMemoryCustomerMappingRepository();
+
+        foreach (var identity in await new FixtureMonitoringIdentitySource()
+            .GetIdentitiesAsync(cancellationToken))
+        {
+            await repository.AddAsync(
+                new CustomerMappingRecord(
+                    Guid.NewGuid(),
+                    identity.AcronisTenantId,
+                    identity.BusinessCentralCustomerNumber,
+                    CustomerMappingState.Confirmed,
+                    CustomerMatchMethod.Manual),
+                cancellationToken);
+        }
+
+        return repository;
     }
 
     private static async Task<ScopedBackupInventoryReviewResult>
@@ -151,7 +206,9 @@ public sealed class BackupAggregatorScopedWorkflow
                 inventoryRuntimeFactory,
             DateOnly asOfDate,
             CancellationToken cancellationToken,
-            IReadOnlySet<string>? excludedTenantIds = null)
+            IReadOnlySet<string>? excludedTenantIds = null,
+            ICustomerMappingRepository? mappingRepository = null,
+            AcknowledgementSettings? acknowledgements = null)
     {
         // Fails closed here when no production source exists.
         var identities =
@@ -189,10 +246,49 @@ public sealed class BackupAggregatorScopedWorkflow
                         identities,
                         excludedTenantIds);
 
-            return await runtime.ReviewService
-                .ReviewSelectedTenantsAsync(
-                    selection,
-                    cancellationToken);
+            var result =
+                await runtime.ReviewService
+                    .ReviewSelectedTenantsAsync(
+                        selection,
+                        cancellationToken);
+
+            /*
+             * Reconciliation needs the mappings themselves, not just
+             * the resolved identities. No monitored-tenant evidence
+             * source exists yet, which the report states.
+             */
+            var reconciliation =
+                mappingRepository is null
+                    ? null
+                    : new ReconciliationEngine()
+                        .Reconcile(
+                            await mappingRepository.GetAllAsync(
+                                cancellationToken),
+                            evidence.Headers,
+                            evidence.Lines,
+                            AcronisTenantObservations.FromCustomerTenants(
+                                tenants),
+                            asOfDate,
+                            SubscriptionItemNumbers.ToSet(itemNumbers),
+                            selection.ExcludedTenants
+                                .Select(excluded => excluded.Tenant.Id)
+                                .ToHashSet(StringComparer.OrdinalIgnoreCase),
+                            monitoredTenantIds: null,
+                            acknowledgements?.Acknowledgements);
+
+            return result with
+            {
+                ScopeReport =
+                    MonitoringScopeReportBuilder.Build(
+                        asOfDate,
+                        itemNumbers.ToArray(),
+                        observations,
+                        selection,
+                        reconciliation,
+                        monitoredEvidenceSupplied: false,
+                        tenants,
+                        acknowledgements?.Notices)
+            };
         }
     }
 

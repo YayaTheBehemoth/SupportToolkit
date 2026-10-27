@@ -225,6 +225,10 @@ public sealed class SmartSubscriptionEntitlementEvaluator
                 continue;
             }
 
+            var itemNumber =
+                SubscriptionItemNumbers.Normalize(
+                    group.Single().ItemNumber);
+
             if (string.IsNullOrWhiteSpace(
                 header.CustomerNumber))
             {
@@ -286,7 +290,8 @@ public sealed class SmartSubscriptionEntitlementEvaluator
                         header.CustomerNumber,
                         MonitoringEntitlementAssessment.NeedsReview,
                         reason,
-                        suspended
+                        suspended,
+                        itemNumber
                     )
                 );
 
@@ -352,7 +357,8 @@ public sealed class SmartSubscriptionEntitlementEvaluator
                     subscriptionNumber,
                     header.CustomerNumber,
                     MonitoringEntitlementAssessment.ActiveCandidate,
-                    "Active monitoring subscription with applicable dates."
+                    "Active monitoring subscription with applicable dates.",
+                    ItemNumber: itemNumber
                 )
             );
         }

@@ -21,6 +21,15 @@ public sealed class ConsoleScopedReviewReporter
 
         var selection = result.Selection;
 
+        if (result.ScopeReport is not null)
+        {
+            new ConsoleMonitoringScopeReporter()
+                .Write(output, result.ScopeReport);
+
+            WriteCompleteness(output, result);
+            return;
+        }
+
         output.WriteLine();
         output.WriteLine("MONITORING SCOPE");
         output.WriteLine("----------------");
@@ -75,6 +84,13 @@ public sealed class ConsoleScopedReviewReporter
             }
         }
 
+        WriteCompleteness(output, result);
+    }
+
+    private static void WriteCompleteness(
+        TextWriter output,
+        ScopedBackupInventoryReviewResult result)
+    {
         output.WriteLine();
         output.WriteLine("COMPLETENESS");
         output.WriteLine("------------");

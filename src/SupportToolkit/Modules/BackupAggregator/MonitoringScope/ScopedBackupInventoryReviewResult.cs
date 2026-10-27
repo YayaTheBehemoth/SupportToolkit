@@ -18,6 +18,12 @@ public sealed record ScopedBackupInventoryReviewResult(
     MonitoringTenantSelectionResult Selection,
     AggregatedBackupReport Inventory)
 {
+    /// <summary>
+    /// Full scope listing with reconciliation, when the run produced
+    /// one.
+    /// </summary>
+    public MonitoringScopeReport? ScopeReport { get; init; }
+
     public bool IsInventoryComplete =>
         Inventory.IsTenantReviewComplete
         && Inventory.IsFullyAccountedFor

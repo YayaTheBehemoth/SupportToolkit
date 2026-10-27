@@ -20,13 +20,63 @@ public enum MonitoringTenantSelectionStatus
 {
     CandidateForInventory,
     NeedsReview,
-    Unclassified
+    Unclassified,
+
+    /// <summary>
+    /// Resolved customer without an Active entitling subscription:
+    /// no entitling item at all, or only on Suspended subscriptions.
+    /// A decided outcome, not an open question.
+    /// </summary>
+    NotEntitled
 }
+
+/// <summary>
+/// The subscription and item that entitle a customer to monitoring.
+/// </summary>
+public sealed record EntitlingSubscription(
+    string SubscriptionNumber,
+    string? ItemNumber
+);
 
 public sealed record MonitoringTenantSelectionFinding(
     TenantDto Tenant,
     MonitoringTenantSelectionStatus Status,
-    string Reason
+    string Reason)
+{
+    /// <summary>
+    /// The resolved Business Central customer, when one is known.
+    /// </summary>
+    public string? CustomerNumber { get; init; }
+
+    /// <summary>
+    /// What put an inventory candidate in scope. Empty otherwise.
+    /// </summary>
+    public IReadOnlyList<EntitlingSubscription> EntitlingSubscriptions
+    {
+        get;
+        init;
+    } = [];
+}
+
+public enum MonitoringTenantExclusionReason
+{
+    /// <summary>
+    /// Detected as the operator's own company.
+    /// </summary>
+    OperatorTenant,
+
+    /// <summary>
+    /// Listed in the profile's excluded tenant IDs.
+    /// </summary>
+    Configured
+}
+
+/// <summary>
+/// A customer tenant deliberately left out before selection.
+/// </summary>
+public sealed record ExcludedMonitoringTenant(
+    TenantDto Tenant,
+    MonitoringTenantExclusionReason Reason
 );
 
 /// <summary>
@@ -43,7 +93,21 @@ public sealed record MonitoringTenantSelectionResult(
     /// Customer tenants deliberately left out of the selection, such as
     /// the operator's own tenant.
     /// </summary>
-    public int ExcludedTenantCount { get; init; }
+    public IReadOnlyList<ExcludedMonitoringTenant> ExcludedTenants
+    {
+        get;
+        init;
+    } = [];
+
+    public int ExcludedTenantCount =>
+        ExcludedTenants.Count;
+
+    public int NotEntitledCount =>
+        Tenants.Count(
+            finding =>
+                finding.Status
+                == MonitoringTenantSelectionStatus.NotEntitled
+        );
 
     /// <summary>
     /// Configuration problems that make the selection untrustworthy.
@@ -102,10 +166,15 @@ public sealed class MonitoringTenantSelector
 
         // Excluded tenants are not customers: they are neither
         // candidates nor unclassified.
-        var excluded =
+        var configuredExclusions =
             (excludedTenantIds ?? new HashSet<string>())
                 .Select(id => id.Trim())
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var excluded =
+            new HashSet<string>(
+                configuredExclusions,
+                StringComparer.OrdinalIgnoreCase);
 
         var notices =
             new List<string>();
@@ -299,9 +368,29 @@ public sealed class MonitoringTenantSelector
             if (customerEvidence.Length == 0)
             {
                 findings.Add(
-                    Unclassified(
+                    NotEntitled(
                         tenant,
-                        "No monitoring entitlement evidence for the resolved customer."
+                        customerNumber,
+                        "No subscription with an entitling item."
+                    )
+                );
+
+                continue;
+            }
+
+            // An entitling item only on Suspended subscriptions does
+            // not entitle the customer.
+            if (customerEvidence.All(
+                    observation =>
+                        observation.Assessment
+                        == MonitoringEntitlementAssessment.NeedsReview
+                        && observation.IsSuspended))
+            {
+                findings.Add(
+                    NotEntitled(
+                        tenant,
+                        customerNumber,
+                        "Entitling item only on suspended subscriptions."
                     )
                 );
 
@@ -329,7 +418,10 @@ public sealed class MonitoringTenantSelector
                     Review(
                         tenant,
                         "Customer has monitoring entitlement evidence requiring review."
-                    )
+                    ) with
+                    {
+                        CustomerNumber = customerNumber
+                    }
                 );
 
                 continue;
@@ -343,6 +435,27 @@ public sealed class MonitoringTenantSelector
                         MonitoringTenantSelectionStatus.CandidateForInventory,
                         "Active monitoring evidence and resolved customer identity."
                     )
+                    {
+                        CustomerNumber = customerNumber,
+
+                        EntitlingSubscriptions =
+                            customerEvidence
+                                .Where(
+                                    observation =>
+                                        observation.Assessment
+                                        == MonitoringEntitlementAssessment
+                                            .ActiveCandidate)
+                                .Select(
+                                    observation =>
+                                        new EntitlingSubscription(
+                                            observation.SubscriptionNumber,
+                                            observation.ItemNumber))
+                                .OrderBy(
+                                    subscription =>
+                                        subscription.SubscriptionNumber,
+                                    StringComparer.OrdinalIgnoreCase)
+                                .ToArray()
+                    }
                 );
 
                 continue;
@@ -409,22 +522,52 @@ public sealed class MonitoringTenantSelector
                 )
                 .ToArray();
 
-        var excludedCount =
-            acronisTenants.Count(
-                tenant =>
-                    string.Equals(
-                        tenant.Kind,
-                        "customer",
-                        StringComparison.OrdinalIgnoreCase)
-                    && excluded.Contains(tenant.Id?.Trim() ?? string.Empty));
+        // An explicit configuration entry takes precedence over the
+        // detected operator tenant as the stated reason.
+        var excludedTenants =
+            acronisTenants
+                .Where(
+                    tenant =>
+                        string.Equals(
+                            tenant.Kind,
+                            "customer",
+                            StringComparison.OrdinalIgnoreCase)
+                        && excluded.Contains(tenant.Id?.Trim() ?? string.Empty))
+                .OrderBy(
+                    tenant => tenant.Name,
+                    StringComparer.OrdinalIgnoreCase)
+                .Select(
+                    tenant =>
+                        new ExcludedMonitoringTenant(
+                            tenant,
+                            configuredExclusions.Contains(
+                                tenant.Id?.Trim() ?? string.Empty)
+                                ? MonitoringTenantExclusionReason.Configured
+                                : MonitoringTenantExclusionReason.OperatorTenant))
+                .ToArray();
 
         return new MonitoringTenantSelectionResult(
             findings.AsReadOnly(),
             unmatchedEvidence
         )
         {
-            ExcludedTenantCount = excludedCount,
+            ExcludedTenants = excludedTenants,
             Notices = notices.AsReadOnly()
+        };
+    }
+
+    private static MonitoringTenantSelectionFinding NotEntitled(
+        TenantDto tenant,
+        string customerNumber,
+        string reason)
+    {
+        return new MonitoringTenantSelectionFinding(
+            tenant,
+            MonitoringTenantSelectionStatus.NotEntitled,
+            reason
+        )
+        {
+            CustomerNumber = customerNumber
         };
     }
 

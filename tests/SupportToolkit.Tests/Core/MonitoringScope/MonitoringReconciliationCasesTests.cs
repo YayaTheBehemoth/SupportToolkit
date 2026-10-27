@@ -166,8 +166,10 @@ public class MonitoringReconciliationCasesTests
         Assert.Single(result.InventoryCandidates);
     }
 
+    // Decided 2026-10-27: an entitling item only on a Suspended
+    // subscription does not entitle.
     [Fact]
-    public void SuspendedOnly_StaysUnderReview()
+    public void SuspendedOnly_IsNotEntitled()
     {
         var observations =
             new SmartSubscriptionEntitlementEvaluator([Entitled])
@@ -184,7 +186,53 @@ public class MonitoringReconciliationCasesTests
                     [new("BC-1", TenantA)]);
 
         Assert.Empty(result.InventoryCandidates);
-        Assert.Equal(1, result.NeedsReviewCount);
+        Assert.Equal(0, result.NeedsReviewCount);
+
+        var finding = Assert.Single(result.Tenants);
+
+        Assert.Equal(
+            MonitoringTenantSelectionStatus.NotEntitled,
+            finding.Status);
+
+        Assert.Equal("BC-1", finding.CustomerNumber);
+    }
+
+    [Fact]
+    public void AddOnWithoutBackupItem_IsEntitled()
+    {
+        var observations =
+            new SmartSubscriptionEntitlementEvaluator([Entitled])
+                .Evaluate(
+                    [Header("SUB-1", "BC-1")],
+                    [Line("SUB-1", Entitled)],
+                    AsOf);
+
+        var observation = Assert.Single(observations);
+
+        Assert.Equal(
+            MonitoringEntitlementAssessment.ActiveCandidate,
+            observation.Assessment);
+
+        Assert.Equal(Entitled, observation.ItemNumber);
+
+        var result =
+            new MonitoringTenantSelector()
+                .Select(
+                    [Tenant(TenantA)],
+                    observations,
+                    [new("BC-1", TenantA)]);
+
+        var finding = Assert.Single(result.Tenants);
+
+        Assert.Equal(
+            MonitoringTenantSelectionStatus.CandidateForInventory,
+            finding.Status);
+
+        Assert.Equal("BC-1", finding.CustomerNumber);
+
+        Assert.Equal(
+            new EntitlingSubscription("SUB-1", Entitled),
+            Assert.Single(finding.EntitlingSubscriptions));
     }
 
     [Theory]
@@ -261,8 +309,9 @@ public class MonitoringReconciliationCasesTests
         Assert.Equal(mapping.Id, discrepancy.Key.MappingId);
     }
 
+    // Decided 2026-10-27: not entitled and not monitored agree.
     [Fact]
-    public void NoEntitledSubscription_AndNotMonitored_RemainsAmbiguous()
+    public void NoEntitledSubscription_AndNotMonitored_IsConsistent()
     {
         var report =
             Reconcile(
@@ -272,9 +321,15 @@ public class MonitoringReconciliationCasesTests
                 [Observed(TenantA)],
                 monitored: []);
 
+        var result = MappingResult(report);
+
         Assert.Equal(
-            ReconciliationBucket.Ambiguous,
-            MappingResult(report).Bucket);
+            ReconciliationBucket.MatchedConsistent,
+            result.Bucket);
+
+        Assert.Equal(
+            "Not entitled and not monitored.",
+            Assert.Single(result.Reasons));
 
         Assert.Empty(report.WouldBeTickets);
     }
@@ -290,11 +345,49 @@ public class MonitoringReconciliationCasesTests
                 [Observed(TenantA)],
                 monitored: null);
 
+        var result = MappingResult(report);
+
+        Assert.Equal(
+            ReconciliationBucket.MatchedConsistent,
+            result.Bucket);
+
+        Assert.Equal(
+            "Not entitled; monitored status unknown.",
+            Assert.Single(result.Reasons));
+
+        Assert.Empty(report.WouldBeTickets);
+    }
+
+    [Fact]
+    public void EntitledButNotMonitored_StaysAmbiguous()
+    {
+        var report =
+            Reconcile(
+                [Confirmed(TenantA, "BC-1")],
+                [Header("SUB-1", "BC-1")],
+                [Line("SUB-1", Entitled)],
+                [Observed(TenantA)],
+                monitored: []);
+
         Assert.Equal(
             ReconciliationBucket.Ambiguous,
             MappingResult(report).Bucket);
+    }
 
-        Assert.Empty(report.WouldBeTickets);
+    [Fact]
+    public void MonitoredWithAddOnOnlyOnDisabledTenantsSuspendedSubscription_IsMonitoredWithoutEntitlement()
+    {
+        var report =
+            Reconcile(
+                [Confirmed(TenantA, "BC-1")],
+                [Header("SUB-1", "BC-1", status: "Suspended")],
+                [Line("SUB-1", Entitled)],
+                [new AcronisTenantObservation(TenantA, false, false)],
+                monitored: [TenantA]);
+
+        Assert.Equal(
+            DiscrepancyType.MonitoredWithoutEntitlement,
+            Assert.Single(report.WouldBeTickets).Key.Type);
     }
 
     [Fact]

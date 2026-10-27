@@ -1,4 +1,6 @@
+using System.Globalization;
 using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Core.Reconciliation;
 
 namespace SupportToolkit.Core.Configuration;
 
@@ -163,6 +165,90 @@ public sealed partial class SupportToolkitConfigurationResolver
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id.Trim())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Reads the module's acknowledged exceptions.
+    ///
+    /// An entry that cannot be interpreted is not applied and is
+    /// returned as a notice instead, so a typo can never hide a
+    /// discrepancy. A local check only.
+    /// </summary>
+    public async Task<AcknowledgementSettings> GetAcknowledgementsAsync(
+        string moduleCommand,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(moduleCommand);
+
+        var settings =
+            await GetMonitoringScopeSettingsAsync(
+                moduleCommand,
+                cancellationToken);
+
+        var acknowledgements =
+            new List<ExceptionAcknowledgement>();
+
+        var notices =
+            new List<string>();
+
+        var entries =
+            settings?.AcknowledgedExceptions ?? [];
+
+        for (var index = 0; index < entries.Count; index++)
+        {
+            var entry =
+                entries[index];
+
+            var problem =
+                entry is null
+                    ? "is empty"
+                    : string.IsNullOrWhiteSpace(entry.TenantId)
+                        ? "has no tenant ID"
+                        : !Enum.TryParse<DiscrepancyType>(
+                            entry.DiscrepancyType?.Trim(),
+                            ignoreCase: true,
+                            out _)
+                          || int.TryParse(entry.DiscrepancyType, out _)
+                            ? "has an unknown discrepancy type"
+                            : string.IsNullOrWhiteSpace(entry.Reason)
+                                ? "has no reason"
+                                : !DateOnly.TryParseExact(
+                                    entry.ExpiresOn?.Trim(),
+                                    "yyyy-MM-dd",
+                                    CultureInfo.InvariantCulture,
+                                    DateTimeStyles.None,
+                                    out _)
+                                    ? "has no valid expiry date (yyyy-MM-dd)"
+                                    : null;
+
+            if (problem is not null)
+            {
+                notices.Add(
+                    $"Acknowledged exception {index + 1} {problem} " +
+                    "and was not applied.");
+
+                continue;
+            }
+
+            acknowledgements.Add(
+                new ExceptionAcknowledgement(
+                    entry!.TenantId.Trim(),
+                    Enum.Parse<DiscrepancyType>(
+                        entry.DiscrepancyType.Trim(),
+                        ignoreCase: true),
+                    entry.Reason.Trim(),
+                    DateOnly.ParseExact(
+                        entry.ExpiresOn.Trim(),
+                        "yyyy-MM-dd",
+                        CultureInfo.InvariantCulture),
+                    string.IsNullOrWhiteSpace(entry.AcknowledgedBy)
+                        ? null
+                        : entry.AcknowledgedBy.Trim()));
+        }
+
+        return new AcknowledgementSettings(
+            acknowledgements,
+            notices);
     }
 
     private async Task<ModuleMonitoringScopeConfiguration?>

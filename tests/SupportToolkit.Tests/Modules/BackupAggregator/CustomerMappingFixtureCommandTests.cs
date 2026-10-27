@@ -38,12 +38,42 @@ public class CustomerMappingFixtureCommandTests
         Assert.Contains("  Rejected: 1", report);
         Assert.Contains("  New suggestions on rerun: 0", report);
 
-        Assert.Contains("Period: 2026-10", report);
-        Assert.Contains("  MatchedConsistent: 1", report);
-        Assert.Contains("  MatchedDiscrepancy: 1", report);
-        Assert.Contains("  Unscoped: 5", report);
-        Assert.Contains("  Ambiguous: 1", report);
-        Assert.Contains("  TenantActiveSubscriptionInactive: 1", report);
+        // Summary partitions the five synthetic tenants exactly once.
+        Assert.Contains("MONITORING SCOPE REPORT", report);
+        Assert.Contains("Acronis customer tenants:  5", report);
+        Assert.Contains("  In scope this run:       1", report);
+        Assert.Contains("  Excluded:                1", report);
+        Assert.Contains("  Needs scope review:      1", report);
+        Assert.Contains("  Unscoped (no mapping):   2", report);
+        Assert.Contains("Discrepancies (open):      0", report);
+        Assert.Contains("Acknowledged:              1", report);
+        Assert.Contains("Ambiguous:                 1", report);
+        Assert.Contains("Unscoped BC records:       2", report);
+
+        Assert.Contains(
+            "  Northwind Manufacturing | BC-NORTHWIND | " +
+            "SUB-NORTHWIND (MONITORING-SERVICE)",
+            report);
+
+        // The known data error is acknowledged, not raised.
+        Assert.Contains(
+            "  Contoso Workshop | BC-CONTOSO | Not entitled. Entitling " +
+            "item only on suspended subscriptions. | " +
+            "TenantActiveSubscriptionInactive acknowledged until 2026-11-14",
+            report);
+
+        Assert.Contains(
+            "  Contoso Workshop | TenantActiveSubscriptionInactive | " +
+            "acknowledged until 2026-11-14",
+            report);
+
+        Assert.True(
+            report.IndexOf("SUMMARY", StringComparison.Ordinal)
+            < report.IndexOf("IN SCOPE THIS RUN", StringComparison.Ordinal)
+            && report.IndexOf("IN SCOPE THIS RUN", StringComparison.Ordinal)
+            < report.IndexOf("EXCLUDED (", StringComparison.Ordinal)
+            && report.IndexOf("EXCLUDED (", StringComparison.Ordinal)
+            < report.IndexOf("DISCREPANCIES (", StringComparison.Ordinal));
 
         Assert.Contains(
             "Discrepancy types are provisional; no tickets are created.",

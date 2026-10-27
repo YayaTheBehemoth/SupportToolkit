@@ -39,9 +39,12 @@ public class MonitoringTenantSelectorTests
             );
 
         Assert.Equal(5, result.Tenants.Count);
+        // Suspended-only and no-evidence customers are decided as not
+        // entitled rather than left open.
         Assert.Equal(3, result.InventoryCandidates.Count);
-        Assert.Equal(1, result.NeedsReviewCount);
-        Assert.Equal(1, result.UnclassifiedCount);
+        Assert.Equal(0, result.NeedsReviewCount);
+        Assert.Equal(0, result.UnclassifiedCount);
+        Assert.Equal(2, result.NotEntitledCount);
         Assert.Empty(result.UnmatchedEvidence);
     }
 
@@ -67,7 +70,7 @@ public class MonitoringTenantSelectorTests
     }
 
     [Fact]
-    public void MissingEntitlement_IsNotAutomaticallyExcluded()
+    public void MissingEntitlement_IsNotEntitledNotCandidate()
     {
         var tenant =
             Tenant("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
@@ -88,9 +91,12 @@ public class MonitoringTenantSelectorTests
             Assert.Single(result.Tenants);
 
         Assert.Equal(
-            MonitoringTenantSelectionStatus.Unclassified,
+            MonitoringTenantSelectionStatus.NotEntitled,
             finding.Status
         );
+
+        Assert.Empty(result.InventoryCandidates);
+        Assert.Equal("BC-001", finding.CustomerNumber);
     }
 
     [Fact]

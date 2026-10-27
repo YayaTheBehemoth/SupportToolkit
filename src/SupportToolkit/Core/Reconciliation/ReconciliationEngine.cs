@@ -15,6 +15,10 @@ namespace SupportToolkit.Core.Reconciliation;
 /// Ambiguous, never consistent. Precedence within a mapping is
 /// Ambiguous, then MatchedDiscrepancy, then MatchedConsistent.
 ///
+/// A customer without an Active entitling subscription is not
+/// entitled; that is consistent unless the tenant is reported as
+/// monitored (decided 2026-10-27).
+///
 /// The treatment of status Open and blocked Invoice is not decided,
 /// so both are Ambiguous. Nothing here creates tickets.
 /// </summary>
@@ -45,6 +49,11 @@ public sealed class ReconciliationEngine
     /// monitored evidence exists and the monitored-versus-entitlement
     /// checks are skipped; the tenant's enabled state is the only signal.
     /// </param>
+    /// <param name="acknowledgements">
+    /// Accepted known discrepancies. An active match marks the
+    /// discrepancy acknowledged so it is not raised; an expired match is
+    /// recorded so the discrepancy is shown as resurfaced.
+    /// </param>
     public ReconciliationReport Reconcile(
         IReadOnlyList<CustomerMappingRecord> mappings,
         IReadOnlyList<SmartSubscriptionHeader> headers,
@@ -53,12 +62,15 @@ public sealed class ReconciliationEngine
         DateOnly asOfDate,
         IReadOnlySet<string>? relevantItemNumbers = null,
         IReadOnlySet<string>? excludedTenantIds = null,
-        IReadOnlySet<string>? monitoredTenantIds = null)
+        IReadOnlySet<string>? monitoredTenantIds = null,
+        IReadOnlyList<ExceptionAcknowledgement>? acknowledgements = null)
     {
         ArgumentNullException.ThrowIfNull(mappings);
         ArgumentNullException.ThrowIfNull(headers);
         ArgumentNullException.ThrowIfNull(lines);
         ArgumentNullException.ThrowIfNull(tenants);
+
+        acknowledgements ??= [];
 
         var relevantItems =
             relevantItemNumbers is null
@@ -218,7 +230,8 @@ public sealed class ReconciliationEngine
                     duplicateSubscriptionNumbers,
                     asOfDate,
                     period,
-                    monitored?.Contains(mapping.AcronisTenantId.Trim())
+                    monitored?.Contains(mapping.AcronisTenantId.Trim()),
+                    acknowledgements
                 )
             );
         }
@@ -270,7 +283,8 @@ public sealed class ReconciliationEngine
         IReadOnlySet<string> duplicateSubscriptionNumbers,
         DateOnly asOfDate,
         string period,
-        bool? monitored)
+        bool? monitored,
+        IReadOnlyList<ExceptionAcknowledgement> acknowledgements)
     {
         var ambiguity =
             new List<string>();
@@ -313,22 +327,6 @@ public sealed class ReconciliationEngine
         {
             ambiguity.Add(
                 "Tenant is reported as monitored but was not found."
-            );
-        }
-
-        // A monitored tenant whose customer has no entitled
-        // subscription is decided below; without monitored evidence
-        // the case stays undefined.
-        var monitoredWithoutEntitlement =
-            monitored == true
-            && customerHeaders.Count == 0;
-
-        if (customerHeaders.Count == 0
-            && !monitoredWithoutEntitlement)
-        {
-            ambiguity.Add(
-                "Confirmed customer has no in-scope subscription " +
-                "headers; the treatment of this case is undefined."
             );
         }
 
@@ -397,8 +395,21 @@ public sealed class ReconciliationEngine
                 mapping.Id,
                 [],
                 ambiguity
-            );
+            )
+            {
+                AcronisTenantId = mapping.AcronisTenantId.Trim(),
+                BcCustomerNo = mapping.BcCustomerNo.Trim()
+            };
         }
+
+        /*
+         * Entitlement requires an Active, unblocked subscription with
+         * an entitling item. No such subscription, or only Suspended
+         * ones, means not entitled: a decided outcome, consistent
+         * unless the tenant is reported as monitored.
+         */
+        var entitled =
+            active.Count > 0;
 
         var tenantActive =
             tenant is { Deleted: false, Enabled: true };
@@ -406,7 +417,16 @@ public sealed class ReconciliationEngine
         var discrepancies =
             new List<ReconciliationDiscrepancy>();
 
-        if (monitoredWithoutEntitlement)
+        var suspendedWithActiveTenant =
+            tenantActive
+            && active.Count == 0
+            && inactive.Count > 0;
+
+        // One finding per fact: a monitored tenant whose entitling
+        // subscriptions are all suspended is already reported below.
+        if (monitored == true
+            && !entitled
+            && !suspendedWithActiveTenant)
         {
             discrepancies.Add(
                 new ReconciliationDiscrepancy(
@@ -414,16 +434,14 @@ public sealed class ReconciliationEngine
                         mapping.Id,
                         DiscrepancyType.MonitoredWithoutEntitlement,
                         period),
-                    [],
+                    inactive,
                     "Acronis tenant is monitored, but the customer has " +
-                    "no in-scope entitled subscription."
+                    "no active entitled subscription."
                 )
             );
         }
 
-        if (tenantActive
-            && active.Count == 0
-            && inactive.Count > 0)
+        if (suspendedWithActiveTenant)
         {
             discrepancies.Add(
                 new ReconciliationDiscrepancy(
@@ -455,18 +473,83 @@ public sealed class ReconciliationEngine
             );
         }
 
+        var acknowledged =
+            discrepancies
+                .Select(
+                    discrepancy =>
+                        ApplyAcknowledgement(
+                            discrepancy,
+                            mapping.AcronisTenantId,
+                            acknowledgements,
+                            asOfDate))
+                .ToArray();
+
+        string consistentReason =
+            entitled
+                ? "Business Central and Acronis evidence agree."
+                : monitored == false
+                    ? "Not entitled and not monitored."
+                    : "Not entitled; monitored status unknown.";
+
         return new ReconciliationResult(
-            discrepancies.Count > 0
+            acknowledged.Length > 0
                 ? ReconciliationBucket.MatchedDiscrepancy
                 : ReconciliationBucket.MatchedConsistent,
             ReconciliationSubject.Mapping,
             mapping.Id.ToString(),
             mapping.Id,
-            discrepancies,
-            discrepancies.Count > 0
-                ? discrepancies.Select(d => d.Reason).ToArray()
-                : ["Business Central and Acronis evidence agree."]
-        );
+            acknowledged,
+            acknowledged.Length > 0
+                ? acknowledged.Select(d => d.Reason).ToArray()
+                : [consistentReason]
+        )
+        {
+            AcronisTenantId = mapping.AcronisTenantId.Trim(),
+            BcCustomerNo = mapping.BcCustomerNo.Trim()
+        };
+    }
+
+    /// <summary>
+    /// Marks a discrepancy with the active acknowledgement for its
+    /// tenant and type, or else with the latest expired one.
+    /// </summary>
+    private static ReconciliationDiscrepancy ApplyAcknowledgement(
+        ReconciliationDiscrepancy discrepancy,
+        string acronisTenantId,
+        IReadOnlyList<ExceptionAcknowledgement> acknowledgements,
+        DateOnly asOfDate)
+    {
+        var matching =
+            acknowledgements
+                .Where(
+                    acknowledgement =>
+                        acknowledgement.Matches(
+                            acronisTenantId,
+                            discrepancy.Key.Type))
+                .ToArray();
+
+        var active =
+            matching
+                .Where(acknowledgement => acknowledgement.IsActive(asOfDate))
+                .MaxBy(acknowledgement => acknowledgement.ExpiresOn);
+
+        if (active is not null)
+        {
+            return discrepancy with
+            {
+                Acknowledgement = active
+            };
+        }
+
+        var expired =
+            matching.MaxBy(acknowledgement => acknowledgement.ExpiresOn);
+
+        return expired is null
+            ? discrepancy
+            : discrepancy with
+            {
+                ExpiredAcknowledgement = expired
+            };
     }
 
     private string? DescribeAmbiguity(

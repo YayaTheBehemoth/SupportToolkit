@@ -149,6 +149,10 @@ public sealed class ScopedBackupReviewFixtureCommand
         );
 
         output.WriteLine(
+            $"Not entitled: {selection.NotEntitledCount}"
+        );
+
+        output.WriteLine(
             $"Unmatched BC observations: {selection.UnmatchedEvidence.Count}"
         );
 
@@ -201,18 +205,43 @@ public sealed class ScopedBackupReviewFixtureCommand
 
         output.WriteLine();
         output.WriteLine(
-            "UNRESOLVED MONITORING SCOPE"
+            "NOT ENTITLED"
         );
         output.WriteLine(
-            "---------------------------"
+            "------------"
         );
 
         foreach (var finding in selection.Tenants
             .Where(
                 finding =>
                     finding.Status
-                    != MonitoringTenantSelectionStatus.CandidateForInventory
+                    == MonitoringTenantSelectionStatus.NotEntitled
             ))
+        {
+            output.WriteLine(
+                $"  {finding.Tenant.Name} | {finding.Reason}"
+            );
+        }
+
+        output.WriteLine();
+        output.WriteLine(
+            "UNRESOLVED MONITORING SCOPE"
+        );
+        output.WriteLine(
+            "---------------------------"
+        );
+
+        var unresolved =
+            selection.Tenants
+                .Where(
+                    finding =>
+                        finding.Status
+                            is not MonitoringTenantSelectionStatus.CandidateForInventory
+                            and not MonitoringTenantSelectionStatus.NotEntitled
+                )
+                .ToList();
+
+        foreach (var finding in unresolved)
         {
             output.WriteLine(
                 $"  {finding.Tenant.Name} | " +
@@ -226,6 +255,12 @@ public sealed class ScopedBackupReviewFixtureCommand
                 $"  Unmatched subscription: " +
                 $"{observation.SubscriptionNumber}"
             );
+        }
+
+        if (unresolved.Count == 0
+            && selection.UnmatchedEvidence.Count == 0)
+        {
+            output.WriteLine("  None.");
         }
 
         output.WriteLine();

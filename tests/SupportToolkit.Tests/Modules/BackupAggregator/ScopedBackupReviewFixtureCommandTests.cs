@@ -39,12 +39,17 @@ public class ScopedBackupReviewFixtureCommandTests
         );
 
         Assert.Contains(
-            "Needs scope review: 1",
+            "Needs scope review: 0",
             output
         );
 
         Assert.Contains(
-            "Unclassified: 1",
+            "Unclassified: 0",
+            output
+        );
+
+        Assert.Contains(
+            "Not entitled: 2",
             output
         );
 
@@ -74,22 +79,22 @@ public class ScopedBackupReviewFixtureCommandTests
         );
 
         Assert.Contains(
-            "Monitoring scope complete: NO",
+            "Monitoring scope complete: YES",
             output
         );
 
         Assert.Contains(
-            "Overall complete: NO",
+            "Overall complete: YES",
             output
         );
 
         Assert.Contains(
-            "Contoso Workshop | NeedsReview",
+            "Contoso Workshop | Entitling item only on suspended subscriptions.",
             output
         );
 
         Assert.Contains(
-            "Alpine Consulting | Unclassified",
+            "Alpine Consulting | No subscription with an entitling item.",
             output
         );
     }

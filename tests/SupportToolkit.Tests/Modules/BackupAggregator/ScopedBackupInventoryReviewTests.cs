@@ -69,12 +69,15 @@ public class ScopedBackupInventoryReviewTests
         Assert.Equal(3, result.Inventory.RowsChecked);
         Assert.Equal(3, result.Inventory.HealthyRowsSuppressed);
 
+        // Suspended-only and no-evidence customers are decided as not
+        // entitled, so the standard fixture's scope is complete.
         Assert.True(result.IsInventoryComplete);
-        Assert.False(result.IsScopeComplete);
-        Assert.False(result.IsOverallComplete);
+        Assert.True(result.IsScopeComplete);
+        Assert.True(result.IsOverallComplete);
 
-        Assert.Equal(1, result.Selection.NeedsReviewCount);
-        Assert.Equal(1, result.Selection.UnclassifiedCount);
+        Assert.Equal(0, result.Selection.NeedsReviewCount);
+        Assert.Equal(0, result.Selection.UnclassifiedCount);
+        Assert.Equal(2, result.Selection.NotEntitledCount);
     }
 
     [Fact]

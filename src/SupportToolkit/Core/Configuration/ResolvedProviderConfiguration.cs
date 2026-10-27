@@ -46,3 +46,13 @@ public sealed record ResolvedZendeskConnection(
     long SubmitterId,
     long RequesterId
 );
+
+/// <summary>
+/// Acknowledged exceptions that could be interpreted, and a notice for
+/// each configured entry that could not and was therefore not applied.
+/// </summary>
+public sealed record AcknowledgementSettings(
+    IReadOnlyList<SupportToolkit.Core.Reconciliation.ExceptionAcknowledgement>
+        Acknowledgements,
+    IReadOnlyList<string> Notices
+);

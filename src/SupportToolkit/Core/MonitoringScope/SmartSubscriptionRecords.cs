@@ -80,6 +80,10 @@ public enum MonitoringEntitlementAssessment
 /// <summary>
 /// One evaluated monitoring subscription.
 ///
+/// ItemNumber is the entitling item on the subscription's single
+/// monitoring line, set once that line has been validated. It is null
+/// when the evidence was rejected before the line was established.
+///
 /// No Acronis identity mapping is performed here.
 /// </summary>
 public sealed record MonitoringEntitlementObservation(
@@ -87,5 +91,6 @@ public sealed record MonitoringEntitlementObservation(
     string? CustomerNumber,
     MonitoringEntitlementAssessment Assessment,
     string Reason,
-    bool IsSuspended = false
+    bool IsSuspended = false,
+    string? ItemNumber = null
 );

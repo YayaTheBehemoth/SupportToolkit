@@ -6,13 +6,14 @@ using SupportToolkit.Core.MonitoringScope;
 using SupportToolkit.Core.Reconciliation;
 using SupportToolkit.Modules.BackupAggregator.Fixtures;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
+using SupportToolkit.Modules.BackupAggregator.Reporting;
 
 namespace SupportToolkit.Cli.Commands;
 
 /// <summary>
 /// Fixture-only walk-through of customer mapping and reconciliation:
 /// candidate key profiling, suggestion, simulated human decisions and
-/// shadow reconciliation.
+/// the shadow monitoring scope report.
 ///
 /// Uses synthetic parties and an in-memory mapping store. No external
 /// provider access, no persistence and no ticketing. A persistent
@@ -215,9 +216,9 @@ public sealed class CustomerMappingFixtureCommand
         );
 
         /*
-         * Shadow reconciliation over the synthetic subscriptions,
-         * with an orphan line and an Open subscription added to
-         * exercise the exception buckets.
+         * Shadow scope report over the synthetic subscriptions, with
+         * an orphan line and an Open subscription added to exercise
+         * the exception buckets.
          */
         var subscriptions =
             SmartSubscriptionFixtureFactory.Create();
@@ -240,6 +241,12 @@ public sealed class CustomerMappingFixtureCommand
         [
             .. subscriptions.Lines,
             new(
+                "SUB-FABRIKAM-2",
+                SmartSubscriptionFixtureFactory.FixtureMonitoringItemNumber,
+                "Item",
+                false
+            ),
+            new(
                 "SUB-ORPHAN",
                 SmartSubscriptionFixtureFactory.FixtureMonitoringItemNumber,
                 "Item",
@@ -247,60 +254,71 @@ public sealed class CustomerMappingFixtureCommand
             )
         ];
 
-        var report =
+        IReadOnlyList<string> itemNumbers =
+            [SmartSubscriptionFixtureFactory.FixtureMonitoringItemNumber];
+
+        var tenants =
+            MonitoringTenantSelectionFixtureFactory
+                .Create()
+                .Tenants;
+
+        var observations =
+            new SmartSubscriptionEntitlementEvaluator(itemNumbers)
+                .Evaluate(
+                    headers,
+                    lines,
+                    asOfDate
+                );
+
+        var selection =
+            new MonitoringTenantSelector()
+                .Select(
+                    tenants,
+                    observations,
+                    await new ConfirmedMappingIdentitySource(repository)
+                        .GetIdentitiesAsync(cancellationToken)
+                );
+
+        // The suspended-subscription discrepancy is a known data
+        // error, accepted for a month.
+        IReadOnlyList<ExceptionAcknowledgement> acknowledgements =
+        [
+            new(
+                "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                DiscrepancyType.TenantActiveSubscriptionInactive,
+                "Known data error; subscription is being removed.",
+                asOfDate.AddDays(30),
+                FixtureActor
+            )
+        ];
+
+        var reconciliation =
             new ReconciliationEngine()
                 .Reconcile(
                     mappings,
                     headers,
                     lines,
                     AcronisTenantObservations.FromCustomerTenants(
-                        MonitoringTenantSelectionFixtureFactory
-                            .Create()
-                            .Tenants
+                        tenants
                     ),
-                    asOfDate
+                    asOfDate,
+                    SubscriptionItemNumbers.ToSet(itemNumbers),
+                    acknowledgements: acknowledgements
                 );
 
-        output.WriteLine();
-        output.WriteLine("SHADOW RECONCILIATION");
-        output.WriteLine("---------------------");
-
-        output.WriteLine($"Period: {report.Period}");
-
-        foreach (var bucket in Enum.GetValues<ReconciliationBucket>())
-        {
-            output.WriteLine(
-                $"  {bucket}: {report.Count(bucket)}"
+        new ConsoleMonitoringScopeReporter()
+            .Write(
+                output,
+                MonitoringScopeReportBuilder.Build(
+                    asOfDate,
+                    itemNumbers,
+                    observations,
+                    selection,
+                    reconciliation,
+                    monitoredEvidenceSupplied: false,
+                    tenants
+                )
             );
-        }
-
-        output.WriteLine();
-        output.WriteLine("WOULD-BE TICKETS (NOT CREATED)");
-        output.WriteLine("------------------------------");
-
-        foreach (var type in Enum.GetValues<DiscrepancyType>())
-        {
-            output.WriteLine(
-                $"  {type}: {report.Count(type)}"
-            );
-        }
-
-        output.WriteLine();
-        output.WriteLine("EXCEPTION QUEUE");
-        output.WriteLine("---------------");
-
-        foreach (var result in report.Results
-            .Where(
-                result =>
-                    result.Bucket
-                        is ReconciliationBucket.Unscoped
-                        or ReconciliationBucket.Ambiguous))
-        {
-            output.WriteLine(
-                $"  {result.Bucket} | {result.Subject} | " +
-                $"{result.SubjectId} | {string.Join(" ", result.Reasons)}"
-            );
-        }
 
         output.WriteLine();
         output.WriteLine("IMPORTANT");

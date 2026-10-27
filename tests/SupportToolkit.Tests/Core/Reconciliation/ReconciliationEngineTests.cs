@@ -196,7 +196,7 @@ public class ReconciliationEngineTests
     }
 
     [Fact]
-    public void ConfirmedCustomerWithoutHeaders_IsAmbiguous()
+    public void ConfirmedCustomerWithoutHeaders_IsNotEntitledAndConsistent()
     {
         var result =
             Single(
@@ -208,7 +208,14 @@ public class ReconciliationEngineTests
                 ReconciliationSubject.Mapping
             );
 
-        Assert.Equal(ReconciliationBucket.Ambiguous, result.Bucket);
+        Assert.Equal(ReconciliationBucket.MatchedConsistent, result.Bucket);
+
+        Assert.Equal(
+            "Not entitled; monitored status unknown.",
+            Assert.Single(result.Reasons));
+
+        Assert.Equal("t1", result.AcronisTenantId);
+        Assert.Equal("BC-1", result.BcCustomerNo);
     }
 
     [Fact]

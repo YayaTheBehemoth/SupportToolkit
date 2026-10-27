@@ -27,9 +27,17 @@ public class BackupAggregatorScopedWorkflowTests
         Assert.Equal(3, result.Selection.InventoryCandidates.Count);
         Assert.True(result.IsInventoryComplete);
 
-        // The suspended fixture subscription keeps scope incomplete.
-        Assert.False(result.IsScopeComplete);
-        Assert.False(result.IsOverallComplete);
+        // The suspended fixture subscription is decided as not
+        // entitled, so the synthetic scope is complete.
+        Assert.True(result.IsScopeComplete);
+        Assert.True(result.IsOverallComplete);
+
+        var report = Assert.IsType<MonitoringScopeReport>(result.ScopeReport);
+
+        Assert.True(report.ReconciliationRun);
+        Assert.Equal(3, report.InScope.Count);
+        Assert.Equal(2, report.Excluded.Count);
+        Assert.Equal(5, report.AcronisCustomerTenants);
     }
 
     [Fact]
@@ -185,10 +193,13 @@ public class BackupAggregatorScopedWorkflowTests
             var exit = await module.RunAsync(["scoped-review"]);
             var scoped = writer.ToString();
 
-            // Scope is incomplete in the synthetic data: exit code 2.
-            Assert.Equal(2, exit);
-            Assert.Contains("MONITORING SCOPE", scoped);
-            Assert.Contains("Monitoring scope complete:   NO", scoped);
+            // Not-entitled customers are decided, so the synthetic
+            // scope is complete: exit code 0.
+            Assert.Equal(0, exit);
+            Assert.Contains("MONITORING SCOPE REPORT", scoped);
+            Assert.Contains("IN SCOPE THIS RUN (3)", scoped);
+            Assert.Contains("EXCLUDED (2)", scoped);
+            Assert.Contains("Monitoring scope complete:   YES", scoped);
 
             // The default fixture shortcut is unchanged by the feature.
             writer.GetStringBuilder().Clear();

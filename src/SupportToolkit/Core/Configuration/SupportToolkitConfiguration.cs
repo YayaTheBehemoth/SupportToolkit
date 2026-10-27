@@ -121,7 +121,42 @@ public sealed class ModuleMonitoringScopeConfiguration
     /// operator's own tenant.
     /// </summary>
     public List<string> ExcludedTenantIds { get; set; } =
-        [];}
+        [];
+
+    /// <summary>
+    /// Known discrepancies accepted until an expiry date. Entries are
+    /// validated on use; an invalid entry suppresses nothing.
+    /// </summary>
+    public List<AcknowledgedExceptionConfiguration> AcknowledgedExceptions
+    {
+        get;
+        set;
+    } = [];
+}
+
+/// <summary>
+/// One acknowledged discrepancy as stored in configuration.
+///
+/// Values are kept as text so a malformed entry is reported rather
+/// than preventing the configuration from loading. DiscrepancyType is a
+/// discrepancy type name; ExpiresOn is yyyy-MM-dd and inclusive.
+/// </summary>
+public sealed class AcknowledgedExceptionConfiguration
+{
+    public string TenantId { get; set; } =
+        string.Empty;
+
+    public string DiscrepancyType { get; set; } =
+        string.Empty;
+
+    public string Reason { get; set; } =
+        string.Empty;
+
+    public string ExpiresOn { get; set; } =
+        string.Empty;
+
+    public string? AcknowledgedBy { get; set; }
+}
 
 /// <summary>
 /// Non-secret Business Central connection metadata.

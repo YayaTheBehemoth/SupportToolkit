@@ -71,17 +71,33 @@ public sealed record DiscrepancyKey(
     string Period
 );
 
+/// <summary>
+/// One disagreement within a confirmed mapping.
+///
+/// Acknowledgement is set while a matching acknowledgement is active;
+/// such a discrepancy is shown but never raised. ExpiredAcknowledgement
+/// is set when the only match has expired, so the report can say the
+/// discrepancy resurfaced.
+/// </summary>
 public sealed record ReconciliationDiscrepancy(
     DiscrepancyKey Key,
     IReadOnlyList<string> SubscriptionNumbers,
-    string Reason
-);
+    string Reason)
+{
+    public ExceptionAcknowledgement? Acknowledgement { get; init; }
+
+    public ExceptionAcknowledgement? ExpiredAcknowledgement { get; init; }
+
+    public bool IsAcknowledged =>
+        Acknowledgement is not null;
+}
 
 /// <summary>
 /// One reconciled subject.
 ///
 /// SubjectId is the mapping id, tenant id, customer number or
-/// subscription number, depending on Subject.
+/// subscription number, depending on Subject. For a mapping subject,
+/// AcronisTenantId and BcCustomerNo identify both sides.
 /// </summary>
 public sealed record ReconciliationResult(
     ReconciliationBucket Bucket,
@@ -89,8 +105,12 @@ public sealed record ReconciliationResult(
     string SubjectId,
     Guid? MappingId,
     IReadOnlyList<ReconciliationDiscrepancy> Discrepancies,
-    IReadOnlyList<string> Reasons
-);
+    IReadOnlyList<string> Reasons)
+{
+    public string? AcronisTenantId { get; init; }
+
+    public string? BcCustomerNo { get; init; }
+}
 
 public sealed record ReconciliationReport(
     string Period,
@@ -102,11 +122,7 @@ public sealed record ReconciliationReport(
             result => result.Bucket == bucket
         );
 
-    /// <summary>
-    /// Discrepancies that would become tickets if their type were
-    /// enabled. Nothing here creates a ticket.
-    /// </summary>
-    public IReadOnlyList<ReconciliationDiscrepancy> WouldBeTickets =>
+    private IEnumerable<ReconciliationDiscrepancy> AllDiscrepancies =>
         Results
             .Where(
                 result =>
@@ -114,7 +130,23 @@ public sealed record ReconciliationReport(
             )
             .SelectMany(
                 result => result.Discrepancies
-            )
+            );
+
+    /// <summary>
+    /// Unacknowledged discrepancies that would become tickets if their
+    /// type were enabled. Nothing here creates a ticket.
+    /// </summary>
+    public IReadOnlyList<ReconciliationDiscrepancy> WouldBeTickets =>
+        AllDiscrepancies
+            .Where(discrepancy => !discrepancy.IsAcknowledged)
+            .ToArray();
+
+    /// <summary>
+    /// Discrepancies held back by an active acknowledgement.
+    /// </summary>
+    public IReadOnlyList<ReconciliationDiscrepancy> Acknowledged =>
+        AllDiscrepancies
+            .Where(discrepancy => discrepancy.IsAcknowledged)
             .ToArray();
 
     public int Count(
