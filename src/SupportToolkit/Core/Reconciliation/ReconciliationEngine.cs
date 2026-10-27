@@ -49,11 +49,6 @@ public sealed class ReconciliationEngine
     /// monitored evidence exists and the monitored-versus-entitlement
     /// checks are skipped; the tenant's enabled state is the only signal.
     /// </param>
-    /// <param name="acknowledgements">
-    /// Accepted known discrepancies. An active match marks the
-    /// discrepancy acknowledged so it is not raised; an expired match is
-    /// recorded so the discrepancy is shown as resurfaced.
-    /// </param>
     public ReconciliationReport Reconcile(
         IReadOnlyList<CustomerMappingRecord> mappings,
         IReadOnlyList<SmartSubscriptionHeader> headers,
@@ -62,15 +57,12 @@ public sealed class ReconciliationEngine
         DateOnly asOfDate,
         IReadOnlySet<string>? relevantItemNumbers = null,
         IReadOnlySet<string>? excludedTenantIds = null,
-        IReadOnlySet<string>? monitoredTenantIds = null,
-        IReadOnlyList<ExceptionAcknowledgement>? acknowledgements = null)
+        IReadOnlySet<string>? monitoredTenantIds = null)
     {
         ArgumentNullException.ThrowIfNull(mappings);
         ArgumentNullException.ThrowIfNull(headers);
         ArgumentNullException.ThrowIfNull(lines);
         ArgumentNullException.ThrowIfNull(tenants);
-
-        acknowledgements ??= [];
 
         var relevantItems =
             relevantItemNumbers is null
@@ -230,8 +222,7 @@ public sealed class ReconciliationEngine
                     duplicateSubscriptionNumbers,
                     asOfDate,
                     period,
-                    monitored?.Contains(mapping.AcronisTenantId.Trim()),
-                    acknowledgements
+                    monitored?.Contains(mapping.AcronisTenantId.Trim())
                 )
             );
         }
@@ -283,8 +274,7 @@ public sealed class ReconciliationEngine
         IReadOnlySet<string> duplicateSubscriptionNumbers,
         DateOnly asOfDate,
         string period,
-        bool? monitored,
-        IReadOnlyList<ExceptionAcknowledgement> acknowledgements)
+        bool? monitored)
     {
         var ambiguity =
             new List<string>();
@@ -473,17 +463,6 @@ public sealed class ReconciliationEngine
             );
         }
 
-        var acknowledged =
-            discrepancies
-                .Select(
-                    discrepancy =>
-                        ApplyAcknowledgement(
-                            discrepancy,
-                            mapping.AcronisTenantId,
-                            acknowledgements,
-                            asOfDate))
-                .ToArray();
-
         string consistentReason =
             entitled
                 ? "Business Central and Acronis evidence agree."
@@ -492,64 +471,21 @@ public sealed class ReconciliationEngine
                     : "Not entitled; monitored status unknown.";
 
         return new ReconciliationResult(
-            acknowledged.Length > 0
+            discrepancies.Count > 0
                 ? ReconciliationBucket.MatchedDiscrepancy
                 : ReconciliationBucket.MatchedConsistent,
             ReconciliationSubject.Mapping,
             mapping.Id.ToString(),
             mapping.Id,
-            acknowledged,
-            acknowledged.Length > 0
-                ? acknowledged.Select(d => d.Reason).ToArray()
+            discrepancies,
+            discrepancies.Count > 0
+                ? discrepancies.Select(d => d.Reason).ToArray()
                 : [consistentReason]
         )
         {
             AcronisTenantId = mapping.AcronisTenantId.Trim(),
             BcCustomerNo = mapping.BcCustomerNo.Trim()
         };
-    }
-
-    /// <summary>
-    /// Marks a discrepancy with the active acknowledgement for its
-    /// tenant and type, or else with the latest expired one.
-    /// </summary>
-    private static ReconciliationDiscrepancy ApplyAcknowledgement(
-        ReconciliationDiscrepancy discrepancy,
-        string acronisTenantId,
-        IReadOnlyList<ExceptionAcknowledgement> acknowledgements,
-        DateOnly asOfDate)
-    {
-        var matching =
-            acknowledgements
-                .Where(
-                    acknowledgement =>
-                        acknowledgement.Matches(
-                            acronisTenantId,
-                            discrepancy.Key.Type))
-                .ToArray();
-
-        var active =
-            matching
-                .Where(acknowledgement => acknowledgement.IsActive(asOfDate))
-                .MaxBy(acknowledgement => acknowledgement.ExpiresOn);
-
-        if (active is not null)
-        {
-            return discrepancy with
-            {
-                Acknowledgement = active
-            };
-        }
-
-        var expired =
-            matching.MaxBy(acknowledgement => acknowledgement.ExpiresOn);
-
-        return expired is null
-            ? discrepancy
-            : discrepancy with
-            {
-                ExpiredAcknowledgement = expired
-            };
     }
 
     private string? DescribeAmbiguity(

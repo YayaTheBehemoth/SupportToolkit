@@ -22,16 +22,14 @@ public sealed record InScopeTenant(
 );
 
 /// <summary>
-/// A customer tenant left out of the review, with the reason, and any
-/// acknowledged discrepancies that apply to it.
+/// A customer tenant left out of the review, with the reason.
 /// </summary>
 public sealed record ExcludedScopeTenant(
     string TenantName,
     string TenantId,
     ScopeExclusionReason Reason,
     string Detail,
-    string? CustomerNumber,
-    IReadOnlyList<ExceptionAcknowledgement> Acknowledgements
+    string? CustomerNumber
 );
 
 /// <summary>
@@ -88,7 +86,6 @@ public sealed record MonitoringScopeReport(
     bool ReconciliationRun,
     bool MonitoredEvidenceSupplied,
     IReadOnlyList<ScopeDiscrepancy> Discrepancies,
-    IReadOnlyList<ScopeDiscrepancy> Acknowledged,
     IReadOnlyList<ScopeException> Ambiguous,
     IReadOnlyList<ScopeException> UnscopedRecords,
     IReadOnlyList<string> Notices)
@@ -112,8 +109,7 @@ public static class MonitoringScopeReportBuilder
         MonitoringTenantSelectionResult selection,
         ReconciliationReport? reconciliation,
         bool monitoredEvidenceSupplied,
-        IReadOnlyList<TenantDto> tenants,
-        IReadOnlyList<string>? additionalNotices = null)
+        IReadOnlyList<TenantDto> tenants)
     {
         ArgumentNullException.ThrowIfNull(entitlingItems);
         ArgumentNullException.ThrowIfNull(observations);
@@ -136,22 +132,6 @@ public static class MonitoringScopeReportBuilder
             && names.TryGetValue(tenantId.Trim(), out var name)
                 ? name
                 : tenantId ?? "<unknown tenant>";
-
-        var acknowledgedByTenant =
-            (reconciliation?.Acknowledged ?? [])
-                .Select(
-                    discrepancy =>
-                        (Tenant: TenantOf(reconciliation!, discrepancy),
-                         discrepancy.Acknowledgement!))
-                .Where(item => item.Tenant is not null)
-                .ToLookup(
-                    item => item.Tenant!,
-                    item => item.Item2,
-                    StringComparer.OrdinalIgnoreCase);
-
-        IReadOnlyList<ExceptionAcknowledgement> AcknowledgementsFor(
-            string tenantId) =>
-            acknowledgedByTenant[tenantId.Trim()].ToArray();
 
         var inScope =
             selection.Tenants
@@ -183,8 +163,7 @@ public static class MonitoringScopeReportBuilder
                                 == MonitoringTenantExclusionReason.OperatorTenant
                                 ? "Operator's own tenant."
                                 : "Excluded by configuration.",
-                            null,
-                            AcknowledgementsFor(excludedTenant.Tenant.Id)))
+                            null))
                 .Concat(
                     selection.Tenants
                         .Where(
@@ -198,8 +177,7 @@ public static class MonitoringScopeReportBuilder
                                     finding.Tenant.Id,
                                     ScopeExclusionReason.NotEntitled,
                                     "Not entitled. " + finding.Reason,
-                                    finding.CustomerNumber,
-                                    AcknowledgementsFor(finding.Tenant.Id))))
+                                    finding.CustomerNumber)))
                 .ToArray();
 
         UnresolvedScopeTenant Unresolved(
@@ -243,11 +221,6 @@ public static class MonitoringScopeReportBuilder
 
         var discrepancies =
             (reconciliation?.WouldBeTickets ?? [])
-                .Select(Describe)
-                .ToArray();
-
-        var acknowledged =
-            (reconciliation?.Acknowledged ?? [])
                 .Select(Describe)
                 .ToArray();
 
@@ -307,12 +280,9 @@ public static class MonitoringScopeReportBuilder
             reconciliation is not null,
             monitoredEvidenceSupplied,
             discrepancies,
-            acknowledged,
             ambiguous,
             unscopedRecords,
-            selection.Notices
-                .Concat(additionalNotices ?? [])
-                .ToArray());
+            selection.Notices);
     }
 
     private static ReconciliationResult? ResultOf(
@@ -320,9 +290,4 @@ public static class MonitoringScopeReportBuilder
         ReconciliationDiscrepancy discrepancy) =>
         reconciliation.Results.FirstOrDefault(
             result => result.Discrepancies.Contains(discrepancy));
-
-    private static string? TenantOf(
-        ReconciliationReport reconciliation,
-        ReconciliationDiscrepancy discrepancy) =>
-        ResultOf(reconciliation, discrepancy)?.AcronisTenantId;
 }

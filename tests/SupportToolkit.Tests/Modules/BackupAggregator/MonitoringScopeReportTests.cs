@@ -82,18 +82,25 @@ public class MonitoringScopeReportTests
     }
 
     [Fact]
-    public void NotEntitledTenant_CarriesItsAcknowledgement()
+    public void NotEntitledTenant_IsExcludedAndItsDiscrepancyStillReported()
     {
+        var report = Build();
+
         var excluded =
             Assert.Single(
-                Build().Excluded,
+                report.Excluded,
                 tenant => tenant.Reason == ScopeExclusionReason.NotEntitled);
 
         Assert.Equal(NotEntitledId, excluded.TenantId);
 
+        var discrepancy =
+            Assert.Single(
+                report.Discrepancies,
+                item => item.TenantId == NotEntitledId);
+
         Assert.Equal(
             DiscrepancyType.TenantActiveSubscriptionInactive,
-            Assert.Single(excluded.Acknowledgements).Type);
+            discrepancy.Discrepancy.Key.Type);
     }
 
     [Fact]
@@ -111,7 +118,7 @@ public class MonitoringScopeReportTests
         Assert.Contains("  In scope this run:       1", output);
         Assert.Contains("  Excluded:                3", output);
         Assert.Contains("Entitled BC customers:     1", output);
-        Assert.Contains("Acknowledged:              1", output);
+        Assert.Contains("Discrepancies (open):      2", output);
         Assert.Contains("monitored without entitlement", output);
 
         Assert.Contains("  In Scope Co | BC-IN | SUB-IN (ADD-ON)", output);
@@ -120,13 +127,12 @@ public class MonitoringScopeReportTests
 
         Assert.Contains(
             "  Suspended Co | BC-SUSP | Not entitled. Entitling item only " +
-            "on suspended subscriptions. | TenantActiveSubscriptionInactive " +
-            "acknowledged until 2026-12-31",
+            "on suspended subscriptions.",
             output);
 
         Assert.Contains(
-            "  Suspended Co | TenantActiveSubscriptionInactive | " +
-            "acknowledged until 2026-12-31 | Known data error. (by reviewer)",
+            "  Suspended Co | BC-SUSP | TenantActiveSubscriptionInactive | " +
+            "SUB-SUSP |",
             output);
 
         Assert.Contains("  Needs scope review | Review Co |", output);
@@ -177,16 +183,7 @@ public class MonitoringScopeReportTests
                     new HashSet<string> { Item },
                     selection.ExcludedTenants
                         .Select(excluded => excluded.Tenant.Id)
-                        .ToHashSet(),
-                    acknowledgements:
-                    [
-                        new ExceptionAcknowledgement(
-                            NotEntitledId,
-                            DiscrepancyType.TenantActiveSubscriptionInactive,
-                            "Known data error.",
-                            new DateOnly(2026, 12, 31),
-                            "reviewer")
-                    ]);
+                        .ToHashSet());
 
         return MonitoringScopeReportBuilder.Build(
             AsOf,

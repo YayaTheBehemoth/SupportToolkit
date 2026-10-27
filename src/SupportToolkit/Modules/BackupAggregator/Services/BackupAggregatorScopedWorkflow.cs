@@ -151,12 +151,6 @@ public sealed class BackupAggregatorScopedWorkflow
                     BackupAggregatorModule.ModuleCommand,
                     cancellationToken);
 
-        var acknowledgements =
-            await _configurationResolver
-                .GetAcknowledgementsAsync(
-                    BackupAggregatorModule.ModuleCommand,
-                    cancellationToken);
-
         return await ExecuteAsync(
             itemNumbers,
             _identitySource,
@@ -165,8 +159,7 @@ public sealed class BackupAggregatorScopedWorkflow
             asOfDate,
             cancellationToken,
             excludedTenantIds,
-            _mappingRepository,
-            acknowledgements);
+            _mappingRepository);
     }
 
     /// <summary>
@@ -207,8 +200,7 @@ public sealed class BackupAggregatorScopedWorkflow
             DateOnly asOfDate,
             CancellationToken cancellationToken,
             IReadOnlySet<string>? excludedTenantIds = null,
-            ICustomerMappingRepository? mappingRepository = null,
-            AcknowledgementSettings? acknowledgements = null)
+            ICustomerMappingRepository? mappingRepository = null)
     {
         // Fails closed here when no production source exists.
         var identities =
@@ -273,8 +265,7 @@ public sealed class BackupAggregatorScopedWorkflow
                             selection.ExcludedTenants
                                 .Select(excluded => excluded.Tenant.Id)
                                 .ToHashSet(StringComparer.OrdinalIgnoreCase),
-                            monitoredTenantIds: null,
-                            acknowledgements?.Acknowledgements);
+                            monitoredTenantIds: null);
 
             return result with
             {
@@ -286,8 +277,7 @@ public sealed class BackupAggregatorScopedWorkflow
                         selection,
                         reconciliation,
                         monitoredEvidenceSupplied: false,
-                        tenants,
-                        acknowledgements?.Notices)
+                        tenants)
             };
         }
     }

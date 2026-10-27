@@ -6,8 +6,8 @@ namespace SupportToolkit.Modules.BackupAggregator.Reporting;
 
 /// <summary>
 /// Writes the full monitoring scope report: summary counts first, then
-/// every in-scope and excluded tenant, then discrepancies,
-/// acknowledgements and exceptions.
+/// every in-scope and excluded tenant, then discrepancies and
+/// exceptions.
 ///
 /// Only runtime data reaches this output; nothing is persisted.
 /// </summary>
@@ -34,7 +34,6 @@ public sealed class ConsoleMonitoringScopeReporter
         WriteInScope(output, report);
         WriteExcluded(output, report);
         WriteDiscrepancies(output, report);
-        WriteAcknowledged(output, report);
         WriteExceptions(output, report);
     }
 
@@ -66,8 +65,6 @@ public sealed class ConsoleMonitoringScopeReporter
         {
             output.WriteLine(
                 $"Discrepancies (open):      {report.Discrepancies.Count}");
-            output.WriteLine(
-                $"Acknowledged:              {report.Acknowledged.Count}");
             output.WriteLine(
                 $"Ambiguous:                 {report.Ambiguous.Count}");
             output.WriteLine(
@@ -128,21 +125,12 @@ public sealed class ConsoleMonitoringScopeReporter
             .OrderBy(tenant => tenant.Reason)
             .ThenBy(tenant => tenant.TenantName, StringComparer.OrdinalIgnoreCase))
         {
-            var line =
+            output.WriteLine(
                 $"  {tenant.TenantName} | " +
                 (tenant.CustomerNumber is null
                     ? string.Empty
                     : $"{tenant.CustomerNumber} | ") +
-                tenant.Detail;
-
-            foreach (var acknowledgement in tenant.Acknowledgements)
-            {
-                line +=
-                    $" | {acknowledgement.Type} acknowledged until " +
-                    Date(acknowledgement.ExpiresOn);
-            }
-
-            output.WriteLine(line);
+                tenant.Detail);
         }
     }
 
@@ -173,44 +161,11 @@ public sealed class ConsoleMonitoringScopeReporter
                     ? string.Empty
                     : " | " + string.Join(", ", discrepancy.SubscriptionNumbers);
 
-            var resurfaced =
-                discrepancy.ExpiredAcknowledgement is null
-                    ? string.Empty
-                    : " | acknowledgement expired " +
-                      Date(discrepancy.ExpiredAcknowledgement.ExpiresOn);
-
             output.WriteLine(
                 $"  {item.TenantName} | " +
                 $"{item.CustomerNumber ?? "<no customer>"} | " +
                 $"{discrepancy.Key.Type}{subscriptions} | " +
-                $"{discrepancy.Reason}{resurfaced}");
-        }
-    }
-
-    private static void WriteAcknowledged(
-        TextWriter output,
-        MonitoringScopeReport report)
-    {
-        Heading(output, $"ACKNOWLEDGED ({report.Acknowledged.Count})");
-
-        if (report.Acknowledged.Count == 0)
-        {
-            output.WriteLine("  None.");
-            return;
-        }
-
-        foreach (var item in report.Acknowledged)
-        {
-            var acknowledgement =
-                item.Discrepancy.Acknowledgement!;
-
-            output.WriteLine(
-                $"  {item.TenantName} | {acknowledgement.Type} | " +
-                $"acknowledged until {Date(acknowledgement.ExpiresOn)} | " +
-                acknowledgement.Reason +
-                (acknowledgement.AcknowledgedBy is null
-                    ? string.Empty
-                    : $" (by {acknowledgement.AcknowledgedBy})"));
+                discrepancy.Reason);
         }
     }
 

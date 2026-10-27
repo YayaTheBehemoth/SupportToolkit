@@ -45,8 +45,7 @@ public class CustomerMappingFixtureCommandTests
         Assert.Contains("  Excluded:                1", report);
         Assert.Contains("  Needs scope review:      1", report);
         Assert.Contains("  Unscoped (no mapping):   2", report);
-        Assert.Contains("Discrepancies (open):      0", report);
-        Assert.Contains("Acknowledged:              1", report);
+        Assert.Contains("Discrepancies (open):      1", report);
         Assert.Contains("Ambiguous:                 1", report);
         Assert.Contains("Unscoped BC records:       2", report);
 
@@ -55,17 +54,18 @@ public class CustomerMappingFixtureCommandTests
             "SUB-NORTHWIND (MONITORING-SERVICE)",
             report);
 
-        // The known data error is acknowledged, not raised.
         Assert.Contains(
             "  Contoso Workshop | BC-CONTOSO | Not entitled. Entitling " +
-            "item only on suspended subscriptions. | " +
-            "TenantActiveSubscriptionInactive acknowledged until 2026-11-14",
+            "item only on suspended subscriptions.",
             report);
 
+        // Reported as found; judging it is left to the operator.
         Assert.Contains(
-            "  Contoso Workshop | TenantActiveSubscriptionInactive | " +
-            "acknowledged until 2026-11-14",
+            "  Contoso Workshop | BC-CONTOSO | " +
+            "TenantActiveSubscriptionInactive | SUB-CONTOSO |",
             report);
+
+        Assert.DoesNotContain("cknowledg", report);
 
         Assert.True(
             report.IndexOf("SUMMARY", StringComparison.Ordinal)

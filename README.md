@@ -246,12 +246,13 @@ Acronis inventory counts and the Acronis portal's "protected workloads" figure c
 
 The run prints a full scope report:
 
-1. **Summary.** The Acronis customer tenants are split into in scope, excluded, needs scope review and unscoped, and those four counts add up to the total. The summary also gives entitled customers, open discrepancies, acknowledged discrepancies, ambiguous results and unscoped Business Central records.
+1. **Summary.** The Acronis customer tenants are split into in scope, excluded, needs scope review and unscoped, and those four counts add up to the total. The summary also gives entitled customers, discrepancies, ambiguous results and unscoped Business Central records.
 2. **In scope this run.** Each tenant reviewed, with its Business Central customer and the entitling subscription and item.
 3. **Excluded.** Each tenant left out, with the reason: the operator's own tenant, excluded by configuration, or not entitled.
-4. **Discrepancies.** These are only computed, never ticketed. A discrepancy whose acknowledgement has expired shows "acknowledgement expired <date>".
-5. **Acknowledged.** Known discrepancies, shown as "acknowledged until <date>".
-6. **Exceptions.** Tenants needing scope review, Ambiguous and Unscoped results, and configuration notices.
+4. **Discrepancies.** These are only computed, never ticketed.
+5. **Exceptions.** Tenants needing scope review, Ambiguous and Unscoped results, and configuration notices.
+
+The report is deliberately naive. Every discrepancy it finds is reported on every run. It doesn't track which ones are already known, accepted or being fixed; that judgment stays with the operator.
 
 Tenant names come from the live Acronis data at runtime and are never stored.
 
@@ -263,21 +264,10 @@ Settings live per module under the profile's `monitoringScope` section. The valu
 "monitoringScope": {
   "backup-aggregator": {
     "monitoringItemNumbers": [ "EXAMPLE-ADDON" ],
-    "excludedTenantIds": [ "00000000-0000-0000-0000-000000000001" ],
-    "acknowledgedExceptions": [
-      {
-        "tenantId": "00000000-0000-0000-0000-000000000002",
-        "discrepancyType": "TenantActiveSubscriptionInactive",
-        "reason": "Known data error; subscription is being removed.",
-        "expiresOn": "2026-12-31",
-        "acknowledgedBy": "example-reviewer"
-      }
-    ]
+    "excludedTenantIds": [ "00000000-0000-0000-0000-000000000001" ]
   }
 }
 ```
-
-An acknowledgement matches one discrepancy type on one tenant and holds until its `expiresOn` date, inclusive. After that date the discrepancy reappears without any change to the config. An entry with an unknown type, a missing tenant or reason, or an invalid date is not applied, and it's listed as a notice. So a typo can't hide a discrepancy.
 
 ---
 
@@ -899,7 +889,7 @@ Two feature branches contain work that is **not** in `main` or in any release:
 | Branch | Contents | Evidence boundary |
 |---|---|---|
 | `feature/compliance-investigation` | A synthetic Intune and Microsoft Graph compliance module: exception-first device list, setting-level evidence, device investigation and a consolidated multi-tenant `compliance report`. | Uses synthetic fixtures. No live Graph authorization, tenant coverage or case lifecycle automation has been established. |
-| `feature/business-central-monitoring-scope` | Monitoring-entitlement assessment from Business Central subscription records, tenant selection and an opt-in `backup-aggregator scoped-review`. Includes fixture commands and a read-only Business Central provider with delegated sign-in. Also adds an owned Acronis tenant to Business Central customer mapping model (suggest, confirm, reject, retire), count-only candidate key profiling, and a four-bucket shadow reconciliation engine. Scoped reviews print a full scope report (summary, in scope, excluded, discrepancies, acknowledged exceptions with expiry, exceptions), shown by `dev customer-mapping` and `backup-aggregator scoped-review`. | Fixture behavior is tested. Production read access, entitlement rules, a Business Central customer source and mapping storage are unresolved. Acronis tenants supply name only, so suggestions are name-based. Reconciliation creates no tickets, and the default review and ticketing paths are unchanged. |
+| `feature/business-central-monitoring-scope` | Monitoring-entitlement assessment from Business Central subscription records, tenant selection and an opt-in `backup-aggregator scoped-review`. Includes fixture commands and a read-only Business Central provider with delegated sign-in. Also adds an owned Acronis tenant to Business Central customer mapping model (suggest, confirm, reject, retire), count-only candidate key profiling, and a four-bucket shadow reconciliation engine. Scoped reviews print a full scope report (summary, in scope, excluded, discrepancies, exceptions), shown by `dev customer-mapping` and `backup-aggregator scoped-review`. | Fixture behavior is tested. Production read access, entitlement rules, a Business Central customer source and mapping storage are unresolved. Acronis tenants supply name only, so suggestions are name-based. Reconciliation creates no tickets, and the default review and ticketing paths are unchanged. |
 
 Synthetic fixtures do not prove real API contracts, authorization or completeness.
 

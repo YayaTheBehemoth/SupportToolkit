@@ -279,19 +279,6 @@ public sealed class CustomerMappingFixtureCommand
                         .GetIdentitiesAsync(cancellationToken)
                 );
 
-        // The suspended-subscription discrepancy is a known data
-        // error, accepted for a month.
-        IReadOnlyList<ExceptionAcknowledgement> acknowledgements =
-        [
-            new(
-                "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-                DiscrepancyType.TenantActiveSubscriptionInactive,
-                "Known data error; subscription is being removed.",
-                asOfDate.AddDays(30),
-                FixtureActor
-            )
-        ];
-
         var reconciliation =
             new ReconciliationEngine()
                 .Reconcile(
@@ -302,8 +289,7 @@ public sealed class CustomerMappingFixtureCommand
                         tenants
                     ),
                     asOfDate,
-                    SubscriptionItemNumbers.ToSet(itemNumbers),
-                    acknowledgements: acknowledgements
+                    SubscriptionItemNumbers.ToSet(itemNumbers)
                 );
 
         new ConsoleMonitoringScopeReporter()
