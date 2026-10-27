@@ -103,58 +103,29 @@ try
             "acronis-tenants",
             StringComparison.OrdinalIgnoreCase))
     {
-        var options =
-            args.Skip(2).ToArray();
-
         var validArguments =
-            options.Length >= 1
-            && options.Length <= 5
-            && options.Contains(
+            (args.Length == 3 || args.Length == 4)
+            && string.Equals(
+                args[2],
                 "--production",
-                StringComparer.OrdinalIgnoreCase)
-            && options.All(
-                option =>
-                    option.Equals(
-                        "--production",
-                        StringComparison.OrdinalIgnoreCase)
-                    || option.Equals(
-                        "--names",
-                        StringComparison.OrdinalIgnoreCase)
-                    || option.Equals(
-                        "--structure",
-                        StringComparison.OrdinalIgnoreCase)
-                    || option.Equals(
-                        "--fields",
-                        StringComparison.OrdinalIgnoreCase)
-                    || option.Equals(
-                        "--full",
-                        StringComparison.OrdinalIgnoreCase))
-            && options.Distinct(
-                StringComparer.OrdinalIgnoreCase).Count()
-                == options.Length;
+                StringComparison.OrdinalIgnoreCase)
+            && (args.Length == 3
+                || string.Equals(
+                    args[3],
+                    "--names",
+                    StringComparison.OrdinalIgnoreCase));
 
         if (!validArguments)
         {
             Console.Error.WriteLine(
                 "Usage: SupportToolkit dev acronis-tenants " +
-                "--production [--names] [--structure] [--fields] [--full]");
+                "--production [--names]");
             return 1;
         }
 
         return await tenantDirectoryCommand.RunAsync(
             Console.Out,
-            showNames: options.Contains(
-                "--names",
-                StringComparer.OrdinalIgnoreCase),
-            showStructure: options.Contains(
-                "--structure",
-                StringComparer.OrdinalIgnoreCase),
-            showFields: options.Contains(
-                "--fields",
-                StringComparer.OrdinalIgnoreCase),
-            fullDetail: options.Contains(
-                "--full",
-                StringComparer.OrdinalIgnoreCase));
+            showNames: args.Length == 4);
     }
 
     /*
@@ -188,6 +159,61 @@ try
 
         return await businessCentralDiagnosticsCommand.RunAsync(
             Console.Out);
+    }
+
+    /*
+     * Host-level developer utility.
+     *
+     * --production explicitly authorizes read-only Business Central
+     * (interactive sign-in) and Acronis reads. Nothing is stored.
+     * --names additionally prints names and customer numbers.
+     */
+    if (args.Length >= 2
+        && string.Equals(
+            args[0],
+            "dev",
+            StringComparison.OrdinalIgnoreCase)
+        && string.Equals(
+            args[1],
+            "customer-matching",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        var matchingOptions =
+            args.Skip(2).ToArray();
+
+        var validMatchingArguments =
+            (matchingOptions.Length == 1 || matchingOptions.Length == 2)
+            && matchingOptions.Contains(
+                "--production",
+                StringComparer.OrdinalIgnoreCase)
+            && matchingOptions.All(
+                option =>
+                    option.Equals(
+                        "--production",
+                        StringComparison.OrdinalIgnoreCase)
+                    || option.Equals(
+                        "--names",
+                        StringComparison.OrdinalIgnoreCase))
+            && matchingOptions.Distinct(
+                StringComparer.OrdinalIgnoreCase).Count()
+                == matchingOptions.Length;
+
+        if (!validMatchingArguments)
+        {
+            Console.Error.WriteLine(
+                "Usage: SupportToolkit dev customer-matching " +
+                "--production [--names]");
+
+            return 1;
+        }
+
+        return await new CustomerMatchingDevCommand(
+                configurationResolver)
+            .RunAsync(
+                Console.Out,
+                showNames: matchingOptions.Contains(
+                    "--names",
+                    StringComparer.OrdinalIgnoreCase));
     }
 
     /*
@@ -379,6 +405,8 @@ static void PrintUsage(
     Console.WriteLine("  dev monitoring-scope");
     Console.WriteLine("  dev scoped-backup-review");
     Console.WriteLine("  dev customer-mapping");
+    Console.WriteLine(
+        "  dev customer-matching --production [--names]");
     Console.WriteLine();
     Console.WriteLine("Modules:");
 

@@ -117,4 +117,23 @@ public sealed class BusinessCentralSubscriptionProvider
             lines
         );
     }
+
+    /// <summary>
+    /// Reads only the subscription number, customer number and
+    /// customer name from the already approved headers page. Kept off
+    /// the interface and off the entitlement read so a missing or
+    /// renamed column fails this call alone.
+    /// </summary>
+    public async Task<IReadOnlyList<BusinessCentralHeaderCustomerNameDto?>>
+        GetHeaderCustomerNamesAsync(
+            CancellationToken cancellationToken = default)
+    {
+        return await _paginator.FetchAllAsync<
+            BusinessCentralHeaderCustomerNameDto?>(
+            "subscription header customer names",
+            $"{_headersPath}?$select=" +
+            BusinessCentralSubscriptionFields.HeaderCustomerNameSelect,
+            cancellationToken
+        );
+    }
 }

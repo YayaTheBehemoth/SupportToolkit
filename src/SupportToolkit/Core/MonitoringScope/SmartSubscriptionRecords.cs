@@ -92,5 +92,6 @@ public sealed record MonitoringEntitlementObservation(
     MonitoringEntitlementAssessment Assessment,
     string Reason,
     bool IsSuspended = false,
-    string? ItemNumber = null
+    string? ItemNumber = null,
+    bool IsBlocked = false
 );

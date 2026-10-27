@@ -37,24 +37,10 @@ public sealed class AcronisTenantProvider
         _logger = logger;
     }
 
-    public Task<IReadOnlyList<TenantDto>>
-        GetTenantsAsync(
-            CancellationToken cancellationToken = default)
-    {
-        return GetTenantsAsync("basic", cancellationToken);
-    }
-
-    /// <summary>
-    /// Same read-only listing at an explicit level of detail. Used by
-    /// diagnostics only; operational callers use the basic listing.
-    /// </summary>
     public async Task<IReadOnlyList<TenantDto>>
         GetTenantsAsync(
-            string levelOfDetail,
             CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(levelOfDetail);
-
         _logger?.Info(
             "Fetching Acronis tenants.");
 
@@ -71,7 +57,7 @@ public sealed class AcronisTenantProvider
                 firstRequestPath:
                     "/api/2/tenants" +
                     $"?subtree_root_id={Uri.EscapeDataString(rootTenantId)}" +
-                    $"&lod={Uri.EscapeDataString(levelOfDetail)}" +
+                    "&lod=basic" +
                     $"&limit={PageSize}",
                 buildNextRequestPath:
                     after =>

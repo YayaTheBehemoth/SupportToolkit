@@ -8,8 +8,10 @@ namespace SupportToolkit.Core.CustomerMapping.Matching;
 /// null means the source did not supply them.
 ///
 /// The verified Acronis tenant contract supplies name only, so CVR and
-/// e-mail are always null on the Acronis side. No Business Central
-/// customer source exists yet.
+/// e-mail are always null on the Acronis side; the contact fields it
+/// carries were profiled and hold no usable match key. The Business
+/// Central side supplies the customer name read from the subscription
+/// headers.
 /// </summary>
 public sealed record CustomerParty(
     string Id,

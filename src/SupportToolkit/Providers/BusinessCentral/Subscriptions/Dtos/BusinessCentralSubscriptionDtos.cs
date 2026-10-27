@@ -152,6 +152,27 @@ public sealed class BusinessCentralSubscriptionLineDto
 }
 
 /// <summary>
+/// Customer name carried on a subscription header row.
+///
+/// Confirmed against the page's $metadata: sellToCustomerName is a
+/// header property next to sellToCustomerNumber. It is read through
+/// its own request so the established header contract is unaffected
+/// if the column is ever renamed: only this read would fail, never
+/// the entitlement read.
+/// </summary>
+public sealed class BusinessCentralHeaderCustomerNameDto
+{
+    [JsonPropertyName("number")]
+    public string? Number { get; init; }
+
+    [JsonPropertyName("sellToCustomerNumber")]
+    public string? SellToCustomerNumber { get; init; }
+
+    [JsonPropertyName("sellToCustomerName")]
+    public string? SellToCustomerName { get; init; }
+}
+
+/// <summary>
 /// Field lists sent as $select so data outside the DTOs is never
 /// requested from Business Central.
 /// </summary>
@@ -161,6 +182,9 @@ public static class BusinessCentralSubscriptionFields
         "id,number,type,blocked,sellToCustomerNumber," +
         "billToCustomerNumber,startDate,endDate,status," +
         "lastModifiedDateTime";
+
+    public const string HeaderCustomerNameSelect =
+        "number,sellToCustomerNumber,sellToCustomerName";
 
     public const string LineSelect =
         "id,subscriptionNumber,lineNumber,type,number,quantity," +

@@ -248,11 +248,20 @@ public sealed class SmartSubscriptionEntitlementEvaluator
 
             if (headerConcern is not null)
             {
+                // A subscription blocked for everything is plainly
+                // inactive; the flag lets callers tell it from an
+                // unclear case without reading the reason text.
                 observations.Add(
-                    Review(
+                    new MonitoringEntitlementObservation(
                         subscriptionNumber,
                         header.CustomerNumber,
-                        headerConcern
+                        MonitoringEntitlementAssessment.NeedsReview,
+                        headerConcern,
+                        ItemNumber: itemNumber,
+                        IsBlocked:
+                            SmartSubscriptionStates.ParseBlocked(
+                                header.BlockedValue)
+                            == SubscriptionBlockedState.All
                     )
                 );
 
