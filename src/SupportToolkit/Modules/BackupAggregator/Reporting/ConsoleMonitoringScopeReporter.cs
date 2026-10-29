@@ -48,6 +48,7 @@ public sealed class ConsoleMonitoringScopeReporter
             }
 
             WriteInScope(output, report);
+            WriteStrayTenants(output, report);
 
             if (HasHiddenDetail(report))
             {
@@ -63,6 +64,7 @@ public sealed class ConsoleMonitoringScopeReporter
 
         WriteAutomaticMappings(output, report);
         WriteInScope(output, report);
+        WriteStrayTenants(output, report);
         WriteExcluded(output, report);
         WriteDiscrepancies(output, report);
         WriteExceptions(output, report);
@@ -100,6 +102,18 @@ public sealed class ConsoleMonitoringScopeReporter
             $"  Unscoped (no mapping):   {report.UnscopedTenants.Count}");
         output.WriteLine(
             $"Entitled BC customers:     {report.EntitledCustomers}");
+
+        if (report.StrayTenants is { } stray)
+        {
+            output.WriteLine(
+                "Leak candidates:           " +
+                (stray.LeakCheckAvailable
+                    ? stray.LeakCandidates.Count.ToString(
+                        CultureInfo.InvariantCulture)
+                    : "unavailable"));
+            output.WriteLine(
+                $"Unmatched tenants:         {stray.Unmatched.Count}");
+        }
 
         if (!report.ReconciliationRun)
         {
@@ -232,6 +246,62 @@ public sealed class ConsoleMonitoringScopeReporter
                 $"  {tenant.TenantName} | " +
                 $"{tenant.CustomerNumber ?? "<no customer>"} | " +
                 entitling);
+        }
+    }
+
+    private static void WriteStrayTenants(
+        TextWriter output,
+        MonitoringScopeReport report)
+    {
+        var check = report.StrayTenants;
+
+        if (check is null)
+        {
+            return;
+        }
+
+        Heading(output, $"STRAY TENANT CHECK ({check.Total})");
+
+        if (!check.LeakCheckAvailable)
+        {
+            output.WriteLine(
+                "  Leak check unavailable: no service items are " +
+                "configured, so a customer without a backup item " +
+                "cannot be told apart from one with it.");
+        }
+        else if (check.LeakCandidates.Count == 0)
+        {
+            output.WriteLine("  Leak candidates: none.");
+        }
+        else
+        {
+            output.WriteLine(
+                $"  Leak candidates ({check.LeakCandidates.Count}): " +
+                "matched customer holds neither the backup nor the " +
+                "monitoring item.");
+
+            foreach (var tenant in check.LeakCandidates)
+            {
+                output.WriteLine(
+                    $"    {tenant.TenantName} | " +
+                    $"{tenant.CustomerNumber} | {tenant.Reason}");
+            }
+        }
+
+        if (check.Unmatched.Count == 0)
+        {
+            output.WriteLine("  Unmatched tenants: none.");
+            return;
+        }
+
+        output.WriteLine(
+            $"  Unmatched tenants ({check.Unmatched.Count}): needs " +
+            "review.");
+
+        foreach (var tenant in check.Unmatched)
+        {
+            output.WriteLine(
+                $"    {tenant.TenantName} | {tenant.Reason}");
         }
     }
 

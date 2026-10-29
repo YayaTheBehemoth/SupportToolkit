@@ -22,7 +22,10 @@ public sealed class BackupReviewTicketDraftFactory
     /// </param>
     public TicketDraft Create(
         AggregatedBackupReport report,
-        string? scopeNote = null)
+        string? scopeNote = null,
+        IReadOnlyList<string>? scopeTenantLines = null,
+        IReadOnlyList<string>? strayLines = null,
+        string? scopeWarning = null)
     {
         ArgumentNullException.ThrowIfNull(
             report
@@ -36,13 +39,17 @@ public sealed class BackupReviewTicketDraftFactory
         {
             Subject =
                 BuildSubject(
-                    report
+                    report,
+                    scopeWarning
                 ),
 
             Body =
                 BuildBody(
                     report,
-                    scopeNote
+                    scopeNote,
+                    scopeTenantLines,
+                    strayLines,
+                    scopeWarning
                 )
         };
     }
@@ -76,8 +83,28 @@ public sealed class BackupReviewTicketDraftFactory
     }
 
     private static string BuildSubject(
+        AggregatedBackupReport report,
+        string? scopeWarning)
+    {
+        var prefix =
+            string.IsNullOrWhiteSpace(scopeWarning)
+                ? string.Empty
+                : "[INCOMPLETE SCOPE] ";
+
+        return prefix + BuildSubjectCore(report);
+    }
+
+    private static string BuildSubjectCore(
         AggregatedBackupReport report)
     {
+        if (report.FindingsCount == 0
+            && report.UnknownRowsCount == 0
+            && report.InProgressWait is { PendingResources: > 0 })
+        {
+            return
+                "Backup review - backups still in progress";
+        }
+
         if (report.FindingsCount == 0
             && report.UnknownRowsCount == 0)
         {
@@ -95,7 +122,10 @@ public sealed class BackupReviewTicketDraftFactory
 
     private static string BuildBody(
         AggregatedBackupReport report,
-        string? scopeNote)
+        string? scopeNote,
+        IReadOnlyList<string>? scopeTenantLines,
+        IReadOnlyList<string>? strayLines,
+        string? scopeWarning)
     {
         var builder =
             new StringBuilder();
@@ -103,6 +133,15 @@ public sealed class BackupReviewTicketDraftFactory
         builder.AppendLine(
             "SUPPORTTOOLKIT // BACKUP REVIEW"
         );
+
+        if (!string.IsNullOrWhiteSpace(scopeWarning))
+        {
+            builder.AppendLine(
+                "!!! " + Inline(scopeWarning) + " !!!"
+            );
+
+            builder.AppendLine();
+        }
 
         builder.AppendLine();
 
@@ -117,6 +156,29 @@ public sealed class BackupReviewTicketDraftFactory
                     scopeNote
                 )
             );
+
+            foreach (var line in scopeTenantLines ?? [])
+            {
+                builder.AppendLine(
+                    "- " + Inline(line)
+                );
+            }
+
+            builder.AppendLine();
+        }
+
+        if (strayLines is { Count: > 0 })
+        {
+            builder.AppendLine(
+                "STRAY TENANT CHECK"
+            );
+
+            foreach (var line in strayLines)
+            {
+                builder.AppendLine(
+                    Inline(line)
+                );
+            }
 
             builder.AppendLine();
         }
@@ -173,6 +235,16 @@ public sealed class BackupReviewTicketDraftFactory
         builder.AppendLine(
             $"Unclassified: {report.UnknownRowsCount}"
         );
+
+        if (report.InProgressWait is { PendingResources: > 0 } wait)
+        {
+            builder.AppendLine(
+                $"Still in progress after waiting: " +
+                $"{wait.PendingResources} resource(s) in " +
+                $"{wait.PendingTenants} tenant(s). Their result is " +
+                "not final."
+            );
+        }
 
         builder.AppendLine();
     }

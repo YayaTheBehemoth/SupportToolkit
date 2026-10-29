@@ -80,6 +80,7 @@ Direct CLI commands are also available for scripting and development.
 | `backup-aggregator ticket preview --scoped` / `ticket submit --scoped` | Ticket from a complete scoped review. | `submit` **writes to Zendesk.** |
 | `backup-health` | Acronis backup health evaluation. | Read-only in production mode. |
 | `dev acronis-tenants --production [--names]` | Tenant discovery diagnostics. | Read-only Acronis calls. |
+| `dev acronis-usage --production [--names [--out <path>]]` | Per-tenant Acronis usage probe for joining to other data. | Read-only Acronis calls. |
 | `dev bc-subscriptions [--production]` | Business Central subscription evidence diagnostics. | Read-only; `--production` signs in interactively. |
 | `dev customer-matching --production [--names] [--why]` | Dry run of the automatic customer-to-tenant matching. | Read-only Acronis and Business Central calls. |
 | `dev monitoring-scope`, `dev customer-mapping` | Fixture-only scope and mapping walkthroughs. | None. |
@@ -192,6 +193,19 @@ If customer discovery unexpectedly returns zero customer tenants, the all-tenant
 
 Ticket creation is blocked when the underlying review is incomplete or its resource accounting is inconsistent.
 
+**Waiting for in-progress resources.** A resource that Acronis reports as running is shown as In progress, and a ticket drafted mid-backup would differ from one drafted afterwards. In production, the review therefore waits for running resources and re-reviews only the tenants that still have some. It prints how many resources are still running and how long it has waited. A tenant whose re-review fails is a failed tenant review like any other. When the maximum wait ends, the remaining resources stay In progress, are counted as pending in the report, console and ticket, and are never shown as healthy. Whether a ticket can still be created in that case is unchanged: it can. With nothing running there is no wait and no extra call. The settings are per profile and module:
+
+```json
+"review": {
+  "backup-aggregator": {
+    "inProgressMaxWaitSeconds": 1800,
+    "inProgressPollIntervalSeconds": 30
+  }
+}
+```
+
+Both values are optional and default to 1800 and 30. `0` for the maximum wait disables waiting. The single-tenant `inventory-review <tenant>` does not wait. `configure status` shows the effective values.
+
 ### Commands
 
 Review one tenant:
@@ -261,7 +275,9 @@ The run prints a scope report. The default view shows the summary, any notices a
 5. **Exceptions.** Tenants needing scope review, Ambiguous and Unscoped results, and configuration notices.
 6. **Automatic mapping.** Accepted links by method, pending and ambiguous cases, and entitled customers that have no Acronis tenant.
 
-**Tickets.** `backup-aggregator ticket preview --scoped` and `ticket submit --scoped` (and the matching interactive menu entries) build the same ticket as a full review, with a scope line, from the scoped review. A ticket is produced only when the whole scoped review is complete: every tenant matched or decided, no scope or notice left open, and no failed tenant review. Otherwise the reasons are printed and nothing is drafted or sent.
+**Tickets.** `backup-aggregator ticket preview --scoped` and `ticket submit --scoped` (and the matching interactive menu entries) build the same ticket as a full review, with a scope line, from the scoped review. A ticket is produced only when nothing but unmatched tenants is left open: no scope review pending, no notice, no entitled customer without a tenant and no failed tenant review. Otherwise the reasons are printed and nothing is drafted or sent. Tenants that could not be matched to a customer do not block the ticket, because they are not reviewed and the ticket says so itself: it starts with an `INCOMPLETE SCOPE` banner naming how many tenants were not covered, its subject is prefixed `[INCOMPLETE SCOPE]`, and they are listed by name under STRAY TENANT CHECK. The console still reports the scope as incomplete.
+
+The ticket's SCOPE section lists every in-scope tenant by name, sorted, with the operator's own tenant marked. A STRAY TENANT CHECK block follows. It is informational and never blocks a ticket. Leak candidates are Acronis tenants matched to a Business Central customer that holds neither the backup item nor the monitoring item, so they may be running without being billed. Customers with the backup item but no monitoring item are a legitimate exclusion and are not listed. Unmatched tenants are listed there as well, with the banner above. The leak check needs service items to be configured. Without them it states "unavailable" instead of reporting none, and name matching stays limited to customers holding an entitling or service item. With them, matching also considers every customer that has any subscription, using data already read, with no extra call. The same section appears in the console report in both the default and the detailed view.
 
 The report is deliberately naive. Every discrepancy it finds is reported on every run. It doesn't track which ones are already known, accepted or being fixed; that judgment stays with the operator.
 
@@ -696,6 +712,29 @@ Production diagnostic output should be handled as potentially sensitive.
 
 ---
 
+## Acronis usage probe
+
+A second developer utility reads per-tenant usage from Acronis, in a form meant to be joined to other data. It only reads and prints: it does not call Business Central, compare anything, or feed any report.
+
+```cmd
+dotnet run --project src\SupportToolkit -- dev acronis-usage --production
+```
+
+The default output is aggregate and safe to share: customer tenant counts, how many have usage, how many have none returned (unknown, never zero), the metric names and units seen, and the spread of values per metric. Units are printed exactly as Acronis reports them and are never converted.
+
+For one row per customer tenant and measurement (tenant id and name, parent tenant, metric, edition, value, absolute value, unit, period start and a status column):
+
+```cmd
+dotnet run --project src\SupportToolkit -- dev acronis-usage --production --names
+dotnet run --project src\SupportToolkit -- dev acronis-usage --production --names --out C:\private\usage.csv
+```
+
+Rows contain customer names. `--out` writes a new CSV and refuses a path inside any git working tree, an existing file, or a missing folder. Tenants with no usage returned get an explicit `unknown` row, so they cannot drop out of a join. The command exits with code `2` when any tenant or value is unknown.
+
+It uses one read-only endpoint, the batch usage endpoint (`GET /api/2/tenants/usages`), added to the read-only allowlist as an exact path. Acronis publishes no measurement timestamp for it, only the start of the usage period, and describes the figures as refreshed every few hours and not meant for billing. The batch size limit and required API-client role are not documented, so requests are chunked at 50 tenants and any failed chunk fails the whole run. The metric names, and which value is the right one, are for the operator to decide from the output.
+
+---
+
 ## Interactive console
 
 Launching SupportToolkit without arguments opens its interactive interface:
@@ -865,6 +904,7 @@ The automated tests cover areas including:
 - Profile and configuration behavior.
 - Logging and exception diagnostics.
 - Acronis transport restrictions.
+- Waiting for in-progress resources, and the usage probe and its read-only endpoint.
 - Monitoring entitlement, scope completeness and operator-tenant handling.
 - Customer-to-tenant name matching, automatic mapping and reconciliation.
 - Scoped tickets and their completeness gate.

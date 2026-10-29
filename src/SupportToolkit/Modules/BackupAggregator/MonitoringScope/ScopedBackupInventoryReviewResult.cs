@@ -43,10 +43,13 @@ public sealed record ScopedBackupInventoryReviewResult(
         && IsScopeComplete;
 
     /// <summary>
-    /// Why no ticket may be created from this review. Empty only when
-    /// the review is overall complete: a ticket asserts that every
-    /// monitored tenant was reviewed, so an incomplete scope or
-    /// inventory must never produce one.
+    /// Why no ticket may be created from this review.
+    ///
+    /// Tenants that could not be matched to a customer do not block:
+    /// they are not reviewed, so the ticket must say so itself (see
+    /// TicketScopeWarning). Every other gap, an unresolved scope, a
+    /// failed tenant review or a notice, still blocks, because a
+    /// ticket must never claim coverage it does not have.
     /// </summary>
     public IReadOnlyList<string> TicketBlockers
     {
@@ -76,13 +79,6 @@ public sealed record ScopedBackupInventoryReviewResult(
                     "review.");
             }
 
-            if (Selection.UnclassifiedCount > 0)
-            {
-                blockers.Add(
-                    $"{Selection.UnclassifiedCount} tenant(s) could not " +
-                    "be matched to a Business Central customer.");
-            }
-
             if (Selection.UnmatchedEvidence.Count > 0)
             {
                 blockers.Add(
@@ -98,6 +94,18 @@ public sealed record ScopedBackupInventoryReviewResult(
             return blockers;
         }
     }
+
+    /// <summary>
+    /// Banner for a ticket drafted while tenants are unmatched. Null
+    /// when every tenant was decided.
+    /// </summary>
+    public string? TicketScopeWarning =>
+        Selection.UnclassifiedCount == 0
+            ? null
+            : $"INCOMPLETE SCOPE: {Selection.UnclassifiedCount} " +
+              "tenant(s) could not be matched to a Business Central " +
+              "customer and were NOT reviewed. This ticket does not " +
+              "cover them; they are listed under STRAY TENANT CHECK.";
 
     /// <summary>
     /// One line for the ticket saying what the review covered.
@@ -122,6 +130,86 @@ public sealed record ScopedBackupInventoryReviewResult(
                 (includesOperator
                     ? ", plus the operator's own tenant."
                     : ".");
+        }
+    }
+
+    /// <summary>
+    /// The tenants this review covered, one line each, sorted by name
+    /// then tenant id. The operator's own tenant is marked.
+    /// </summary>
+    public IReadOnlyList<string> TicketScopeTenantLines =>
+        (ScopeReport?.InScope ?? [])
+            .OrderBy(
+                tenant => tenant.TenantName,
+                StringComparer.OrdinalIgnoreCase)
+            .ThenBy(
+                tenant => tenant.TenantId,
+                StringComparer.OrdinalIgnoreCase)
+            .Select(
+                tenant => tenant.IsOperatorTenant
+                    ? $"{tenant.TenantName} (operator's own tenant)"
+                    : tenant.TenantName)
+            .ToArray();
+
+    /// <summary>
+    /// The stray tenant check as ticket lines. Informational: it never
+    /// blocks a ticket. Null when the run produced no scope report.
+    /// An unavailable leak check is stated, never left out.
+    /// </summary>
+    public IReadOnlyList<string>? TicketStrayLines
+    {
+        get
+        {
+            var check = ScopeReport?.StrayTenants;
+
+            if (check is null)
+            {
+                return null;
+            }
+
+            var lines = new List<string>();
+
+            if (!check.LeakCheckAvailable)
+            {
+                lines.Add(
+                    "Leak check unavailable: no service items are " +
+                    "configured.");
+            }
+            else if (check.LeakCandidates.Count == 0)
+            {
+                lines.Add("Leak candidates: none.");
+            }
+            else
+            {
+                lines.Add(
+                    $"Leak candidates ({check.LeakCandidates.Count}): " +
+                    "matched customer holds neither the backup nor " +
+                    "the monitoring item.");
+
+                lines.AddRange(
+                    check.LeakCandidates.Select(
+                        tenant =>
+                            $"- {tenant.TenantName} " +
+                            $"(customer {tenant.CustomerNumber})"));
+            }
+
+            if (check.Unmatched.Count == 0)
+            {
+                lines.Add("Unmatched tenants: none.");
+            }
+            else
+            {
+                lines.Add(
+                    $"Unmatched tenants ({check.Unmatched.Count}): not " +
+                    "matched to any Business Central customer; stray " +
+                    "tenant or matching miss.");
+
+                lines.AddRange(
+                    check.Unmatched.Select(
+                        tenant => $"- {tenant.TenantName}"));
+            }
+
+            return lines;
         }
     }
 }

@@ -297,6 +297,11 @@ public sealed class JsonSupportToolkitConfigurationStore
                 new Dictionary<
                     string,
                     ModuleMonitoringScopeConfiguration>();
+
+            profile.Review ??=
+                new Dictionary<
+                    string,
+                    ModuleReviewConfiguration>();
         }
     }
 

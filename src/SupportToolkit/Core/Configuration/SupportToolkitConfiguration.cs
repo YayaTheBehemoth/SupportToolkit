@@ -77,6 +77,15 @@ public sealed class SupportToolkitProfile
         set;
     } = new();
 
+    /// <summary>
+    /// Per-module review settings, keyed by module command.
+    /// </summary>
+    public Dictionary<string, ModuleReviewConfiguration> Review
+    {
+        get;
+        set;
+    } = new();
+
     public Dictionary<string, SupportToolkitMode> Modules
     {
         get;
@@ -94,6 +103,18 @@ public sealed class AcronisConnectionConfiguration
 
     public string ClientId { get; set; } =
         string.Empty;
+}
+
+/// <summary>
+/// How a module review treats resources that are still running.
+/// Unset values use the defaults in InProgressWaitSettings. A maximum
+/// wait of 0 disables waiting.
+/// </summary>
+public sealed class ModuleReviewConfiguration
+{
+    public int? InProgressMaxWaitSeconds { get; set; }
+
+    public int? InProgressPollIntervalSeconds { get; set; }
 }
 
 /// <summary>

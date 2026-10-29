@@ -148,6 +148,19 @@ public sealed class AcronisReadOnlyHandler : DelegatingHandler
             return true;
         }
 
+        /*
+         * Per-tenant usage, read-only. Exact path only: no wildcard
+         * under /api/2/tenants, and no usage-report endpoint (creating
+         * a report is a write).
+         */
+        if (string.Equals(
+                path,
+                "/api/2/tenants/usages",
+                StringComparison.Ordinal))
+        {
+            return true;
+        }
+
         if (string.Equals(
                 path,
                 "/api/resource_management/v4/resource_statuses",

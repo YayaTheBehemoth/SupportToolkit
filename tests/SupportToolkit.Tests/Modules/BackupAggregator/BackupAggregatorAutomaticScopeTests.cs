@@ -446,7 +446,7 @@ public class BackupAggregatorAutomaticScopeTests
     }
 
     [Fact]
-    public async Task IncompleteScopedReview_ProducesNoTicketAndSaysWhy()
+    public async Task UnmatchedTenant_ProducesATicketWithALoudIncompleteScopeBanner()
     {
         var run = await RunScenarioAsync(
             [Sub("SUB-1", "BC-1", Item, "EXAMPLE-BACKUP")],
@@ -459,6 +459,77 @@ public class BackupAggregatorAutomaticScopeTests
             [new("BC-1", "Northwind Traders ApS")],
             ServiceItems);
 
+        Assert.False(run.Result.IsScopeComplete);
+        Assert.False(run.Result.IsOverallComplete);
+        Assert.Empty(run.Result.TicketBlockers);
+
+        var draft =
+            new BackupAggregatorWorkflow(Resolver(ServiceItems))
+                .CreateScopedTicketDraft(run.Result);
+
+        Assert.StartsWith("[INCOMPLETE SCOPE] ", draft.Subject);
+        Assert.Contains(
+            "!!! INCOMPLETE SCOPE: 1 tenant(s) could not be matched " +
+            "to a Business Central customer and were NOT reviewed.",
+            draft.Body);
+        Assert.Contains("Unmatched tenants (1)", draft.Body);
+        Assert.Contains("- Unrelated Tenant", draft.Body);
+
+        // The banner comes before everything else.
+        Assert.True(
+            draft.Body.IndexOf("!!! INCOMPLETE SCOPE", StringComparison.Ordinal)
+                < draft.Body.IndexOf("STRAY TENANT CHECK", StringComparison.Ordinal));
+
+        Assert.StartsWith(
+            "SUPPORTTOOLKIT // BACKUP REVIEW",
+            draft.Body);
+
+        Assert.True(
+            draft.Body.IndexOf("!!! INCOMPLETE SCOPE", StringComparison.Ordinal)
+                < draft.Body.IndexOf("SUMMARY", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task CompleteScope_HasNoBannerAndNoSubjectPrefix()
+    {
+        var run = await RunScenarioAsync(
+            [Sub("SUB-1", "BC-1", Item, "EXAMPLE-BACKUP")],
+            [
+                Tenant(OwnPartner, "SYNTHETIC OPERATOR", "partner"),
+                Tenant(OwnCustomer, "Synthetic Operator", "customer"),
+                Tenant(Northwind, "Northwind Traders", "customer")
+            ],
+            [new("BC-1", "Northwind Traders ApS")],
+            ServiceItems);
+
+        var draft =
+            new BackupAggregatorWorkflow(Resolver(ServiceItems))
+                .CreateScopedTicketDraft(run.Result);
+
+        Assert.DoesNotContain("INCOMPLETE SCOPE", draft.Subject);
+        Assert.DoesNotContain("INCOMPLETE SCOPE", draft.Body);
+        Assert.Null(run.Result.TicketScopeWarning);
+    }
+
+    [Fact]
+    public async Task AnEntitledCustomerWithNoTenant_StillBlocksTheTicket()
+    {
+        var run = await RunScenarioAsync(
+            [
+                Sub("SUB-1", "BC-1", Item, "EXAMPLE-BACKUP"),
+                Sub("SUB-2", "BC-2", Item, "EXAMPLE-BACKUP")
+            ],
+            [
+                Tenant(OwnPartner, "SYNTHETIC OPERATOR", "partner"),
+                Tenant(OwnCustomer, "Synthetic Operator", "customer"),
+                Tenant(Northwind, "Northwind Traders", "customer")
+            ],
+            [
+                new("BC-1", "Northwind Traders ApS"),
+                new("BC-2", "Contoso Vaerksted A/S")
+            ],
+            ServiceItems);
+
         Assert.NotEmpty(run.Result.TicketBlockers);
 
         var exception =
@@ -467,7 +538,6 @@ public class BackupAggregatorAutomaticScopeTests
                     .CreateScopedTicketDraft(run.Result));
 
         Assert.Contains("not complete", exception.Message);
-        Assert.Contains("could not be matched", exception.Message);
     }
 
     [Fact]
@@ -494,6 +564,207 @@ public class BackupAggregatorAutomaticScopeTests
 
         Assert.Contains("SCOPE", scoped.Body);
         Assert.DoesNotContain("SCOPE", full.Body);
+    }
+
+    private const string Fabrikam = "77777777-7777-7777-7777-777777777777";
+
+    [Fact]
+    public async Task TenantOfACustomerWithNeitherItem_IsALeakCandidateInReportConsoleAndTicket()
+    {
+        var run = await RunScenarioAsync(
+            [
+                Sub("SUB-1", "BC-1", Item, "EXAMPLE-BACKUP"),
+                // Backup but no monitoring: a legitimate exclusion.
+                Sub("SUB-2", "BC-2", "EXAMPLE-BACKUP"),
+                // Subscribes to something unrelated: no backup at all.
+                Sub("SUB-3", "BC-3", "OTHER-SERVICE")
+            ],
+            [
+                Tenant(OwnPartner, "SYNTHETIC OPERATOR", "partner"),
+                Tenant(OwnCustomer, "Synthetic Operator", "customer"),
+                Tenant(Northwind, "Northwind Traders", "customer"),
+                Tenant(Contoso, "Contoso", "customer"),
+                Tenant(Fabrikam, "Fabrikam Industries", "customer")
+            ],
+            [
+                new("BC-1", "Northwind Traders ApS"),
+                new("BC-2", "Contoso Vaerksted A/S"),
+                new("BC-3", "Fabrikam Industries A/S")
+            ],
+            ServiceItems);
+
+        var report = Assert.IsType<MonitoringScopeReport>(
+            run.Result.ScopeReport);
+
+        var check = Assert.IsType<StrayTenantCheck>(report.StrayTenants);
+
+        Assert.True(check.LeakCheckAvailable);
+
+        var leak = Assert.Single(check.LeakCandidates);
+        Assert.Equal("Fabrikam Industries", leak.TenantName);
+        Assert.Equal("BC-3", leak.CustomerNumber);
+        Assert.Empty(check.Unmatched);
+
+        // The backup-only customer is excluded but is not a leak.
+        Assert.Contains(
+            report.Excluded,
+            tenant => tenant.TenantName == "Contoso");
+
+        // Everything is decided, so the scope is complete and a ticket
+        // may be drafted; the stray check is informational.
+        Assert.Empty(run.Result.TicketBlockers);
+
+        using var writer = new StringWriter();
+
+        new SupportToolkit.Modules.BackupAggregator.Reporting
+            .ConsoleMonitoringScopeReporter()
+            .Write(writer, report, detailed: false);
+
+        var console = writer.ToString();
+
+        Assert.Contains("STRAY TENANT CHECK (1)", console);
+        Assert.Contains("Fabrikam Industries | BC-3", console);
+        Assert.DoesNotContain("Contoso |", console.Split("STRAY TENANT CHECK")[1]);
+
+        var draft =
+            new BackupAggregatorWorkflow(Resolver(ServiceItems))
+                .CreateScopedTicketDraft(run.Result);
+
+        Assert.Contains("STRAY TENANT CHECK", draft.Body);
+        Assert.Contains("Leak candidates (1)", draft.Body);
+        Assert.Contains("- Fabrikam Industries (customer BC-3)", draft.Body);
+        Assert.Contains("Unmatched tenants: none.", draft.Body);
+        Assert.DoesNotContain("- Contoso (customer", draft.Body);
+    }
+
+    [Fact]
+    public async Task ScopeSection_ListsTheInScopeTenantsSortedWithTheOperatorMarked()
+    {
+        var run = await RunScenarioAsync(
+            [
+                Sub("SUB-1", "BC-1", Item, "EXAMPLE-BACKUP"),
+                Sub("SUB-2", "BC-2", Item, "EXAMPLE-BACKUP")
+            ],
+            [
+                Tenant(OwnPartner, "SYNTHETIC OPERATOR", "partner"),
+                Tenant(OwnCustomer, "Synthetic Operator", "customer"),
+                Tenant(Northwind, "Northwind Traders", "customer"),
+                Tenant(Contoso, "Contoso", "customer")
+            ],
+            [
+                new("BC-1", "Northwind Traders ApS"),
+                new("BC-2", "Contoso Vaerksted A/S")
+            ],
+            ServiceItems);
+
+        Assert.Equal(
+            [
+                "Contoso",
+                "Northwind Traders",
+                "Synthetic Operator (operator's own tenant)"
+            ],
+            run.Result.TicketScopeTenantLines);
+
+        var body =
+            new BackupAggregatorWorkflow(Resolver(ServiceItems))
+                .CreateScopedTicketDraft(run.Result)
+                .Body;
+
+        var scope =
+            body.Split("SCOPE")[1];
+
+        Assert.True(
+            scope.IndexOf("- Contoso", StringComparison.Ordinal)
+                < scope.IndexOf("- Northwind Traders", StringComparison.Ordinal));
+
+        Assert.Contains(
+            "- Synthetic Operator (operator's own tenant)",
+            body);
+
+        Assert.Contains("2 entitled customer tenant(s)", body);
+    }
+
+    [Fact]
+    public async Task ASimilarlyNamedCustomerOutsideTheService_DoesNotBreakAnEarlierUniqueMatch()
+    {
+        var run = await RunScenarioAsync(
+            [
+                Sub("SUB-1", "BC-1", Item, "EXAMPLE-BACKUP"),
+                // Unrelated subscription, near-identical name.
+                Sub("SUB-2", "BC-9", "OTHER-SERVICE")
+            ],
+            [
+                Tenant(OwnPartner, "SYNTHETIC OPERATOR", "partner"),
+                Tenant(OwnCustomer, "Synthetic Operator", "customer"),
+                Tenant(Northwind, "Northwind Traders", "customer")
+            ],
+            [
+                new("BC-1", "Northwind Traders ApS"),
+                new("BC-9", "Northwind Traders Holding ApS")
+            ],
+            ServiceItems);
+
+        var report = Assert.IsType<MonitoringScopeReport>(
+            run.Result.ScopeReport);
+
+        Assert.Contains(
+            report.InScope,
+            tenant => tenant.TenantId == Northwind
+                && tenant.CustomerNumber == "BC-1");
+
+        Assert.Empty(run.Result.TicketBlockers);
+    }
+
+    [Fact]
+    public async Task WithoutServiceItems_TheLeakCheckIsUnavailableNeverClean()
+    {
+        var run = await RunScenarioAsync(
+            [Sub("SUB-1", "BC-1", Item)],
+            [
+                Tenant(OwnPartner, "SYNTHETIC OPERATOR", "partner"),
+                Tenant(OwnCustomer, "Synthetic Operator", "customer"),
+                Tenant(Northwind, "Northwind Traders", "customer")
+            ],
+            [new("BC-1", "Northwind Traders ApS")],
+            serviceItems: null);
+
+        var check = Assert.IsType<StrayTenantCheck>(
+            Assert.IsType<MonitoringScopeReport>(run.Result.ScopeReport)
+                .StrayTenants);
+
+        Assert.False(check.LeakCheckAvailable);
+        Assert.Empty(check.LeakCandidates);
+
+        var body =
+            new BackupAggregatorWorkflow(Resolver(null))
+                .CreateScopedTicketDraft(run.Result)
+                .Body;
+
+        Assert.Contains("Leak check unavailable", body);
+        Assert.DoesNotContain("Leak candidates: none.", body);
+    }
+
+    [Fact]
+    public async Task UnmatchedTenant_IsListedForReviewInTheStrayCheck()
+    {
+        var run = await RunScenarioAsync(
+            [Sub("SUB-1", "BC-1", Item, "EXAMPLE-BACKUP")],
+            [
+                Tenant(OwnPartner, "SYNTHETIC OPERATOR", "partner"),
+                Tenant(OwnCustomer, "Synthetic Operator", "customer"),
+                Tenant(Northwind, "Northwind Traders", "customer"),
+                Tenant(Stranger, "Unrelated Tenant", "customer")
+            ],
+            [new("BC-1", "Northwind Traders ApS")],
+            ServiceItems);
+
+        var check = Assert.IsType<StrayTenantCheck>(
+            Assert.IsType<MonitoringScopeReport>(run.Result.ScopeReport)
+                .StrayTenants);
+
+        var unmatched = Assert.Single(check.Unmatched);
+        Assert.Equal("Unrelated Tenant", unmatched.TenantName);
+        Assert.False(run.Result.IsScopeComplete);
     }
 
     private static (string Subscription, string Customer, string[] Items) Sub(

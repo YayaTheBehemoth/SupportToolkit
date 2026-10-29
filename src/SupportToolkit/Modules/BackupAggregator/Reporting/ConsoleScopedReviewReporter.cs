@@ -124,8 +124,12 @@ public sealed class ConsoleScopedReviewReporter
             result.IsOverallComplete
                 ? "this review is complete, so a ticket can be " +
                   "previewed and created from it."
-                : "a ticket can be created only when the overall " +
-                  "review is complete.");
+                : result.TicketBlockers.Count == 0
+                    ? "a ticket can be created, but it will carry an " +
+                      "INCOMPLETE SCOPE banner: unmatched tenants are " +
+                      "not covered."
+                    : "a ticket cannot be created until the reasons " +
+                      "above are resolved.");
     }
 
     private static string YesNo(

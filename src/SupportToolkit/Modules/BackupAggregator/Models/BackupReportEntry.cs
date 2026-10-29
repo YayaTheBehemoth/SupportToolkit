@@ -22,4 +22,7 @@ public sealed class BackupReportEntry
     public string? PlanName { get; init; }
 
     public string? ResourceState { get; init; }
+
+    public bool IsInProgress =>
+        BackupResourceStates.IsInProgress(ResourceState);
 }

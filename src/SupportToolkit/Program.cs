@@ -31,6 +31,10 @@ var tenantDirectoryCommand =
     new AcronisTenantDirectoryDevCommand(
         configurationResolver);
 
+var usageProbeCommand =
+    new AcronisUsageDevCommand(
+        configurationResolver);
+
 var businessCentralDiagnosticsCommand =
     new BusinessCentralSubscriptionDevCommand(
         configurationResolver);
@@ -126,6 +130,37 @@ try
         return await tenantDirectoryCommand.RunAsync(
             Console.Out,
             showNames: args.Length == 4);
+    }
+
+    /*
+     * Host-level developer utility.
+     *
+     * --production explicitly authorizes read-only Acronis calls.
+     * --names adds one row per customer tenant (customer names);
+     * --out writes those rows to a file outside any git working tree.
+     */
+    if (args.Length >= 2
+        && string.Equals(
+            args[0],
+            "dev",
+            StringComparison.OrdinalIgnoreCase)
+        && string.Equals(
+            args[1],
+            "acronis-usage",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        if (!AcronisUsageDevCommand.TryParseArguments(
+                args.Skip(2).ToArray(),
+                out var usageOptions,
+                out var usageError))
+        {
+            Console.Error.WriteLine(usageError);
+            return 1;
+        }
+
+        return await usageProbeCommand.RunAsync(
+            Console.Out,
+            usageOptions!);
     }
 
     /*
@@ -404,6 +439,8 @@ static void PrintUsage(
     Console.WriteLine("Developer diagnostics:");
     Console.WriteLine(
         "  dev acronis-tenants --production [--names]");
+    Console.WriteLine(
+        "  dev acronis-usage --production [--names [--out <path>]]");
     Console.WriteLine(
         "  dev bc-subscriptions --production");
     Console.WriteLine();

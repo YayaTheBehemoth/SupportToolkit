@@ -32,7 +32,9 @@ public sealed class BackupAggregatorProductionSession
 
     public static BackupAggregatorProductionSession Create(
         AcronisOptions options,
-        OperationalLogger logger)
+        OperationalLogger logger,
+        InProgressWaitOptions? inProgressWait = null,
+        Action<string>? progress = null)
     {
         ArgumentNullException.ThrowIfNull(
             options
@@ -105,7 +107,9 @@ public sealed class BackupAggregatorProductionSession
                 microsoft365Inventory,
                 deviceInventory,
                 new BackupInventoryNormalizer(),
-                logger
+                logger,
+                inProgressWait: inProgressWait,
+                progress: progress
             );
 
         return new BackupAggregatorProductionSession(

@@ -101,16 +101,7 @@ internal static class BackupReportEntryPresentation
             return $"Completed - {ToDisplayText(result)}";
         }
 
-        if (string.Equals(
-                state,
-                "running",
-                StringComparison.OrdinalIgnoreCase
-            )
-            || string.Equals(
-                state,
-                "backup",
-                StringComparison.OrdinalIgnoreCase
-            ))
+        if (BackupResourceStates.IsInProgress(state))
         {
             return "In progress";
         }
