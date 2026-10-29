@@ -15,6 +15,9 @@ public class AcronisUsageDevCommandTests
     [InlineData("--production")]
     [InlineData("--production", "--names")]
     [InlineData("--production", "--names", "--out", "usage.csv")]
+    [InlineData("--production", "--metric", "storage")]
+    [InlineData("--production", "--tenant", "alpha", "--metric", "storage")]
+    [InlineData("--production", "--metric", "storage", "--metric", "total_storage", "--names")]
     public void Arguments_AcceptTheDocumentedShapes(params string[] args)
     {
         Assert.True(
@@ -33,6 +36,8 @@ public class AcronisUsageDevCommandTests
     [InlineData("--production", "--names", "--out")]
     [InlineData("--production", "--names", "--names")]
     [InlineData("--production", "--unknown")]
+    [InlineData("--production", "--metric")]
+    [InlineData("--production", "--tenant")]
     public void Arguments_RejectEverythingElse(params string[] args)
     {
         Assert.False(
@@ -108,6 +113,142 @@ public class AcronisUsageDevCommandTests
     }
 
     [Fact]
+    public void TenantFilter_PrintsOneTenantWithRawGbAndGibColumns()
+    {
+        var usage =
+            new AcronisUsageResult(
+                new Dictionary<string, IReadOnlyList<AcronisTenantUsage>>
+                {
+                    [Alpha] =
+                    [
+                        new(
+                            Alpha,
+                            "storage_total",
+                            "standard",
+                            "infra",
+                            1073741824m,
+                            1073741824m,
+                            "bytes",
+                            null),
+                        new(
+                            Alpha,
+                            "empty_metric",
+                            "standard",
+                            "infra",
+                            0m,
+                            0m,
+                            "bytes",
+                            null)
+                    ],
+                    [Beta] =
+                    [
+                        new(
+                            Beta,
+                            "storage_total",
+                            "standard",
+                            "infra",
+                            5m,
+                            5m,
+                            "bytes",
+                            null)
+                    ]
+                },
+                0);
+
+        var output = new StringWriter();
+
+        var exit =
+            AcronisUsageDevCommand.WriteReport(
+                output,
+                Tenants(),
+                usage,
+                showNames: false,
+                tenantFilter: "alpha");
+
+        var text = output.ToString();
+
+        Assert.Equal(0, exit);
+        Assert.Contains("Alpha Example", text);
+        Assert.DoesNotContain("Beta Example", text);
+        Assert.Contains("1073741824", text);
+        Assert.Contains("1.07", text);
+        Assert.Contains("1 ", text);
+        Assert.DoesNotContain("empty_metric", text);
+        Assert.Contains("1 zero-valued row(s) hidden", text);
+    }
+
+    [Fact]
+    public void TenantFilter_WithNoMatch_ReportsItAndIsIncomplete()
+    {
+        var output = new StringWriter();
+
+        var exit =
+            AcronisUsageDevCommand.WriteReport(
+                output,
+                Tenants(),
+                Usage(),
+                showNames: false,
+                tenantFilter: "nothing-like-this");
+
+        Assert.Equal(2, exit);
+        Assert.Contains("No customer tenant matched", output.ToString());
+    }
+
+    [Fact]
+    public void MetricFilter_KeepsOnlyNamedMetrics_AndMarksAbsentOnesUnknown()
+    {
+        var rows =
+            AcronisUsageDevCommand.BuildRows(
+                Tenants(),
+                Usage(),
+                ["LOCAL_STORAGE"]);
+
+        // Alpha has usage, but not this metric: unknown, not dropped.
+        var alpha = Assert.Single(rows, row => row.TenantId == Alpha);
+        Assert.Equal(
+            "unknown: requested metric not reported",
+            alpha.Status);
+        Assert.Null(alpha.Value);
+
+        Assert.DoesNotContain(rows, row => row.Metric == "storage");
+        Assert.Contains(rows, row => row.Metric == "local_storage");
+    }
+
+    [Fact]
+    public void Rows_CarryTypeInfraAndApplicationIds()
+    {
+        var usage =
+            new AcronisUsageResult(
+                new Dictionary<string, IReadOnlyList<AcronisTenantUsage>>
+                {
+                    [Alpha] =
+                    [
+                        new(
+                            Alpha,
+                            "storage",
+                            "standard",
+                            "infra",
+                            1m,
+                            1m,
+                            "bytes",
+                            null,
+                            "infra-1",
+                            "app-1")
+                    ]
+                },
+                0);
+
+        var row =
+            Assert.Single(
+                AcronisUsageDevCommand.BuildRows(Tenants(), usage),
+                item => item.TenantId == Alpha);
+
+        Assert.Equal("infra", row.Type);
+        Assert.Equal("infra-1", row.InfraId);
+        Assert.Equal("app-1", row.ApplicationId);
+    }
+
+    [Fact]
     public void NamesMode_WritesOneRowPerMeasurement_WithParentAndUnknownRows()
     {
         var output = new StringWriter();
@@ -122,16 +263,17 @@ public class AcronisUsageDevCommandTests
 
         Assert.Contains(
             "tenant_id,tenant_name,parent_tenant_id,parent_tenant_name," +
-            "metric,edition,value,absolute_value,unit,range_start,status",
+            "metric,edition,type,infra_id,application_id,value," +
+            "absolute_value,unit,range_start,status",
             text);
 
         Assert.Contains(
             $"{Alpha},Alpha Example,{Partner},Example Partner," +
-            "storage,standard,1000,1000,bytes,2026-10-01T00:00:00,ok",
+            "storage,standard,infra,,,1000,1000,bytes,2026-10-01T00:00:00,ok",
             text);
 
         Assert.Contains(
-            $"{Gamma},Gamma Example,{Partner},Example Partner,,,unknown," +
+            $"{Gamma},Gamma Example,{Partner},Example Partner,,,,,,unknown," +
             "unknown,,,unknown: no usage returned",
             text);
 

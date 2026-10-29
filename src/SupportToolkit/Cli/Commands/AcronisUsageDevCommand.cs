@@ -8,7 +8,9 @@ namespace SupportToolkit.Cli.Commands;
 
 public sealed record AcronisUsageOptions(
     bool ShowNames,
-    string? OutputPath);
+    string? OutputPath,
+    IReadOnlyList<string>? Metrics = null,
+    string? Tenant = null);
 
 /// <summary>
 /// One line of per-tenant usage, ready to join to other data. Status
@@ -22,6 +24,9 @@ public sealed record AcronisUsageRow(
     string? ParentTenantName,
     string? Metric,
     string? Edition,
+    string? Type,
+    string? InfraId,
+    string? ApplicationId,
     decimal? Value,
     decimal? AbsoluteValue,
     string? Unit,
@@ -69,6 +74,7 @@ public sealed class AcronisUsageDevCommand
         options = null;
         error =
             "Usage: SupportToolkit dev acronis-usage --production " +
+            "[--metric <name>]... [--tenant <text>] " +
             "[--names [--out <path>]]";
 
         if (args.Count == 0
@@ -82,6 +88,8 @@ public sealed class AcronisUsageDevCommand
 
         var showNames = false;
         string? outputPath = null;
+        var metrics = new List<string>();
+        string? tenant = null;
 
         for (var index = 1; index < args.Count; index++)
         {
@@ -103,6 +111,25 @@ public sealed class AcronisUsageDevCommand
             {
                 outputPath = args[++index];
             }
+            else if (string.Equals(
+                         args[index],
+                         "--metric",
+                         StringComparison.OrdinalIgnoreCase)
+                     && index + 1 < args.Count
+                     && !string.IsNullOrWhiteSpace(args[index + 1]))
+            {
+                metrics.Add(args[++index].Trim());
+            }
+            else if (string.Equals(
+                         args[index],
+                         "--tenant",
+                         StringComparison.OrdinalIgnoreCase)
+                     && tenant is null
+                     && index + 1 < args.Count
+                     && !string.IsNullOrWhiteSpace(args[index + 1]))
+            {
+                tenant = args[++index].Trim();
+            }
             else
             {
                 return false;
@@ -116,7 +143,11 @@ public sealed class AcronisUsageDevCommand
             return false;
         }
 
-        options = new AcronisUsageOptions(showNames, outputPath);
+        options = new AcronisUsageOptions(
+                showNames,
+                outputPath,
+                metrics,
+                tenant);
         error = string.Empty;
 
         return true;
@@ -167,7 +198,9 @@ public sealed class AcronisUsageDevCommand
             tenants,
             usage,
             options.ShowNames,
-            fullOutputPath);
+            fullOutputPath,
+            options.Metrics,
+            options.Tenant);
     }
 
     /// <summary>
@@ -180,13 +213,36 @@ public sealed class AcronisUsageDevCommand
         IReadOnlyList<TenantDto> tenants,
         AcronisUsageResult usage,
         bool showNames,
-        string? validatedOutputPath = null)
+        string? validatedOutputPath = null,
+        IReadOnlyList<string>? metrics = null,
+        string? tenantFilter = null)
     {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(tenants);
         ArgumentNullException.ThrowIfNull(usage);
 
-        var rows = BuildRows(tenants, usage);
+        var rows = BuildRows(tenants, usage, metrics);
+
+        if (tenantFilter is not null)
+        {
+            rows =
+                rows
+                    .Where(
+                        row =>
+                            string.Equals(
+                                row.TenantId,
+                                tenantFilter,
+                                StringComparison.OrdinalIgnoreCase)
+                            || row.TenantName.Contains(
+                                tenantFilter,
+                                StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+
+            if (!showNames)
+            {
+                return WriteTenantTable(output, rows);
+            }
+        }
 
         var incomplete =
             WriteAggregate(output, tenants, usage, rows);
@@ -235,13 +291,106 @@ public sealed class AcronisUsageDevCommand
     }
 
     /// <summary>
+    /// Console table for the tenants a filter matched: nonzero rows
+    /// only, with byte values shown raw next to decimal GB (10^9) and
+    /// binary GiB (2^30) so the matching convention can be seen.
+    /// The raw value stays the reported one; the conversions are
+    /// labelled helpers for comparing with another screen.
+    /// </summary>
+    private static int WriteTenantTable(
+        TextWriter output,
+        IReadOnlyList<AcronisUsageRow> rows)
+    {
+        output.WriteLine();
+        output.WriteLine("ACRONIS USAGE FOR MATCHED TENANT(S) (read-only)");
+        output.WriteLine("-----------------------------------------------");
+
+        var matched =
+            rows.Select(row => (row.TenantId, row.TenantName))
+                .Distinct()
+                .ToArray();
+
+        if (matched.Length == 0)
+        {
+            output.WriteLine("No customer tenant matched the filter.");
+            return 2;
+        }
+
+        var incomplete = false;
+
+        foreach (var (tenantId, tenantName) in matched)
+        {
+            var own =
+                rows.Where(row => row.TenantId == tenantId).ToArray();
+
+            var hiddenZero =
+                own.Count(row => row.Status == "ok" && row.Value == 0m);
+
+            var shown =
+                own.Where(row => row.Status != "ok" || row.Value != 0m)
+                    .OrderBy(
+                        row => row.Metric,
+                        StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(
+                        row => row.Edition,
+                        StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+            output.WriteLine();
+            output.WriteLine($"{tenantName} ({tenantId})");
+            output.WriteLine(
+                $"  {"metric",-34} {"edition",-18} {"type",-8} " +
+                $"{"raw value",18} {"unit",-9} {"GB (1e9)",12} " +
+                $"{"GiB (2^30)",12} {"abs raw",18}");
+
+            foreach (var row in shown)
+            {
+                if (row.Status != "ok")
+                {
+                    incomplete = true;
+                }
+
+                var isBytes =
+                    string.Equals(
+                        row.Unit,
+                        "bytes",
+                        StringComparison.OrdinalIgnoreCase)
+                    && row.Value is not null;
+
+                output.WriteLine(
+                    $"  {row.Metric ?? "<missing>",-34} " +
+                    $"{row.Edition ?? "<none>",-18} " +
+                    $"{row.Type ?? "<none>",-8} " +
+                    $"{Number(row.Value),18} " +
+                    $"{row.Unit ?? Unknown,-9} " +
+                    $"{(isBytes ? Format(row.Value!.Value / 1_000_000_000m) : "-"),12} " +
+                    $"{(isBytes ? Format(row.Value!.Value / 1_073_741_824m) : "-"),12} " +
+                    $"{Number(row.AbsoluteValue),18}" +
+                    (row.Status == "ok" ? string.Empty : $"  [{row.Status}]"));
+            }
+
+            output.WriteLine(
+                $"  ({hiddenZero} zero-valued row(s) hidden.)");
+        }
+
+        output.WriteLine();
+        output.WriteLine(
+            "Raw values are exactly as Acronis reports them; GB and " +
+            "GiB are helper conversions for comparing with another " +
+            "screen. This output contains a customer name.");
+
+        return incomplete ? 2 : 0;
+    }
+
+    /// <summary>
     /// One row per customer tenant and measurement. A tenant with no
     /// usage returned, or with an invalid id, gets one explicit
     /// unknown row so it cannot disappear from a join.
     /// </summary>
     public static IReadOnlyList<AcronisUsageRow> BuildRows(
         IReadOnlyList<TenantDto> tenants,
-        AcronisUsageResult usage)
+        AcronisUsageResult usage,
+        IReadOnlyList<string>? metrics = null)
     {
         var names =
             tenants
@@ -282,6 +431,9 @@ public sealed class AcronisUsageDevCommand
                     null,
                     null,
                     null,
+                    null,
+                    null,
+                    null,
                     status);
 
             if (!Guid.TryParse(tenant.Id, out var parsed))
@@ -301,7 +453,25 @@ public sealed class AcronisUsageDevCommand
                 continue;
             }
 
-            foreach (var measurement in measurements
+            IReadOnlyList<AcronisTenantUsage> selected =
+                metrics is null || metrics.Count == 0
+                    ? measurements
+                    : measurements
+                        .Where(
+                            item => metrics.Contains(
+                                item.MetricName ?? string.Empty,
+                                StringComparer.OrdinalIgnoreCase))
+                        .ToArray();
+
+            if (selected.Count == 0)
+            {
+                rows.Add(
+                    UnknownRow(
+                        "unknown: requested metric not reported"));
+                continue;
+            }
+
+            foreach (var measurement in selected
                          .OrderBy(
                              item => item.MetricName,
                              StringComparer.OrdinalIgnoreCase)
@@ -334,6 +504,9 @@ public sealed class AcronisUsageDevCommand
                         parentName,
                         measurement.MetricName,
                         measurement.Edition,
+                        measurement.Type,
+                        measurement.InfraId,
+                        measurement.ApplicationId,
                         measurement.Value,
                         measurement.AbsoluteValue,
                         measurement.Unit,
@@ -446,9 +619,13 @@ public sealed class AcronisUsageDevCommand
             customers.Count(tenant => !Guid.TryParse(tenant.Id, out _));
 
         var withoutUsage =
-            rows.Count(row => row.Status.StartsWith(
-                "unknown: no usage",
-                StringComparison.Ordinal));
+            rows.Count(row => row.Metric is null
+                && row.Status.StartsWith(
+                    "unknown: ",
+                    StringComparison.Ordinal)
+                && !row.Status.StartsWith(
+                    "unknown: invalid",
+                    StringComparison.Ordinal));
 
         var rowsWithProblems =
             measured.Count(row => row.Status != "ok");
@@ -539,7 +716,8 @@ public sealed class AcronisUsageDevCommand
     {
         writer.WriteLine(
             "tenant_id,tenant_name,parent_tenant_id,parent_tenant_name," +
-            "metric,edition,value,absolute_value,unit,range_start,status");
+            "metric,edition,type,infra_id,application_id,value," +
+            "absolute_value,unit,range_start,status");
 
         foreach (var row in rows)
         {
@@ -552,6 +730,9 @@ public sealed class AcronisUsageDevCommand
                     Csv(row.ParentTenantName),
                     Csv(row.Metric),
                     Csv(row.Edition),
+                    Csv(row.Type),
+                    Csv(row.InfraId),
+                    Csv(row.ApplicationId),
                     Number(row.Value),
                     Number(row.AbsoluteValue),
                     Csv(row.Unit),
@@ -564,7 +745,7 @@ public sealed class AcronisUsageDevCommand
     /// Quotes a field and neutralizes spreadsheet formulas, because
     /// tenant names are not trusted text.
     /// </summary>
-    private static string Csv(
+    internal static string Csv(
         string? value)
     {
         if (string.IsNullOrEmpty(value))
@@ -582,17 +763,17 @@ public sealed class AcronisUsageDevCommand
             : text;
     }
 
-    private static string Number(
+    internal static string Number(
         decimal? value) =>
         value is null
             ? Unknown
             : value.Value.ToString("G29", CultureInfo.InvariantCulture);
 
-    private static string Format(
+    internal static string Format(
         decimal value) =>
         value.ToString("0.##", CultureInfo.InvariantCulture);
 
-    private static decimal Median(
+    internal static decimal Median(
         decimal[] sorted) =>
         sorted.Length % 2 == 1
             ? sorted[sorted.Length / 2]
@@ -602,7 +783,7 @@ public sealed class AcronisUsageDevCommand
     /// <summary>
     /// Nearest-rank percentile of an ascending array.
     /// </summary>
-    private static decimal Percentile(
+    internal static decimal Percentile(
         decimal[] sorted,
         decimal fraction)
     {

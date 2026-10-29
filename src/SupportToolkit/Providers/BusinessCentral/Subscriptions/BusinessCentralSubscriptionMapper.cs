@@ -103,7 +103,8 @@ public static class BusinessCentralSubscriptionMapper
                             ?? string.Empty,
                         line.Number?.Trim() ?? string.Empty,
                         BusinessCentralEnumNames.Decode(line.Type),
-                        line.OmitLine
+                        line.OmitLine,
+                        line.Quantity
                     );
                 }
             )

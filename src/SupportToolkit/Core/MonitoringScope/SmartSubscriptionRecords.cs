@@ -45,7 +45,8 @@ public sealed record SmartSubscriptionLine(
     string SubscriptionNumber,
     string ItemNumber,
     string? LineType = null,
-    bool? OmitLine = null
+    bool? OmitLine = null,
+    decimal? Quantity = null
 );
 
 /// <summary>

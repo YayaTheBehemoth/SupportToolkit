@@ -80,7 +80,8 @@ Direct CLI commands are also available for scripting and development.
 | `backup-aggregator ticket preview --scoped` / `ticket submit --scoped` | Ticket from a complete scoped review. | `submit` **writes to Zendesk.** |
 | `backup-health` | Acronis backup health evaluation. | Read-only in production mode. |
 | `dev acronis-tenants --production [--names]` | Tenant discovery diagnostics. | Read-only Acronis calls. |
-| `dev acronis-usage --production [--names [--out <path>]]` | Per-tenant Acronis usage probe for joining to other data. | Read-only Acronis calls. |
+| `dev usage-compare --production [--metric <name>] [--names]` | Read-only comparison of Business Central backup quantities with Acronis `storage_total`, per customer. | Read-only Business Central and Acronis calls. |
+| `dev acronis-usage --production [--metric <name>]... [--tenant <text>] [--names [--out <path>]]` | Per-tenant Acronis usage probe for joining to other data. | Read-only Acronis calls. |
 | `dev bc-subscriptions [--production]` | Business Central subscription evidence diagnostics. | Read-only; `--production` signs in interactively. |
 | `dev customer-matching --production [--names] [--why]` | Dry run of the automatic customer-to-tenant matching. | Read-only Acronis and Business Central calls. |
 | `dev monitoring-scope`, `dev customer-mapping` | Fixture-only scope and mapping walkthroughs. | None. |
@@ -722,7 +723,7 @@ dotnet run --project src\SupportToolkit -- dev acronis-usage --production
 
 The default output is aggregate and safe to share: customer tenant counts, how many have usage, how many have none returned (unknown, never zero), the metric names and units seen, and the spread of values per metric. Units are printed exactly as Acronis reports them and are never converted.
 
-For one row per customer tenant and measurement (tenant id and name, parent tenant, metric, edition, value, absolute value, unit, period start and a status column):
+For one row per customer tenant and measurement (tenant id and name, parent tenant, metric, edition, type, infra id, application id, value, absolute value, unit, period start and a status column). `--metric <name>` (repeatable, case-insensitive) keeps only the named metrics; a tenant without them gets an `unknown` row:
 
 ```cmd
 dotnet run --project src\SupportToolkit -- dev acronis-usage --production --names

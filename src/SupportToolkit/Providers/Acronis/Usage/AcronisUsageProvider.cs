@@ -19,7 +19,9 @@ public sealed record AcronisTenantUsage(
     decimal? Value,
     decimal? AbsoluteValue,
     string? Unit,
-    string? RangeStart);
+    string? RangeStart,
+    string? InfraId = null,
+    string? ApplicationId = null);
 
 /// <summary>
 /// Usage per requested tenant. A requested tenant with no entry in
@@ -130,7 +132,9 @@ public sealed class AcronisUsageProvider
                             usage.Value,
                             usage.AbsoluteValue,
                             usage.MeasurementUnit,
-                            usage.RangeStart)));
+                            usage.RangeStart,
+                            usage.InfraId,
+                            usage.ApplicationId)));
             }
         }
 
