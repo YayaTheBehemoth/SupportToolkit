@@ -4,12 +4,14 @@ namespace SupportToolkit.Modules.BackupAggregator.Services;
 
 /// <summary>
 /// Builds the in-progress wait for a production review from the
-/// active profile and gives it a console progress sink.
+/// active profile.
+///
+/// Where its progress messages go is not decided here: the host that
+/// constructs the workflow supplies the sink, so a console, a web page or
+/// a test can each receive them.
 /// </summary>
 internal static class InProgressWaitSetup
 {
-    private static readonly object ConsoleLock = new();
-
     public static async Task<InProgressWaitOptions> LoadAsync(
         SupportToolkitConfigurationResolver resolver,
         string moduleCommand,
@@ -23,18 +25,5 @@ internal static class InProgressWaitSetup
         return InProgressWaitOptions.Create(
             TimeSpan.FromSeconds(settings.MaxWaitSeconds),
             TimeSpan.FromSeconds(settings.PollIntervalSeconds));
-    }
-
-    /// <summary>
-    /// Operator-facing telemetry. Reviews run tenants concurrently, so
-    /// writes are serialized.
-    /// </summary>
-    public static void WriteProgress(
-        string message)
-    {
-        lock (ConsoleLock)
-        {
-            Console.WriteLine(message);
-        }
     }
 }

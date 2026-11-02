@@ -44,6 +44,10 @@ public sealed class BackupAggregatorScopedWorkflow
     private readonly Func<CancellationToken,
         Task<ScopedInventoryRuntime>> _inventoryRuntimeFactory;
 
+    // Where operator-facing progress from a production review goes.
+    // Supplied by the host; this workflow never writes to a console.
+    private readonly Action<string>? _progress;
+
     // One Business Central bundle per workflow, so the evidence and
     // the names share a single sign-in.
     private Task<BusinessCentralProviderBundle>? _businessCentralBundle;
@@ -60,12 +64,15 @@ public sealed class BackupAggregatorScopedWorkflow
         ICustomerMappingRepository? mappingRepository = null,
         Func<CancellationToken,
             Task<ICustomerNameSource>>?
-            nameSourceFactory = null)
+            nameSourceFactory = null,
+        Action<string>? progress = null)
     {
         _configurationResolver =
             configurationResolver
             ?? throw new ArgumentNullException(
                 nameof(configurationResolver));
+
+        _progress = progress;
 
         _mappingRepository =
             mappingRepository;
@@ -101,6 +108,43 @@ public sealed class BackupAggregatorScopedWorkflow
     {
         return _configurationResolver
             .IsMonitoringScopeEnabledAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// The monitored review's mode and whether it can be offered. Any
+    /// configuration problem simply makes it unavailable, with the
+    /// reason; a problem reading the mode itself is not hidden.
+    /// </summary>
+    public async Task<ScopedReviewAvailability> GetAvailabilityAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var mode =
+            await _configurationResolver.GetModuleModeAsync(
+                BackupAggregatorModule.ModuleCommand,
+                cancellationToken);
+
+        if (mode == SupportToolkitMode.Fixture)
+        {
+            return new ScopedReviewAvailability(mode, true, null);
+        }
+
+        try
+        {
+            return await IsEnabledAsync(cancellationToken)
+                ? new ScopedReviewAvailability(mode, true, null)
+                : new ScopedReviewAvailability(
+                    mode,
+                    false,
+                    "The monitored review needs a Business Central " +
+                    "connection in the active profile.");
+        }
+        catch (InvalidOperationException exception)
+        {
+            return new ScopedReviewAvailability(
+                mode,
+                false,
+                exception.Message);
+        }
     }
 
     /// <summary>
@@ -594,7 +638,7 @@ public sealed class BackupAggregatorScopedWorkflow
                     connection.ClientSecret),
                 OperationalLogger.FromEnvironment(),
                 wait,
-                InProgressWaitSetup.WriteProgress);
+                _progress);
 
         return new ScopedInventoryRuntime(
             session.ReviewService,
