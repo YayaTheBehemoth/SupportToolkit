@@ -59,6 +59,12 @@ jobs:
             throw "Acronis fixtures are missing from the extracted package."
           }
 
+          foreach ($launcher in 'Start SupportToolkit.cmd', 'Import config.cmd') {
+            if (-not (Test-Path (Join-Path $destination $launcher) -PathType Leaf)) {
+              throw "$launcher is missing from the extracted package."
+            }
+          }
+
           Write-Host "ZIP extraction succeeded."
           Write-Host "Executable and fixtures verified."
 
@@ -87,5 +93,5 @@ jobs:
             "artifacts/SupportToolkit-win-x64.zip" `
             --verify-tag `
             --title "SupportToolkit $env:RELEASE_TAG" `
-            --notes "Portable Windows x64 build. Extract the ZIP and run SupportToolkit.exe." `
+            --notes "Portable Windows x64 build. Extract the ZIP, then double-click Start SupportToolkit.cmd for the web UI, or run SupportToolkit.exe." `
             --prerelease

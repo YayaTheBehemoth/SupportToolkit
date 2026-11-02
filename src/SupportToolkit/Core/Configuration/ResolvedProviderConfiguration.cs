@@ -29,6 +29,20 @@ public sealed record ResolvedBusinessCentralConnection(
 );
 
 /// <summary>
+/// Resolved Zendesk deletion connection: a public OAuth client.
+///
+/// There is no secret: sign-in is interactive (PKCE in the operator's
+/// browser). Presence is checked during resolution; subdomain format
+/// belongs to the provider's options. This never carries ticket
+/// destination or user IDs, which belong to the ticketing connection.
+/// </summary>
+public sealed record ResolvedZendeskDeletionConnection(
+    string ConnectionName,
+    string Subdomain,
+    string ClientId
+);
+
+/// <summary>
 /// Fully resolved Zendesk connection and ticket destination.
 ///
 /// DestinationName and GroupId are resolved from the active profile

@@ -10,7 +10,7 @@ namespace SupportToolkit.Cli.Commands;
 /// Developer-only, read-only Acronis tenant directory inspection.
 ///
 /// Uses the active profile's configured Acronis connection, independently
-/// of BackupHealth and BackupAggregator module modes.
+/// of the BackupAggregator module mode.
 ///
 /// The CLI dispatcher must require an explicit --production argument.
 /// </summary>
@@ -48,7 +48,7 @@ public sealed class AcronisTenantDirectoryDevCommand
 
         /*
          * This is the same production tenant-discovery implementation
-         * used by BackupHealth and BackupAggregator.
+         * used by BackupAggregator.
          *
          * Its shared paginator fetches every page or fails.
          * No backup resource inventory is requested.

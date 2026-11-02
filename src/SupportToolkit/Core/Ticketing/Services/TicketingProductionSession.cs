@@ -82,12 +82,24 @@ public sealed class TicketingProductionSession
                     )
             };
 
-        var apiClient =
-            new ZendeskApiClient(
+        /*
+         * The ticketing connection authenticates with its own
+         * client credentials source and the tickets:write scope.
+         */
+        var tokenSource =
+            new ZendeskClientCredentialsTokenSource(
                 httpClient,
                 options,
                 logger:
                     logger
+            );
+
+        var apiClient =
+            new ZendeskApiClient(
+                httpClient,
+                options,
+                tokenSource,
+                logger
             );
 
         var ticketProvider =

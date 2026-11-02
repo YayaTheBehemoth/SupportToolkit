@@ -281,6 +281,11 @@ public sealed class JsonSupportToolkitConfigurationStore
                 string,
                 BusinessCentralConnectionConfiguration>();
 
+        configuration.Connections.ZendeskDeletion ??=
+            new Dictionary<
+                string,
+                ZendeskDeletionConnectionConfiguration>();
+
         configuration.Profiles ??=
             new Dictionary<
                 string,
@@ -302,8 +307,59 @@ public sealed class JsonSupportToolkitConfigurationStore
                 new Dictionary<
                     string,
                     ModuleReviewConfiguration>();
+
+            /*
+             * Retired module entries are tolerated on load and dropped
+             * on the next save, like the retired allowWrites property.
+             * Connections and every other setting are left untouched.
+             */
+            foreach (var retired in profile.Modules.Keys
+                         .Where(
+                             key => RetiredModules.Contains(
+                                 key.Trim(),
+                                 StringComparer.OrdinalIgnoreCase))
+                         .ToArray())
+            {
+                profile.Modules.Remove(retired);
+            }
+
+            /*
+             * Settings this build does not recognise are kept (see
+             * ConfigurationNode), except the ones retired on purpose.
+             */
+            if (profile.UnrecognizedSettings is not null)
+            {
+                foreach (var retired in profile.UnrecognizedSettings.Keys
+                             .Where(
+                                 key => RetiredProfileSettings.Contains(
+                                     key,
+                                     StringComparer.OrdinalIgnoreCase))
+                             .ToArray())
+                {
+                    profile.UnrecognizedSettings.Remove(retired);
+                }
+            }
         }
     }
+
+    /// <summary>
+    /// Module commands that no longer exist. BackupHealth was retired
+    /// in favour of BackupAggregator.
+    /// </summary>
+    private static readonly string[] RetiredModules =
+    [
+        "backup-health"
+    ];
+
+    /// <summary>
+    /// Profile settings that no longer exist and are dropped on save
+    /// instead of being kept as unrecognised. The old allowWrites switch
+    /// was retired because its safeguards live elsewhere.
+    /// </summary>
+    private static readonly string[] RetiredProfileSettings =
+    [
+        "allowWrites"
+    ];
 
     private static bool IsDevelopmentBuild()
     {

@@ -7,9 +7,6 @@ using SupportToolkit.Core.Ticketing.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Modules.BackupAggregator.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Services;
-using SupportToolkit.Modules.BackupHealth.Models;
-using SupportToolkit.Modules.BackupHealth.Reporting;
-using SupportToolkit.Modules.BackupHealth.Services;
 
 namespace SupportToolkit.Ui.Interactive;
 
@@ -32,16 +29,12 @@ public sealed partial class SupportToolkitInteractiveShell
 
     private readonly ConfigureCommand _configureCommand;
     private readonly BackupAggregatorWorkflow _backupAggregatorWorkflow;
-    private readonly BackupHealthWorkflow _backupHealthWorkflow;
 
     private readonly BackupAggregatorScopedWorkflow?
         _backupAggregatorScopedWorkflow;
 
     private readonly ConsoleBackupAggregatorReporter
         _backupAggregatorReporter;
-
-    private readonly ConsoleBackupHealthReporter
-        _backupHealthReporter;
 
     private readonly ConsoleTicketDraftPreviewer
         _ticketDraftPreviewer;
@@ -50,7 +43,6 @@ public sealed partial class SupportToolkitInteractiveShell
         ISupportToolkitConfigurationStore configurationStore,
         ConfigureCommand configureCommand,
         BackupAggregatorWorkflow backupAggregatorWorkflow,
-        BackupHealthWorkflow backupHealthWorkflow,
         BackupAggregatorScopedWorkflow? backupAggregatorScopedWorkflow = null)
     {
         _backupAggregatorScopedWorkflow =
@@ -71,16 +63,8 @@ public sealed partial class SupportToolkitInteractiveShell
             ?? throw new ArgumentNullException(
                 nameof(backupAggregatorWorkflow));
 
-        _backupHealthWorkflow =
-            backupHealthWorkflow
-            ?? throw new ArgumentNullException(
-                nameof(backupHealthWorkflow));
-
         _backupAggregatorReporter =
             new ConsoleBackupAggregatorReporter();
-
-        _backupHealthReporter =
-            new ConsoleBackupHealthReporter();
 
         _ticketDraftPreviewer =
             new ConsoleTicketDraftPreviewer();
@@ -109,7 +93,7 @@ public sealed partial class SupportToolkitInteractiveShell
             var choice =
                 ReadMenuChoice(
                     minimum: 1,
-                    maximum: 6);
+                    maximum: 5);
 
             Console.WriteLine();
 
@@ -121,24 +105,19 @@ public sealed partial class SupportToolkitInteractiveShell
                     break;
 
                 case 2:
-                    await RunBackupHealthMenuAsync(
-                        cancellationToken);
-                    break;
-
-                case 3:
                     await ChangeProfileAsync(
                         cancellationToken);
                     break;
 
-                case 4:
+                case 3:
                     await RunConfigurationWizardAsync();
                     break;
 
-                case 5:
+                case 4:
                     ToggleDebugMode();
                     break;
 
-                case 6:
+                case 5:
                     Console.WriteLine(
                         "Shutting down. All session data has been " +
                         "wiped: sign-ins, reviews and ticket drafts " +
@@ -237,16 +216,15 @@ public sealed partial class SupportToolkitInteractiveShell
         Console.WriteLine();
 
         Console.WriteLine("1. Backup Aggregator");
-        Console.WriteLine("2. Backup Health");
-        Console.WriteLine("3. Change profile");
-        Console.WriteLine("4. Configuration wizard");
+        Console.WriteLine("2. Change profile");
+        Console.WriteLine("3. Configuration wizard");
 
         Console.WriteLine(
             debugEnabled
-                ? "5. Disable debug logging"
-                : "5. Enable debug logging");
+                ? "4. Disable debug logging"
+                : "4. Enable debug logging");
 
-        Console.WriteLine("6. Exit");
+        Console.WriteLine("5. Exit");
         Console.WriteLine();
     }
 

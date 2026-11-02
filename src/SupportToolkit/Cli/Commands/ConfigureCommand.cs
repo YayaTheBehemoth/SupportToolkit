@@ -17,9 +17,6 @@ public sealed partial class ConfigureCommand
     private const string BackupAggregatorCommand =
         "backup-aggregator";
 
-    private const string BackupHealthCommand =
-        "backup-health";
-
     private readonly ISupportToolkitConfigurationStore
         _configurationStore;
 
@@ -105,6 +102,20 @@ public sealed partial class ConfigureCommand
             );
         }
 
+        if (args.Length is 1 or 2
+            && string.Equals(
+                args[0],
+                "import",
+                StringComparison.OrdinalIgnoreCase
+            ))
+        {
+            return await ImportAsync(
+                args.Length == 2
+                    ? args[1]
+                    : null
+            );
+        }
+
         if (args.Length == 1
             && args[0] is "--help" or "-h")
         {
@@ -144,6 +155,10 @@ public sealed partial class ConfigureCommand
 
         Console.WriteLine(
             "  SupportToolkit configure status"
+        );
+
+        Console.WriteLine(
+            "  SupportToolkit configure import [file]"
         );
 
         Console.WriteLine();

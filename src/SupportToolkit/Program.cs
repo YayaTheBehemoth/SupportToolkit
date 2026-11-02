@@ -6,9 +6,9 @@ using SupportToolkit.Core.Modules;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.Services;
-using SupportToolkit.Modules.BackupHealth;
-using SupportToolkit.Modules.BackupHealth.Services;
+using SupportToolkit.Modules.ZendeskBulkDelete.Services;
 using SupportToolkit.Ui;
+using SupportToolkit.Ui.Web;
 using SupportToolkit.Ui.Interactive;
 
 var configurationStore =
@@ -44,6 +44,10 @@ var businessCentralDiagnosticsCommand =
     new BusinessCentralSubscriptionDevCommand(
         configurationResolver);
 
+var zendeskBulkDeleteCommand =
+    new ZendeskBulkDeleteDevCommand(
+        configurationResolver);
+
 var backupAggregatorWorkflow =
     new BackupAggregatorWorkflow(
         configurationResolver,
@@ -54,15 +58,8 @@ var backupAggregatorScopedWorkflow =
         configurationResolver,
         progress: ConsoleProgress.Write);
 
-var backupHealthWorkflow =
-    new BackupHealthWorkflow(
-        configurationResolver);
-
 ISupportToolkitModule[] modules =
 [
-    new BackupHealthModule(
-        backupHealthWorkflow),
-
     new BackupAggregatorModule(
         backupAggregatorWorkflow,
         backupAggregatorScopedWorkflow)
@@ -73,7 +70,6 @@ var interactiveShell =
         configurationStore,
         configureCommand,
         backupAggregatorWorkflow,
-        backupHealthWorkflow,
         backupAggregatorScopedWorkflow);
 
 var firstRunStartup =
@@ -94,6 +90,88 @@ try
     {
         PrintUsage(modules);
         return 0;
+    }
+
+    /*
+     * The local web UI. The web host is built only here, so every other
+     * command (and --help) never touches it. It listens on 127.0.0.1 only.
+     */
+    if (string.Equals(
+            args[0],
+            "serve",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        if (!WebServeArguments.TryParse(
+                args.Skip(1).ToArray(),
+                out var serveOptions,
+                out var serveError))
+        {
+            Console.Error.WriteLine(serveError);
+            return 1;
+        }
+
+        // The web host shows progress on the page, not in the console.
+        var webProgress = new ProgressFeed();
+
+        var webWorkflow =
+            new BackupAggregatorWorkflow(
+                configurationResolver,
+                webProgress.Write);
+
+        var webScopedWorkflow =
+            new BackupAggregatorScopedWorkflow(
+                configurationResolver,
+                progress: webProgress.Write);
+
+        return await WebHostRunner.RunAsync(
+            serveOptions!,
+            new WebAppState(
+                new ConfigurationStatusService(
+                    configurationStore,
+                    configurationResolver,
+                    secretStore),
+                new AggregatorWebSession(
+                    new BackupReviewSession(
+                        webWorkflow,
+                        webScopedWorkflow),
+                    webProgress),
+                new BulkDeleteWebSession(
+                    async token =>
+                    {
+                        try
+                        {
+                            var connection =
+                                await configurationResolver
+                                    .GetZendeskDeletionConnectionAsync(token);
+
+                            return new BulkDeleteAvailability(
+                                true,
+                                connection.Subdomain,
+                                null);
+                        }
+                        catch (InvalidOperationException exception)
+                        {
+                            return new BulkDeleteAvailability(
+                                false,
+                                null,
+                                exception.Message);
+                        }
+                    },
+                    async token =>
+                    {
+                        // Deletion is enabled here, and only here: this is
+                        // the connection that can delete, used after the
+                        // operator's typed confirmations.
+                        var session =
+                            await ZendeskBulkDeleteSession.CreateAsync(
+                                configurationResolver,
+                                enableDeletion: true,
+                                cancellationToken: token);
+
+                        return new BulkDeleteConnection(
+                            BulkDeleteReviewSession.From(session),
+                            session);
+                    })));
     }
 
     /*
@@ -137,6 +215,38 @@ try
         return await tenantDirectoryCommand.RunAsync(
             Console.Out,
             showNames: args.Length == 4);
+    }
+
+    /*
+     * Host-level developer utility: Zendesk bulk delete, sign-in, search
+     * and preview only. Nothing is deleted. Interactive only.
+     *
+     * --production explicitly authorizes the interactive Zendesk
+     * sign-in and read-only calls, using the profile's Zendesk deletion
+     * connection (not the ticketing connection).
+     */
+    if (args.Length >= 2
+        && string.Equals(
+            args[0],
+            "dev",
+            StringComparison.OrdinalIgnoreCase)
+        && string.Equals(
+            args[1],
+            "zendesk-bulk-delete",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        if (!ZendeskBulkDeleteDevCommand.TryParseArguments(
+                args.Skip(2).ToArray(),
+                out var bulkDeleteOptions,
+                out var bulkDeleteError))
+        {
+            Console.Error.WriteLine(bulkDeleteError);
+            return 1;
+        }
+
+        return await zendeskBulkDeleteCommand.RunAsync(
+            Console.Out,
+            bulkDeleteOptions!);
     }
 
     /*
@@ -470,6 +580,10 @@ static void PrintUsage(
     Console.WriteLine("Application commands:");
     Console.WriteLine(
         "  configure            Configure persistent settings and credentials.");
+    Console.WriteLine(
+        "  serve [--port <n>] [--no-browser]");
+    Console.WriteLine(
+        "                       Open the local web UI (127.0.0.1 only).");
     Console.WriteLine();
 
     Console.WriteLine("Developer diagnostics:");
@@ -481,6 +595,10 @@ static void PrintUsage(
         "  dev usage-compare --production [--metric <name>] [--names]");
     Console.WriteLine(
         "  dev bc-subscriptions --production");
+    Console.WriteLine(
+        "  dev zendesk-bulk-delete --production [--organization <name>] [--sender <name>] " +
+        "[--requester <email>] [--domain <domain>] [--text <text>] " +
+        "[--dry-run | --delete [--include <ids>] [--exclude <ids>] [--receipt-dir <path>]]");
     Console.WriteLine();
 
     Console.WriteLine("  dev monitoring-scope");

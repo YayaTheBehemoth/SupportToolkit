@@ -64,15 +64,6 @@ public sealed partial class ConfigureCommand
                 )
             );
 
-        profile.Modules[BackupHealthCommand] =
-            ReadMode(
-                "Backup Health",
-                GetConfiguredMode(
-                    profile,
-                    BackupHealthCommand
-                )
-            );
-
         if (RequiresAcronisConnection(profile))
         {
             Console.WriteLine();
@@ -138,6 +129,40 @@ public sealed partial class ConfigureCommand
                         pendingSecret
                     );
                 }
+            }
+        }
+
+        /*
+         * Zendesk bulk deletion is its own connection, separate from
+         * ticket creation above: a different OAuth client and sign-in,
+         * and no secret.
+         */
+        var zendeskDeletionSelected =
+            !string.IsNullOrWhiteSpace(
+                profile.ZendeskDeletionConnection
+            );
+
+        if (zendeskDeletionSelected
+            || ReadConfirmation(
+                "Configure Zendesk bulk deletion (a separate " +
+                "connection from ticketing) for this profile? [y/N]: ",
+                defaultValue: false
+            ))
+        {
+            Console.WriteLine();
+
+            if (!(zendeskDeletionSelected
+                && KeepExistingZendeskDeletionConnection(
+                    configuration,
+                    profile
+                )))
+            {
+                Console.WriteLine();
+
+                ConfigureZendeskDeletionConnection(
+                    configuration,
+                    profile
+                );
             }
         }
 

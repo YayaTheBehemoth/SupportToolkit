@@ -7,9 +7,6 @@ using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Modules.BackupAggregator.Ticketing;
-using SupportToolkit.Modules.BackupHealth.Models;
-using SupportToolkit.Modules.BackupHealth.Reporting;
-using SupportToolkit.Modules.BackupHealth.Services;
 
 namespace SupportToolkit.Ui.Interactive;
 

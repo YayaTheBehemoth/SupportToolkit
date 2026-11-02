@@ -1,0 +1,59 @@
+@using SupportToolkit.Modules.BackupAggregator.Presentation
+
+@if (Scope is null)
+{
+    <p class="muted">This review produced no scope listing.</p>
+    return;
+}
+
+@if (!Scope.ReconciliationRun)
+{
+    <p class="muted">Reconciliation was not run for this review.</p>
+}
+else
+{
+    <h3 class="tenant">Discrepancies (@Scope.Discrepancies.Count)</h3>
+    @if (Scope.Discrepancies.Count == 0)
+    {
+        <p class="muted">None.</p>
+    }
+    else
+    {
+        <ul>
+            @foreach (var line in Scope.Discrepancies)
+            {
+                <li>@line</li>
+            }
+        </ul>
+    }
+
+    <h3 class="tenant">Exceptions (@Scope.Exceptions.Count)</h3>
+    @if (Scope.Exceptions.Count == 0)
+    {
+        <p class="muted">None.</p>
+    }
+    else
+    {
+        <ul>
+            @foreach (var exception in Scope.Exceptions)
+            {
+                <li>@exception.Subject: @string.Join("; ", exception.Reasons)</li>
+            }
+        </ul>
+    }
+}
+
+@if (Scope.Notices.Count > 0)
+{
+    <h3 class="tenant">Notices</h3>
+    <ul>
+        @foreach (var notice in Scope.Notices)
+        {
+            <li>@notice</li>
+        }
+    </ul>
+}
+
+@code {
+    [Parameter] public ScopeView? Scope { get; set; }
+}
