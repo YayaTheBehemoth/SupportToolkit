@@ -14,10 +14,11 @@ SupportToolkit currently includes:
 - **Monitoring scope** — Business Central subscription entitlement decides which Acronis tenants are reviewed.
 - **Configuration management** — Reusable provider connections, runtime profiles, and secure credential storage.
 - **Interactive CLI** — Menu-driven workflows alongside commands suitable for scripting.
+- **Web UI** — A local browser interface for the Backup Aggregator and Zendesk bulk delete, started with one double-click or `SupportToolkit serve`.
 
 The application supports fixture-based development and production integrations through the same underlying workflows.
 
-**Current release:** [`v0.3.0`](https://github.com/YayaTheBehemoth/SupportToolkit/releases) (Windows x64 prerelease). See [Release history](#release-history) for what changed and why, and [Development branches](#development-branches) for work that is not part of `main` yet.
+**Current release:** [`v0.4.0`](https://github.com/YayaTheBehemoth/SupportToolkit/releases) (Windows x64 prerelease). See [Release history](#release-history) for what changed and why, and [Development branches](#development-branches) for work that is not part of `main` yet.
 
 ## Getting started
 
@@ -27,8 +28,8 @@ Download the latest available Windows x64 package from the [GitHub Releases page
 
 1. Download `SupportToolkit-win-x64.zip`.
 2. Extract the archive to a directory of your choice.
-3. Run `SupportToolkit.exe`.
-4. Complete the configuration wizard when prompted.
+3. Double-click `Start SupportToolkit.cmd` to open the web UI, or run `SupportToolkit.exe` for the console.
+4. Before first use, create a profile with the configuration wizard (`SupportToolkit configure`), or, if you were given a settings file, double-click `Import config.cmd` (see [Configuration storage](#configuration-storage)).
 
 The portable distribution is self-contained and does not require the .NET SDK or a separate .NET runtime.
 
@@ -72,7 +73,7 @@ Direct CLI commands are also available for scripting and development.
 | `SupportToolkit` | Interactive console (first run starts the configuration wizard). | Depends on the menu action chosen. |
 | `SupportToolkit --help` | Print usage. | None. |
 | `serve [--port <n>] [--no-browser]` | Open the local web UI. See [Web UI](#web-ui). | Listens on 127.0.0.1 only. What the pages do depends on the active profile's mode. |
-| `configure [status \| profile <name> \| profile delete <name> \| use <name>]` | Manage profiles, connections and credentials. | Local configuration and Windows Credential Manager only. |
+| `configure [status \| profile <name> \| profile delete <name> \| use <name> \| import [file]]` | Manage profiles, connections and credentials. `import` moves a settings file into place (see [Configuration storage](#configuration-storage)). | Local configuration and Windows Credential Manager only. |
 | `backup-aggregator inventory-review <tenant> \| --all` | Consolidated Acronis inventory review. | Read-only in production mode. |
 | `backup-aggregator ticket preview` | Generate and display a Zendesk ticket draft. | None. |
 | `backup-aggregator ticket submit` | Create a Zendesk ticket from a completed review. | **Writes to Zendesk.** |
@@ -394,7 +395,7 @@ If a request times out, fails, or returns an invalid response, ticket creation m
 
 ## Zendesk bulk delete
 
-SupportToolkit has an interactive way to find and bulk-delete Zendesk tickets, for example everything for a customer that has left. It signs in, searches, shows a preview, and, only when asked with `--delete`, deletes the tickets you selected after two typed confirmations and writes a receipt. Without `--delete` it only reads. It is a developer command for now; a user interface is planned.
+SupportToolkit has an interactive way to find and bulk-delete Zendesk tickets, for example everything for a customer that has left. It signs in, searches, shows a preview, and, only when asked with `--delete`, deletes the tickets you selected after two typed confirmations and writes a receipt. Without `--delete` it only reads. It is available as a developer command and as a page in the [Web UI](#web-ui), which follows the same rules.
 
 ### Two Zendesk connections
 
@@ -639,6 +640,16 @@ The development configuration file is excluded from Git.
 
 An example file is provided in `local.config.example.json`. All values in it are fictional.
 
+**Importing a settings file.** A settings file that was handed over can be put in place without finding the folder:
+
+```cmd
+SupportToolkit configure import
+SupportToolkit configure import <file>
+```
+
+Without a file it looks in the folder next to `SupportToolkit.exe`. A settings file is recognised by its content (JSON with at least one profile), not its name, and the files that ship with the program are ignored. It must be the only one there; if there are several, none is used. The file is moved, not copied, and moved as it is. If settings already exist they are kept beside them as `local.config.json.bak-<date>-<time>` and never overwritten. The release zip includes `Import config.cmd`, which runs this for you.
+
+A settings file holds no passwords or client secrets. When the import finishes it lists the connections that a profile uses (Acronis and Zendesk ticketing have a client secret; the others sign in interactively) which have none stored on this computer, and asks for each: typing is hidden, and Enter skips one. Anything skipped can be entered later with `SupportToolkit configure`; `configure status` shows what is missing.
 **Saving keeps settings it does not recognise.** If the file holds a setting this version has no property for (for example one written by a newer version), it is kept exactly as written and written back on the next save, such as after a profile switch. Only settings retired on purpose are dropped (see below). Versions from before this behaviour still discard unrecognised settings when they save, so back up `local.config.json` before running an older build against a configuration written by a newer one.
 
 ### Retired write switch
@@ -824,7 +835,15 @@ Interactive and raw CLI operations share the same application workflows.
 SupportToolkit serve
 ```
 
-`serve` starts a local web UI in your browser. It is built into the same executable; nothing else is installed. This first version shows configuration status (the active profile, whether each connection is valid, the saved profiles and connections, environment overrides) and lets you switch the active profile. The pages for the Backup Aggregator and for Zendesk bulk delete follow. The configuration wizard stays in the console (`SupportToolkit configure`).
+The release zip also has `Start SupportToolkit.cmd`: double-click it to start the web UI without typing a command. Leave its window open while you work; press **Exit SupportToolkit** in the page, or close the window, when you are finished.
+
+`serve` starts a local web UI in your browser. It is built into the same executable; nothing else is installed. Its pages are:
+
+- **Profile.** Choose which profile everything uses. The configuration wizard stays in the console (`SupportToolkit configure`).
+- **Backup Aggregator.** Run or refresh the monitored review, with progress and Cancel. Read the completeness banner and the Attention, Unclassified and Incomplete tabs (the detailed view adds Scope and Reconciliation). **Prepare ticket** then shows the exact ticket and its Zendesk destination to confirm before anything is created. What can be prepared or submitted, and that a prepared ticket is used once, is decided by the same `BackupReviewSession` the console uses.
+- **Zendesk bulk delete.** Sign in, search, choose tickets, check the plan and type the confirmations, with progress and a result. The rules are the command's: closed tickets are chosen for you and others need a second confirmation, an incomplete search is never deleted from, and nothing is sent that was not in the confirmed plan. Deletion runs in the background, so reloading or closing the tab does not stop it; **Exit** stops it cleanly and writes the receipt.
+
+A **Simple / Detailed** switch in the top bar (Simple by default) hides technical detail such as ticket ID lists, request counts, job progress and the scope tabs. It never hides a warning, the Zendesk instance, a count, a typed confirmation, a failed or unknown outcome, or the receipt.
 
 **The mode is shown at the top of the page.** A profile in production mode reads real customer data, and customer names will appear on screen. Check the banner before sharing your screen.
 
@@ -835,11 +854,11 @@ SupportToolkit serve
 - The `Host` header must be the loopback address and port (against DNS rebinding), and any request that changes state, or opens a WebSocket, must come from the UI's own origin.
 - Nothing is loaded from another site, secrets are never sent to the browser (only whether one is present), and request URLs are not logged because they carry the token.
 
-Stop it with Ctrl+C or the **Exit** button. The link works for that run only; start `serve` again for a new one.
+Stop it with the **Exit SupportToolkit** button, or Ctrl+C. Closing the browser tab alone does not stop it. The link works for that run only; start `serve` again for a new one.
 
 Options: `--port <n>` to use a fixed port, and `--no-browser` to print the link without opening the browser.
 
-**Limits.** One operator: two browser tabs show the same state. Secrets still come from Windows Credential Manager, so production use is Windows-only. The release zip holds `SupportToolkit.exe` plus a `wwwroot` folder and a small manifest beside it (the web framework's script); keep them together, as with `Fixtures`.
+**Limits.** One operator: two browser tabs show the same state. Secrets still come from Windows Credential Manager, so production use is Windows-only. The release zip holds `SupportToolkit.exe`, the two `.cmd` launchers, a `wwwroot` folder and a small manifest beside it (the web framework's script); keep them together, as with `Fixtures`.
 
 ---
 
@@ -1061,6 +1080,7 @@ Releases are published as Windows x64 prereleases on the [GitHub Releases page](
 
 | Version | Tagged commit date | Summary | Why |
 |---|---|---|---|
+| `v0.4.0` | 2026-11-03 | Local web UI (`serve`, or double-click `Start SupportToolkit.cmd`): profile selection, the Backup Aggregator review and ticket, and Zendesk bulk delete with typed confirmations and receipts, with a Simple / Detailed view. `configure import` moves a handed-over settings file into place and asks for the secrets it needs. Saving now keeps settings the program does not recognise. The console and its commands are unchanged. | The console was hard to hand to colleagues. Both interfaces now sit on the same session rules, so they cannot diverge. |
 | `v0.3.0` | 2026-10-27 | Business Central monitoring scope: entitlement from subscription records decides which Acronis tenants are reviewed, with automatic name-based customer matching, always-included operator tenant, scope completeness reporting and scoped tickets. Interactive console offers the scoped review only. | The review needed to cover exactly the customers entitled to monitoring, not every tenant. |
 | `v0.2.4` | 2026-10-19 | Corrected Teams and SharePoint workload accounting in BackupAggregator. | Comparisons against live data showed Team-associated Groups with their own protected SITE workload being collapsed into the Team, undercounting resources. |
 | `v0.2.3` | 2026-10-17 | Stabilization baseline: provider contract and pagination hardening, fail-closed ticketing and configuration behavior, read-only `dev acronis-tenants` diagnostics, retired `allowWrites`, redacted diagnostics, reorganized configuration code, consolidated tests. | Live Acronis observations and a review of failure paths showed that incomplete or contradictory data must never read as a clean result. |
@@ -1074,6 +1094,7 @@ Behavior changes that matter to operators:
 - **Partial reviews are explicit.** A tenant that fails to review is reported as incomplete and the run exits with code `2`. Ticket creation is blocked for incomplete reviews.
 - **Zero discovered customers is a failure,** not an empty healthy estate.
 - **Ticket destinations are explicit.** A profile selects one named Zendesk destination, and destination identity is part of the idempotency key.
+- **Saving keeps unrecognised settings.** A setting the program has no property for is written back as it was, instead of being dropped on the next save. Only settings retired on purpose are removed.
 - **Diagnostics are redacted.** UUIDs are redacted in operational logging, and debug output reports exception types and HTTP statuses rather than raw messages or stack traces.
 
 ## Development branches
@@ -1095,10 +1116,11 @@ BackupAggregator and Zendesk ticket submission are implemented on `main`, with a
 - Acronis production reads and comparisons against the Acronis portal have been exercised for BackupAggregator and tenant discovery.
 - Business Central reads (subscriptions and customer names) and the automatic matching were exercised with read-only commands against a live environment; the scoped review has had limited end-to-end validation.
 - Zendesk ticket routing and idempotent replay were validated in a personal trial account. Authorized end-to-end validation in an organizational Zendesk environment has not been completed.
+- The Zendesk bulk delete, including real deletion through the web UI, was exercised only in a personal sandbox account with a set of test tickets. It has not been used against an organizational Zendesk.
 
 Provider behavior is only considered production-validated where real external responses have been observed and checked.
 
-Deployment model, scheduling, persistence and an operator-friendly interface are intentionally undecided. Different modules have different operational needs, and the current interactive console has usability limits for non-developers. These will be revisited when a validated workflow needs them rather than designed up front.
+Deployment model, scheduling, persistence and an operator-friendly interface are intentionally undecided. Different modules have different operational needs, and the console has usability limits for non-developers. A local web UI now exists for the Backup Aggregator and Zendesk bulk delete; it runs on the same rules as the console. These will be revisited when a validated workflow needs them rather than designed up front.
 
 The current focus is correctness, maintainability, explicit operator control, and practical usefulness in MSP support workflows.
 
