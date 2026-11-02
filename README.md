@@ -71,6 +71,7 @@ Direct CLI commands are also available for scripting and development.
 |---|---|---|
 | `SupportToolkit` | Interactive console (first run starts the configuration wizard). | Depends on the menu action chosen. |
 | `SupportToolkit --help` | Print usage. | None. |
+| `serve [--port <n>] [--no-browser]` | Open the local web UI. See [Web UI](#web-ui). | Listens on 127.0.0.1 only. What the pages do depends on the active profile's mode. |
 | `configure [status \| profile <name> \| profile delete <name> \| use <name>]` | Manage profiles, connections and credentials. | Local configuration and Windows Credential Manager only. |
 | `backup-aggregator inventory-review <tenant> \| --all` | Consolidated Acronis inventory review. | Read-only in production mode. |
 | `backup-aggregator ticket preview` | Generate and display a Zendesk ticket draft. | None. |
@@ -638,6 +639,8 @@ The development configuration file is excluded from Git.
 
 An example file is provided in `local.config.example.json`. All values in it are fictional.
 
+**Saving keeps settings it does not recognise.** If the file holds a setting this version has no property for (for example one written by a newer version), it is kept exactly as written and written back on the next save, such as after a profile switch. Only settings retired on purpose are dropped (see below). Versions from before this behaviour still discard unrecognised settings when they save, so back up `local.config.json` before running an older build against a configuration written by a newer one.
+
 ### Retired write switch
 
 Earlier versions had a global `allowWrites` profile setting and a `SUPPORTTOOLKIT_ALLOW_WRITES` environment variable. Both are retired:
@@ -815,6 +818,31 @@ Interactive and raw CLI operations share the same application workflows.
 
 ---
 
+## Web UI
+
+```cmd
+SupportToolkit serve
+```
+
+`serve` starts a local web UI in your browser. It is built into the same executable; nothing else is installed. This first version shows configuration status (the active profile, whether each connection is valid, the saved profiles and connections, environment overrides) and lets you switch the active profile. The pages for the Backup Aggregator and for Zendesk bulk delete follow. The configuration wizard stays in the console (`SupportToolkit configure`).
+
+**The mode is shown at the top of the page.** A profile in production mode reads real customer data, and customer names will appear on screen. Check the banner before sharing your screen.
+
+**It is local only.**
+
+- It listens on `127.0.0.1` on a free port and cannot be reached from the network. There is no option to listen elsewhere.
+- Each run prints a link containing a random launch token. Opening it signs your browser in with a session cookie (`HttpOnly`, `SameSite=Strict`) and redirects to a clean URL. Without that cookie every request, including the page's live connection, is refused, so another website or program on the machine cannot use the UI.
+- The `Host` header must be the loopback address and port (against DNS rebinding), and any request that changes state, or opens a WebSocket, must come from the UI's own origin.
+- Nothing is loaded from another site, secrets are never sent to the browser (only whether one is present), and request URLs are not logged because they carry the token.
+
+Stop it with Ctrl+C or the **Exit** button. The link works for that run only; start `serve` again for a new one.
+
+Options: `--port <n>` to use a fixed port, and `--no-browser` to print the link without opening the browser.
+
+**Limits.** One operator: two browser tabs show the same state. Secrets still come from Windows Credential Manager, so production use is Windows-only. The release zip holds `SupportToolkit.exe` plus a `wwwroot` folder and a small manifest beside it (the web framework's script); keep them together, as with `Fixtures`.
+
+---
+
 ## Architecture
 
 SupportToolkit separates operational modules, external providers, shared infrastructure, and user interfaces.
@@ -828,7 +856,8 @@ src/
     │   └── Commands/
     │
     ├── Ui/
-    │   └── Interactive/
+    │   ├── Interactive/
+    │   └── Web/ (Blazor Server pages, local-only host)
     │
     ├── Core/
     │   ├── Configuration/

@@ -1,0 +1,50 @@
+<section class="card">
+    <header>
+        <h3>@Connection.Name</h3>
+        <span class="badge @BadgeClass">@BadgeText</span>
+    </header>
+
+    @if (!string.IsNullOrEmpty(Connection.Alias))
+    {
+        <p class="muted">Connection: <strong>@Connection.Alias</strong></p>
+    }
+
+    @if (Connection.Details.Count > 0)
+    {
+        <dl>
+            @foreach (var detail in Connection.Details)
+            {
+                <dt>@detail.Label</dt>
+                <dd>@detail.Value</dd>
+            }
+        </dl>
+    }
+
+    @if (!string.IsNullOrEmpty(Connection.Reason))
+    {
+        <p class="@(Connection.State == ConnectionState.Invalid ? "problem" : "muted")">
+            @Connection.Reason
+        </p>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public ConnectionStatus Connection { get; set; } = default!;
+
+    private string BadgeClass =>
+        Connection.State switch
+        {
+            ConnectionState.Valid => "ok",
+            ConnectionState.Invalid => "bad",
+            _ => "neutral"
+        };
+
+    private string BadgeText =>
+        Connection.State switch
+        {
+            ConnectionState.Valid => "valid locally",
+            ConnectionState.Invalid => "incomplete or invalid",
+            _ => "not selected"
+        };
+}

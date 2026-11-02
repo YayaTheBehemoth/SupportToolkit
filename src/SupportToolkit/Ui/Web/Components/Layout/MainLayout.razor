@@ -1,0 +1,26 @@
+@inherits LayoutComponentBase
+@inject IHostApplicationLifetime Lifetime
+
+<div class="shell">
+    <header class="topbar">
+        <span class="brand">SupportToolkit</span>
+        <nav>
+            <NavLink href="" Match="NavLinkMatch.All">Status</NavLink>
+        </nav>
+        <span class="spacer"></span>
+        <button type="button" class="link" @onclick="Exit">Exit</button>
+    </header>
+
+    <main>
+        @Body
+    </main>
+
+    <footer class="footnote">
+        Local only. This page is served from your own machine and is not
+        reachable from the network.
+    </footer>
+</div>
+
+@code {
+    private void Exit() => Lifetime.StopApplication();
+}

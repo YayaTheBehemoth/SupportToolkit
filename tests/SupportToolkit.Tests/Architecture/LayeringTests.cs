@@ -122,6 +122,59 @@ public class LayeringTests
     }
 
     [Fact]
+    public void AspNetCore_IsOnlyUsedByTheWebUi_AndTheEntryPoint()
+    {
+        var offenders =
+            AllSourceFiles()
+                .Where(
+                    file => !file.RelativePath.StartsWith(
+                                "Ui/Web/",
+                                StringComparison.Ordinal)
+                            && file.RelativePath != "Program.cs")
+                .Where(
+                    file => file.Code.Contains(
+                        "Microsoft.AspNetCore",
+                        StringComparison.Ordinal))
+                .Select(file => file.RelativePath)
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            "The web framework belongs in Ui/Web (and Program.cs, which " +
+            "starts it). Everything else stays usable without it:\n  " +
+            string.Join("\n  ", offenders));
+    }
+
+    [Fact]
+    public void RazorComponents_LiveOnlyInTheWebUi()
+    {
+        var root = SourceRoot();
+
+        var offenders =
+            Directory.EnumerateFiles(root, "*.razor", SearchOption.AllDirectories)
+                .Select(
+                    path => Path.GetRelativePath(root, path)
+                        .Replace('\\', '/'))
+                .Where(
+                    path => !path.StartsWith(
+                        "Ui/Web/",
+                        StringComparison.Ordinal))
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            "Components belong in Ui/Web:\n  " +
+            string.Join("\n  ", offenders));
+
+        // And the check is not vacuous: the web UI does have components.
+        Assert.NotEmpty(
+            Directory.EnumerateFiles(
+                Path.Combine(root, "Ui", "Web"),
+                "*.razor",
+                SearchOption.AllDirectories));
+    }
+
+    [Fact]
     public void TheAllowlist_HasNoStaleEntries()
     {
         var files =
@@ -230,6 +283,34 @@ public class LayeringTests
                     relative,
                     StripComments(File.ReadAllText(path)));
             }
+        }
+    }
+
+    /// <summary>
+    /// Every source file of the application, whatever the folder, without
+    /// build output.
+    /// </summary>
+    private static IEnumerable<SourceFile> AllSourceFiles()
+    {
+        var root = SourceRoot();
+
+        foreach (var path in Directory.EnumerateFiles(
+                     root,
+                     "*.cs",
+                     SearchOption.AllDirectories))
+        {
+            var relative =
+                Path.GetRelativePath(root, path).Replace('\\', '/');
+
+            if (relative.StartsWith("obj/", StringComparison.Ordinal)
+                || relative.StartsWith("bin/", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            yield return new SourceFile(
+                relative,
+                StripComments(File.ReadAllText(path)));
         }
     }
 

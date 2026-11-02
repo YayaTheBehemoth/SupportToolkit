@@ -1,10 +1,13 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- A local tool, not an IIS site: do not ship web.config or the IIS in-process module. -->
+    <PublishIISAssets>false</PublishIISAssets>
+    <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
   </PropertyGroup>
   <ItemGroup>
   <None Include="..\..\Fixtures\Acronis\**\*">
@@ -12,6 +15,10 @@
     <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
   </None>
 </ItemGroup>
+  <ItemGroup>
+    <!-- The web UI's stylesheet travels inside the exe: nothing is served from disk. -->
+    <EmbeddedResource Include="Ui\Web\wwwroot\app.css" LogicalName="app.css" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Identity.Client" Version="4.90.1" />
   </ItemGroup>

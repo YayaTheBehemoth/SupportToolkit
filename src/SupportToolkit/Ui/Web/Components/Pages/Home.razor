@@ -1,0 +1,267 @@
+@page "/"
+@inject WebAppState State
+
+<h1>Status</h1>
+
+@if (_loadError is not null)
+{
+    <div class="banner bad">
+        <strong>The configuration could not be read.</strong>
+        <span>@_loadError</span>
+    </div>
+}
+else if (_status is null)
+{
+    <p class="muted">Loading...</p>
+}
+else
+{
+    @if (_message is not null)
+    {
+        <div class="banner @(_messageIsError ? "bad" : "ok")">@_message</div>
+    }
+
+    @if (!_status.HasProfiles)
+    {
+        <div class="banner warn">
+            <strong>No profile is configured yet.</strong>
+            <span>
+                Run <code>SupportToolkit configure</code> in a terminal to create one,
+                then reload this page.
+            </span>
+        </div>
+    }
+    else if (_status.Runtime is null)
+    {
+        <div class="banner warn">
+            <strong>No valid active profile is selected.</strong>
+            <span>Choose one below.</span>
+        </div>
+    }
+    else
+    {
+        var mode = _status.Runtime.BackupAggregatorMode;
+
+        <div class="banner @ModeBannerClass(mode)">
+            <strong>@ModeTitle(mode)</strong>
+            <span>@ModeDetail(mode)</span>
+        </div>
+    }
+
+    <p class="muted">
+        Configuration file: <code>@_status.ConfigurationPath</code>
+    </p>
+
+    @if (_status.Runtime is not null)
+    {
+        <h2>Active profile: @_status.ActiveProfile</h2>
+
+        <div class="grid">
+            <ConnectionCard Connection="_status.Runtime.Acronis" />
+            <ConnectionCard Connection="_status.Runtime.BusinessCentral" />
+            <ConnectionCard Connection="_status.Runtime.ZendeskTicketing" />
+            <ConnectionCard Connection="_status.Runtime.ZendeskDeletion" />
+
+            <section class="card">
+                <header>
+                    <h3>Review wait for in-progress backups</h3>
+                    <span class="badge @(_status.Runtime.ReviewWait.IsValid ? "ok" : "bad")">
+                        @(_status.Runtime.ReviewWait.IsValid ? "valid" : "invalid")
+                    </span>
+                </header>
+
+                @if (!_status.Runtime.ReviewWait.IsValid)
+                {
+                    <p class="problem">@_status.Runtime.ReviewWait.Problem</p>
+                }
+                else if (_status.Runtime.ReviewWait.IsDisabled)
+                {
+                    <p class="muted">Waiting is disabled.</p>
+                }
+                else
+                {
+                    <dl>
+                        <dt>Longest wait</dt>
+                        <dd>@_status.Runtime.ReviewWait.MaxWaitSeconds seconds</dd>
+                        <dt>Poll every</dt>
+                        <dd>@_status.Runtime.ReviewWait.PollIntervalSeconds seconds</dd>
+                    </dl>
+                }
+            </section>
+        </div>
+    }
+
+    @if (_status.HasProfiles)
+    {
+        <h2>Profiles</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>Profile</th>
+                    <th>Aggregator mode</th>
+                    <th>Acronis</th>
+                    <th>Business Central</th>
+                    <th>Zendesk ticketing</th>
+                    <th>Zendesk deletion</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var profile in _status.Profiles)
+                {
+                    <tr class="@(profile.IsActive ? "active" : "")">
+                        <td>@(profile.IsActive ? "●" : "")</td>
+                        <td><strong>@profile.Name</strong></td>
+                        <td>@ModeText(profile)</td>
+                        <td>@Dash(profile.AcronisConnection)</td>
+                        <td>@Dash(profile.BusinessCentralConnection)</td>
+                        <td>@Dash(profile.ZendeskConnection)@(profile.ZendeskDestination is null ? "" : " → " + profile.ZendeskDestination)</td>
+                        <td>@Dash(profile.ZendeskDeletionConnection)</td>
+                        <td>
+                            @if (!profile.IsActive)
+                            {
+                                <button type="button" disabled="@_busy"
+                                        @onclick="() => SwitchAsync(profile.Name)">
+                                    Use
+                                </button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    @if (_status.SavedConnections.Count > 0)
+    {
+        <h2>Saved connections</h2>
+
+        <div class="grid">
+            @foreach (var saved in _status.SavedConnections)
+            {
+                <section class="card">
+                    <header>
+                        <h3>@saved.Name</h3>
+                        <span class="badge neutral">@saved.Kind</span>
+                    </header>
+                    <dl>
+                        @foreach (var detail in saved.Details)
+                        {
+                            <dt>@detail.Label</dt>
+                            <dd>@detail.Value</dd>
+                        }
+                    </dl>
+                </section>
+            }
+        </div>
+    }
+
+    <h2>Environment overrides</h2>
+
+    @if (_status.EnvironmentOverridesSet.Count == 0)
+    {
+        <p class="muted">None.</p>
+    }
+    else
+    {
+        <ul>
+            @foreach (var variable in _status.EnvironmentOverridesSet)
+            {
+                <li><code>@variable</code> is set (value hidden)</li>
+            }
+        </ul>
+    }
+
+    @foreach (var obsolete in _status.ObsoleteEnvironmentVariablesSet)
+    {
+        <div class="banner warn">
+            <code>@obsolete</code> is obsolete and ignored. Remove it from your environment.
+        </div>
+    }
+
+    <p class="muted">
+        Readiness is checked locally. No provider sign-in or API request is made
+        to show this page.
+    </p>
+}
+
+@code {
+    private ConfigurationStatus? _status;
+    private string? _loadError;
+    private string? _message;
+    private bool _messageIsError;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync() =>
+        await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _status = await State.Status.GetAsync();
+            _loadError = null;
+        }
+        catch (InvalidOperationException exception)
+        {
+            _status = null;
+            _loadError = exception.Message;
+        }
+    }
+
+    private async Task SwitchAsync(string profileName)
+    {
+        _busy = true;
+
+        try
+        {
+            var result = await State.Status.SetActiveProfileAsync(profileName);
+
+            _message = result.Message;
+            _messageIsError = !result.Succeeded;
+
+            await LoadAsync();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or IOException)
+        {
+            _message = exception.Message;
+            _messageIsError = true;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string Dash(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "—" : value;
+
+    private static string ModeText(ProfileStatus profile) =>
+        profile.Modules.TryGetValue("backup-aggregator", out var mode)
+            ? mode.ToString().ToLowerInvariant()
+            : "fixture (default)";
+
+    private static string ModeTitle(ModeStatus mode) =>
+        mode.Mode switch
+        {
+            SupportToolkitMode.Production => "PRODUCTION: real customer data",
+            SupportToolkitMode.Fixture => "FIXTURE: synthetic data only",
+            _ => "Invalid configuration"
+        };
+
+    private static string ModeDetail(ModeStatus mode) =>
+        mode.Problem
+        ?? (mode.OverriddenBy is null
+            ? "Backup Aggregator mode, from the active profile."
+            : $"Backup Aggregator mode, overridden by {mode.OverriddenBy}.");
+
+    private static string ModeBannerClass(ModeStatus mode) =>
+        mode.Mode switch
+        {
+            SupportToolkitMode.Production => "prod",
+            SupportToolkitMode.Fixture => "ok",
+            _ => "bad"
+        };
+}

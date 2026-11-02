@@ -7,6 +7,7 @@ using SupportToolkit.Core.Secrets;
 using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Ui;
+using SupportToolkit.Ui.Web;
 using SupportToolkit.Ui.Interactive;
 
 var configurationStore =
@@ -88,6 +89,33 @@ try
     {
         PrintUsage(modules);
         return 0;
+    }
+
+    /*
+     * The local web UI. The web host is built only here, so every other
+     * command (and --help) never touches it. It listens on 127.0.0.1 only.
+     */
+    if (string.Equals(
+            args[0],
+            "serve",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        if (!WebServeArguments.TryParse(
+                args.Skip(1).ToArray(),
+                out var serveOptions,
+                out var serveError))
+        {
+            Console.Error.WriteLine(serveError);
+            return 1;
+        }
+
+        return await WebHostRunner.RunAsync(
+            serveOptions!,
+            new WebAppState(
+                new ConfigurationStatusService(
+                    configurationStore,
+                    configurationResolver,
+                    secretStore)));
     }
 
     /*
@@ -496,6 +524,10 @@ static void PrintUsage(
     Console.WriteLine("Application commands:");
     Console.WriteLine(
         "  configure            Configure persistent settings and credentials.");
+    Console.WriteLine(
+        "  serve [--port <n>] [--no-browser]");
+    Console.WriteLine(
+        "                       Open the local web UI (127.0.0.1 only).");
     Console.WriteLine();
 
     Console.WriteLine("Developer diagnostics:");

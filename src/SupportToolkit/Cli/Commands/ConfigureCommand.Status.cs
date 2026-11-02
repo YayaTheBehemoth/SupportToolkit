@@ -9,24 +9,6 @@ namespace SupportToolkit.Cli.Commands;
 
 public sealed partial class ConfigureCommand
 {
-    private static readonly string[] RuntimeEnvironmentVariables =
-    [
-        "SUPPORTTOOLKIT_CONFIG",
-        "SUPPORTTOOLKIT_BACKUP_AGGREGATOR_MODE",
-        "ACRONIS_DATACENTER_URL",
-        "ACRONIS_CLIENT_ID",
-        "ACRONIS_CLIENT_SECRET",
-        "ZENDESK_SUBDOMAIN",
-        "ZENDESK_CLIENT_ID",
-        "ZENDESK_CLIENT_SECRET"
-    ];
-
-    private static readonly string[] ObsoleteEnvironmentVariables =
-    [
-        "SUPPORTTOOLKIT_ALLOW_WRITES",
-        "SUPPORTTOOLKIT_BACKUP_HEALTH_MODE"
-    ];
-
     private async Task<int> WriteStatusAsync()
     {
         var configuration =
@@ -323,7 +305,7 @@ public sealed partial class ConfigureCommand
 
         var found = false;
 
-        foreach (var variable in RuntimeEnvironmentVariables)
+        foreach (var variable in RuntimeEnvironmentVariables.Overrides)
         {
             if (!IsEnvironmentVariableSet(variable))
             {
@@ -345,7 +327,7 @@ public sealed partial class ConfigureCommand
          * Obsolete variables are intentionally not part of the
          * runtime resolver anymore.
          */
-        foreach (var obsolete in ObsoleteEnvironmentVariables)
+        foreach (var obsolete in RuntimeEnvironmentVariables.Obsolete)
         {
             if (!IsEnvironmentVariableSet(obsolete))
             {
