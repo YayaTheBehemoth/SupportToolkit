@@ -33,6 +33,12 @@ public sealed class TenantBackupReport
                 == BackupReportEntryClassification.Unknown
         );
 
+    public int InProgressCount =>
+        Entries.Count(
+            entry =>
+                entry.IsInProgress
+        );
+
     public bool RequiresReview =>
         FindingsCount > 0
         || UnknownRowsCount > 0;

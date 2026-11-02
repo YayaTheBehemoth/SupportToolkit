@@ -117,6 +117,10 @@ public sealed partial class ConfigureCommand
 
         Console.WriteLine();
 
+        await WriteEffectiveReviewWaitAsync(resolver);
+
+        Console.WriteLine();
+
         WriteEnvironmentOverrides();
 
         Console.WriteLine(
@@ -561,5 +565,29 @@ public sealed partial class ConfigureCommand
             <= 0 => $"{userId} (invalid; must be positive)",
             _ => userId.Value.ToString(CultureInfo.InvariantCulture)
         };
+    }
+
+    private static async Task WriteEffectiveReviewWaitAsync(
+        SupportToolkitConfigurationResolver resolver)
+    {
+        Console.WriteLine("Review wait for in-progress backups");
+
+        try
+        {
+            var settings =
+                await resolver.GetInProgressWaitSettingsAsync(
+                    BackupAggregatorCommand);
+
+            Console.WriteLine(
+                settings.MaxWaitSeconds == 0
+                    ? "  Waiting: disabled"
+                    : $"  Waiting: up to {settings.MaxWaitSeconds}s, " +
+                      $"checking every {settings.PollIntervalSeconds}s");
+        }
+        catch (InvalidOperationException exception)
+        {
+            Console.WriteLine("  Waiting: invalid setting");
+            Console.WriteLine($"  Reason: {exception.Message}");
+        }
     }
 }

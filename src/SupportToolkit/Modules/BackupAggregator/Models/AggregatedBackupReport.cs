@@ -64,4 +64,18 @@ public sealed class AggregatedBackupReport
 
     public bool IsTenantReviewComplete =>
         FailedTenantCount == 0;
+
+    /// <summary>
+    /// Resources still running when the review ended.
+    /// </summary>
+    public int InProgressCount =>
+        Tenants.Sum(
+            tenant =>
+                tenant.InProgressCount
+        );
+
+    /// <summary>
+    /// Set when the review waited for in-progress resources.
+    /// </summary>
+    public InProgressWaitSummary? InProgressWait { get; init; }
 }

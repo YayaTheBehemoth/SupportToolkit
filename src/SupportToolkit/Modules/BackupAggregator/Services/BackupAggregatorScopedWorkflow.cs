@@ -20,8 +20,8 @@ namespace SupportToolkit.Modules.BackupAggregator.Services;
 ///
 /// Separate from BackupAggregatorWorkflow on purpose: the existing
 /// all-tenant review and the ticket workflow do not depend on, call
-/// or change with this class. A ticket is never built from a scoped
-/// result.
+/// or change with this class. A scoped ticket is built from a scoped
+/// result only when the review is complete.
 ///
 /// The feature is available only when the active profile selects a
 /// Business Central connection. Fixture mode runs entirely on synthetic data.
@@ -44,6 +44,10 @@ public sealed class BackupAggregatorScopedWorkflow
     private readonly Func<CancellationToken,
         Task<ScopedInventoryRuntime>> _inventoryRuntimeFactory;
 
+    // Where operator-facing progress from a production review goes.
+    // Supplied by the host; this workflow never writes to a console.
+    private readonly Action<string>? _progress;
+
     // One Business Central bundle per workflow, so the evidence and
     // the names share a single sign-in.
     private Task<BusinessCentralProviderBundle>? _businessCentralBundle;
@@ -60,12 +64,15 @@ public sealed class BackupAggregatorScopedWorkflow
         ICustomerMappingRepository? mappingRepository = null,
         Func<CancellationToken,
             Task<ICustomerNameSource>>?
-            nameSourceFactory = null)
+            nameSourceFactory = null,
+        Action<string>? progress = null)
     {
         _configurationResolver =
             configurationResolver
             ?? throw new ArgumentNullException(
                 nameof(configurationResolver));
+
+        _progress = progress;
 
         _mappingRepository =
             mappingRepository;
@@ -101,6 +108,43 @@ public sealed class BackupAggregatorScopedWorkflow
     {
         return _configurationResolver
             .IsMonitoringScopeEnabledAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// The monitored review's mode and whether it can be offered. Any
+    /// configuration problem simply makes it unavailable, with the
+    /// reason; a problem reading the mode itself is not hidden.
+    /// </summary>
+    public async Task<ScopedReviewAvailability> GetAvailabilityAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var mode =
+            await _configurationResolver.GetModuleModeAsync(
+                BackupAggregatorModule.ModuleCommand,
+                cancellationToken);
+
+        if (mode == SupportToolkitMode.Fixture)
+        {
+            return new ScopedReviewAvailability(mode, true, null);
+        }
+
+        try
+        {
+            return await IsEnabledAsync(cancellationToken)
+                ? new ScopedReviewAvailability(mode, true, null)
+                : new ScopedReviewAvailability(
+                    mode,
+                    false,
+                    "The monitored review needs a Business Central " +
+                    "connection in the active profile.");
+        }
+        catch (InvalidOperationException exception)
+        {
+            return new ScopedReviewAvailability(
+                mode,
+                false,
+                exception.Message);
+        }
     }
 
     /// <summary>
@@ -351,7 +395,8 @@ public sealed class BackupAggregatorScopedWorkflow
                         selection,
                         reconciliation,
                         monitoredEvidenceSupplied: false,
-                        tenants)
+                        tenants,
+                        scope.ItemHolderCustomerNumbers)
                     with
                     {
                         AutomaticMappings = automatic
@@ -377,8 +422,22 @@ public sealed class BackupAggregatorScopedWorkflow
         // Every customer of the service is matched, entitled or not:
         // a tenant of a customer with the backup but no monitoring
         // add-on is then decided (not entitled) rather than unresolved.
+        // Customers with any other subscription are matched too, so a
+        // tenant whose customer holds neither item is recognized as a
+        // leak candidate instead of staying unmatched. The evidence
+        // already holds them; no extra read is made. Only when service
+        // items are configured: without them a customer with the
+        // backup cannot be told from one without, so tenants of other
+        // customers stay unmatched and the scope stays incomplete.
         var customerNumbers =
-            scope.ServiceCustomerNumbers;
+            scope.ServiceCustomerNumbers
+                .Concat(
+                    scope.ItemHolderCustomerNumbers is null
+                        ? []
+                        : scope.AllSubscriptionCustomerNumbers)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(number => number, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
 
         var names =
             nameSourceFactory is null
@@ -386,7 +445,7 @@ public sealed class BackupAggregatorScopedWorkflow
                     customerNumbers
                         .Select(number => new CustomerParty(number))
                         .ToArray(),
-                    customerNumbers.Count,
+                    customerNumbers.Length,
                     0,
                     "No customer name source is configured.")
                 : await (await nameSourceFactory(cancellationToken))
@@ -419,13 +478,50 @@ public sealed class BackupAggregatorScopedWorkflow
             }
         }
 
+        // Two passes, so widening the pool can only add matches. The
+        // first pass sees exactly the customers it always saw (those
+        // holding an entitling or service item); a tenant it accepts
+        // is never reconsidered. The second pass offers the remaining
+        // tenants the other subscription customers too. Without the
+        // split, a similarly named customer outside the service could
+        // turn an earlier unique match into an ambiguous one.
+        var itemHolders =
+            scope.ServiceCustomerNumbers
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var itemHolderParties =
+            names.Parties
+                .Where(party => itemHolders.Contains(party.Id.Trim()))
+                .ToArray();
+
+        var resolver =
+            new AutoCustomerMappingResolver();
+
         var resolution =
-            await new AutoCustomerMappingResolver()
-                .ResolveAsync(
+            await resolver.ResolveAsync(
+                acronisParties,
+                itemHolderParties,
+                runRepository,
+                cancellationToken);
+
+        if (itemHolderParties.Length < names.Parties.Count)
+        {
+            var wider =
+                await resolver.ResolveAsync(
                     acronisParties,
                     names.Parties,
                     runRepository,
                     cancellationToken);
+
+            resolution =
+                wider with
+                {
+                    Accepted =
+                        [.. resolution.Accepted, .. wider.Accepted],
+                    PendingReview =
+                        [.. resolution.PendingReview, .. wider.PendingReview]
+                };
+        }
 
         var identities =
             await new ConfirmedMappingIdentitySource(runRepository)
@@ -528,13 +624,21 @@ public sealed class BackupAggregatorScopedWorkflow
             await _configurationResolver
                 .GetAcronisConnectionAsync(cancellationToken);
 
+        var wait =
+            await InProgressWaitSetup.LoadAsync(
+                _configurationResolver,
+                BackupAggregatorModule.ModuleCommand,
+                cancellationToken);
+
         var session =
             BackupAggregatorProductionSession.Create(
                 AcronisOptions.Create(
                     connection.DatacenterUrl,
                     connection.ClientId,
                     connection.ClientSecret),
-                OperationalLogger.FromEnvironment());
+                OperationalLogger.FromEnvironment(),
+                wait,
+                _progress);
 
         return new ScopedInventoryRuntime(
             session.ReviewService,

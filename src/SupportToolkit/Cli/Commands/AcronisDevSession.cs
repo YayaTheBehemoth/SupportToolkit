@@ -2,6 +2,7 @@ using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Providers.Acronis.Tenants;
 using SupportToolkit.Providers.Acronis.Transport;
+using SupportToolkit.Providers.Acronis.Usage;
 
 namespace SupportToolkit.Cli.Commands;
 
@@ -19,13 +20,17 @@ public sealed class AcronisDevSession : IDisposable
 
     private AcronisDevSession(
         HttpClient httpClient,
-        AcronisTenantProvider provider)
+        AcronisTenantProvider provider,
+        AcronisUsageProvider usageProvider)
     {
         _httpClient = httpClient;
         Provider = provider;
+        UsageProvider = usageProvider;
     }
 
     public AcronisTenantProvider Provider { get; }
+
+    public AcronisUsageProvider UsageProvider { get; }
 
     public static async Task<AcronisDevSession> CreateAsync(
         SupportToolkitConfigurationResolver configurationResolver,
@@ -61,13 +66,19 @@ public sealed class AcronisDevSession : IDisposable
         var diagnosticLogger =
             logger.DebugEnabled ? logger : null;
 
+        var apiClient =
+            new AcronisApiClient(
+                httpClient,
+                options,
+                logger: diagnosticLogger);
+
         return new AcronisDevSession(
             httpClient,
             new AcronisTenantProvider(
-                new AcronisApiClient(
-                    httpClient,
-                    options,
-                    logger: diagnosticLogger),
+                apiClient,
+                diagnosticLogger),
+            new AcronisUsageProvider(
+                apiClient,
                 diagnosticLogger));
     }
 

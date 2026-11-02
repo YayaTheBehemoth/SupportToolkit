@@ -303,6 +303,11 @@ public sealed class JsonSupportToolkitConfigurationStore
                     string,
                     ModuleMonitoringScopeConfiguration>();
 
+            profile.Review ??=
+                new Dictionary<
+                    string,
+                    ModuleReviewConfiguration>();
+
             /*
              * Retired module entries are tolerated on load and dropped
              * on the next save, like the retired allowWrites property.

@@ -198,4 +198,41 @@ public class BackupReviewTicketDraftFactoryTests
             StringComparison.OrdinalIgnoreCase
         );
     }
+
+    [Fact]
+    public void Create_PrintsEveryScopeTenantWithoutTruncation()
+    {
+        var lines =
+            Enumerable.Range(0, 300)
+                .Select(index => $"Example Tenant {index:000}")
+                .ToArray();
+
+        var draft =
+            new BackupReviewTicketDraftFactory()
+                .Create(
+                    new BackupAggregatorFixtureFactory().BuildReport(),
+                    "Monitored tenants only: 300 tenant(s).",
+                    lines,
+                    ["Leak candidates: none.", "Unmatched tenants: none."]);
+
+        Assert.Contains("- Example Tenant 000", draft.Body);
+        Assert.Contains("- Example Tenant 299", draft.Body);
+        Assert.Equal(
+            300,
+            draft.Body.Split("- Example Tenant ").Length - 1);
+        Assert.Contains("STRAY TENANT CHECK", draft.Body);
+    }
+
+    [Fact]
+    public void Create_SanitizesLineBreaksInTenantNames()
+    {
+        var draft =
+            new BackupReviewTicketDraftFactory()
+                .Create(
+                    new BackupAggregatorFixtureFactory().BuildReport(),
+                    "Scope.",
+                    ["Example\r\nInjected Line"]);
+
+        Assert.Contains("- Example  Injected Line", draft.Body);
+    }
 }

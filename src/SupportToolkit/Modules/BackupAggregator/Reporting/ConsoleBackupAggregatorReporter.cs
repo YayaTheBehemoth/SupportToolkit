@@ -416,6 +416,18 @@ public sealed class ConsoleBackupAggregatorReporter
             Console.WriteLine();
         }
 
+        if (report.InProgressWait is { PendingResources: > 0 } wait)
+        {
+            Console.WriteLine(
+                $"WARNING: {wait.PendingResources} resource(s) in " +
+                $"{wait.PendingTenants} tenant(s) were still in " +
+                "progress when waiting stopped. Their result is not " +
+                "final."
+            );
+
+            Console.WriteLine();
+        }
+
         if (report.RowsChecked == 0)
         {
             Console.WriteLine(

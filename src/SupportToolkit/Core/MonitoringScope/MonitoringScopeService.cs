@@ -29,6 +29,21 @@ public sealed record MonitoringScopeResult(
     public IReadOnlyList<string> EntitledWithoutServiceItem { get; init; } =
         [];
 
+    /// <summary>
+    /// Every customer with at least one subscription header, whatever
+    /// it contains. Used to widen name matching so a tenant whose
+    /// customer holds no relevant item is still recognized.
+    /// </summary>
+    public IReadOnlyList<string> AllSubscriptionCustomerNumbers { get; init; } =
+        [];
+
+    /// <summary>
+    /// Customers holding any entitling or service item, in any
+    /// subscription status. Null when no service items were supplied:
+    /// without them "holds no backup item" cannot be decided.
+    /// </summary>
+    public IReadOnlyList<string>? ItemHolderCustomerNumbers { get; init; }
+
     public CustomerEntitlementState StateOf(
         string customerNumber)
     {
@@ -93,6 +108,8 @@ public sealed class MonitoringScopeService
         var serviceCustomers =
             customers.Keys.ToList();
 
+        IReadOnlyList<string>? itemHolders = null;
+
         var entitledWithoutService =
             new List<string>();
 
@@ -116,6 +133,11 @@ public sealed class MonitoringScopeService
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
+            itemHolders =
+                serviceCustomers
+                    .OrderBy(number => number, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
             entitledWithoutService =
                 customers.Keys
                     .Where(number => !withServiceItem.Contains(number))
@@ -131,7 +153,16 @@ public sealed class MonitoringScopeService
                 .OrderBy(number => number, StringComparer.OrdinalIgnoreCase)
                 .ToArray())
         {
-            EntitledWithoutServiceItem = entitledWithoutService
+            EntitledWithoutServiceItem = entitledWithoutService,
+            ItemHolderCustomerNumbers = itemHolders,
+            AllSubscriptionCustomerNumbers =
+                evidence.Headers
+                    .Select(header => header.CustomerNumber)
+                    .Where(number => !string.IsNullOrWhiteSpace(number))
+                    .Select(number => number!.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(number => number, StringComparer.OrdinalIgnoreCase)
+                    .ToArray()
         };
     }
 

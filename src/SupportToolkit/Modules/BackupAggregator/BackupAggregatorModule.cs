@@ -153,7 +153,8 @@ public sealed class BackupAggregatorModule
     /// <summary>
     /// Ticket preview or submission for the scoped review.
     ///
-    /// Only a complete review produces a ticket. An incomplete one
+    /// Only a review with no blocking gap produces a ticket (unmatched
+    /// tenants do not block; the ticket carries a banner). An incomplete one
     /// prints why and exits with code 2, without any draft and without
     /// contacting Zendesk.
     /// </summary>
@@ -172,11 +173,16 @@ public sealed class BackupAggregatorModule
             await _scopedWorkflow.ReviewAsync(
                 DateOnly.FromDateTime(DateTime.Today));
 
-        var blockers =
-            result.TicketBlockers;
+        // The one gate that decides whether a ticket may be produced;
+        // the interactive console and any other interface use it too.
+        var preparation =
+            _workflow.PrepareScopedTicketDraft(result);
 
-        if (blockers.Count > 0)
+        if (!preparation.IsReady)
         {
+            var blockers =
+                preparation.NotReady.Reasons;
+
             new ConsoleScopedReviewReporter(
                     OperationalLogger.FromEnvironment().DebugEnabled)
                 .Write(Console.Out, result);
@@ -201,7 +207,7 @@ public sealed class BackupAggregatorModule
         if (!submit)
         {
             WriteTicketPreview(
-                _workflow.CreateScopedTicketDraft(result));
+                preparation.Value);
 
             return 0;
         }

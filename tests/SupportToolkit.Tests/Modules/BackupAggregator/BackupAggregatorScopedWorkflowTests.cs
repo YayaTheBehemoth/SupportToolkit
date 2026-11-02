@@ -306,8 +306,8 @@ public class BackupAggregatorScopedWorkflowTests
 
         Assert.Contains("Monitoring scope complete:   NO", text);
         Assert.Contains(
-            "a ticket can be created only when the overall review is " +
-            "complete",
+            "a ticket cannot be created until the reasons above are " +
+            "resolved",
             text);
         Assert.Contains("UNRESOLVED SCOPE", text);
     }

@@ -6,6 +6,7 @@ using SupportToolkit.Core.Modules;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.Services;
+using SupportToolkit.Ui;
 using SupportToolkit.Ui.Interactive;
 
 var configurationStore =
@@ -29,6 +30,14 @@ var tenantDirectoryCommand =
     new AcronisTenantDirectoryDevCommand(
         configurationResolver);
 
+var usageProbeCommand =
+    new AcronisUsageDevCommand(
+        configurationResolver);
+
+var usageCompareCommand =
+    new UsageCompareDevCommand(
+        configurationResolver);
+
 var businessCentralDiagnosticsCommand =
     new BusinessCentralSubscriptionDevCommand(
         configurationResolver);
@@ -39,11 +48,13 @@ var zendeskBulkDeleteCommand =
 
 var backupAggregatorWorkflow =
     new BackupAggregatorWorkflow(
-        configurationResolver);
+        configurationResolver,
+        ConsoleProgress.Write);
 
 var backupAggregatorScopedWorkflow =
     new BackupAggregatorScopedWorkflow(
-        configurationResolver);
+        configurationResolver,
+        progress: ConsoleProgress.Write);
 
 ISupportToolkitModule[] modules =
 [
@@ -152,6 +163,66 @@ try
         return await zendeskBulkDeleteCommand.RunAsync(
             Console.Out,
             bulkDeleteOptions!);
+    }
+
+    /*
+     * Host-level developer utility.
+     *
+     * --production explicitly authorizes read-only Acronis calls.
+     * --names adds one row per customer tenant (customer names);
+     * --out writes those rows to a file outside any git working tree.
+     */
+    if (args.Length >= 2
+        && string.Equals(
+            args[0],
+            "dev",
+            StringComparison.OrdinalIgnoreCase)
+        && string.Equals(
+            args[1],
+            "acronis-usage",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        if (!AcronisUsageDevCommand.TryParseArguments(
+                args.Skip(2).ToArray(),
+                out var usageOptions,
+                out var usageError))
+        {
+            Console.Error.WriteLine(usageError);
+            return 1;
+        }
+
+        return await usageProbeCommand.RunAsync(
+            Console.Out,
+            usageOptions!);
+    }
+
+    /*
+     * Host-level developer utility: read-only comparison of Business
+     * Central backup quantities with Acronis usage. --production
+     * explicitly authorizes the read-only reads.
+     */
+    if (args.Length >= 2
+        && string.Equals(
+            args[0],
+            "dev",
+            StringComparison.OrdinalIgnoreCase)
+        && string.Equals(
+            args[1],
+            "usage-compare",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        if (!UsageCompareDevCommand.TryParseArguments(
+                args.Skip(2).ToArray(),
+                out var compareOptions,
+                out var compareError))
+        {
+            Console.Error.WriteLine(compareError);
+            return 1;
+        }
+
+        return await usageCompareCommand.RunAsync(
+            Console.Out,
+            compareOptions!);
     }
 
     /*
@@ -430,6 +501,10 @@ static void PrintUsage(
     Console.WriteLine("Developer diagnostics:");
     Console.WriteLine(
         "  dev acronis-tenants --production [--names]");
+    Console.WriteLine(
+        "  dev acronis-usage --production [--metric <name>]... [--tenant <text>] [--names [--out <path>]]");
+    Console.WriteLine(
+        "  dev usage-compare --production [--metric <name>] [--names]");
     Console.WriteLine(
         "  dev bc-subscriptions --production");
     Console.WriteLine(

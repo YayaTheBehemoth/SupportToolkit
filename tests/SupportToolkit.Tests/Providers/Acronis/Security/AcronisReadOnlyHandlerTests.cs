@@ -12,6 +12,7 @@ public class AcronisReadOnlyHandlerTests
     [Theory]
     [InlineData("/api/2/clients/fixture-client")]
     [InlineData("/api/2/tenants?limit=100")]
+    [InlineData("/api/2/tenants/usages?tenants=11111111-1111-1111-1111-111111111111,22222222-2222-2222-2222-222222222222")]
     [InlineData("/api/resource_management/v4/resource_statuses?limit=100")]
     [InlineData("/api/alert_manager/v1/alerts?show_deleted=false")]
     [InlineData("/bc/api/resource_manager/v1/o365/groups")]
@@ -110,6 +111,41 @@ public class AcronisReadOnlyHandlerTests
             "read-only",
             exception.Message,
             StringComparison.OrdinalIgnoreCase
+        );
+
+        Assert.Equal(
+            0,
+            network.RequestCount
+        );
+    }
+
+    [Theory]
+    [InlineData("POST", "/api/2/tenants/usages")]
+    [InlineData("PUT", "/api/2/tenants/usages")]
+    [InlineData("DELETE", "/api/2/tenants/usages")]
+    [InlineData("GET", "/api/2/tenants/usages/extra")]
+    [InlineData("GET", "/api/2/tenants/11111111-1111-1111-1111-111111111111/usages")]
+    [InlineData("GET", "/api/2/reports")]
+    [InlineData("POST", "/api/2/reports")]
+    [InlineData("DELETE", "/api/2/reports/11111111-1111-1111-1111-111111111111")]
+    public async Task UsageEndpoint_AllowsOnlyTheExactReadPath(
+        string method,
+        string path)
+    {
+        var network =
+            new RecordingHandler();
+
+        using var client =
+            CreateClient(network);
+
+        using var request =
+            new HttpRequestMessage(
+                new HttpMethod(method),
+                path
+            );
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => client.SendAsync(request)
         );
 
         Assert.Equal(
