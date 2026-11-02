@@ -150,16 +150,7 @@ public sealed class DeviceBackupResourceNormalizer
     private static bool IsBackupInProgressState(
         string state)
     {
-        return string.Equals(
-                   state,
-                   "running",
-                   StringComparison.OrdinalIgnoreCase
-               )
-               || string.Equals(
-                   state,
-                   "backup",
-                   StringComparison.OrdinalIgnoreCase
-               );
+        return BackupResourceStates.IsInProgress(state);
     }
 
     private static bool IsNotProtectedState(

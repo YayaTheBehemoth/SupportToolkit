@@ -167,7 +167,10 @@ public sealed class BackupAggregatorWorkflow
         return new BackupReviewTicketDraftFactory()
             .Create(
                 result.Inventory,
-                result.TicketScopeNote
+                result.TicketScopeNote,
+                result.TicketScopeTenantLines,
+                result.TicketStrayLines,
+                result.TicketScopeWarning
             );
     }
 
@@ -423,13 +426,22 @@ public sealed class BackupAggregatorWorkflow
                 resolvedConnection.ClientSecret
             );
 
+        var wait =
+            await InProgressWaitSetup.LoadAsync(
+                _configurationResolver,
+                BackupAggregatorModule.ModuleCommand,
+                cancellationToken
+            );
+
         var logger =
             OperationalLogger.FromEnvironment();
 
         return BackupAggregatorProductionSession
             .Create(
                 acronisOptions,
-                logger
+                logger,
+                wait,
+                InProgressWaitSetup.WriteProgress
             );
     }
 

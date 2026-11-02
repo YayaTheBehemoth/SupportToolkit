@@ -153,7 +153,8 @@ public sealed class BackupAggregatorModule
     /// <summary>
     /// Ticket preview or submission for the scoped review.
     ///
-    /// Only a complete review produces a ticket. An incomplete one
+    /// Only a review with no blocking gap produces a ticket (unmatched
+    /// tenants do not block; the ticket carries a banner). An incomplete one
     /// prints why and exits with code 2, without any draft and without
     /// contacting Zendesk.
     /// </summary>

@@ -63,6 +63,12 @@
           "serviceItemNumbers": ["EXAMPLE-BACKUP", "EXAMPLE-BACKUP-2"]
         }
       },
+      "review": {
+        "backup-aggregator": {
+          "inProgressMaxWaitSeconds": 1800,
+          "inProgressPollIntervalSeconds": 30
+        }
+      },
       "modules": {
         "backup-aggregator": "production",
         "backup-health": "fixture"

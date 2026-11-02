@@ -117,6 +117,38 @@ public sealed record AutomaticMappingSummary(
     } = [];
 }
 
+/// <summary>
+/// An Acronis customer tenant that may not be billed, with why it is
+/// listed.
+/// </summary>
+public sealed record StrayTenant(
+    string TenantName,
+    string TenantId,
+    string? CustomerNumber,
+    string Reason);
+
+/// <summary>
+/// Tenant-level check for Acronis tenants that exist without a
+/// billing relationship for the service.
+///
+/// Leak candidates are tenants matched to a Business Central customer
+/// that holds neither the backup item nor the monitoring item. That
+/// needs the service items: when LeakCheckAvailable is false the check
+/// could not run, which must never be read as "no leaks".
+///
+/// Unmatched tenants could be strays or matching misses. A customer
+/// with the backup item but no monitoring item is a legitimate
+/// exclusion and appears in neither list.
+/// </summary>
+public sealed record StrayTenantCheck(
+    bool LeakCheckAvailable,
+    IReadOnlyList<StrayTenant> LeakCandidates,
+    IReadOnlyList<StrayTenant> Unmatched)
+{
+    public int Total =>
+        LeakCandidates.Count + Unmatched.Count;
+}
+
 public sealed record MonitoringScopeReport(
     DateOnly AsOfDate,
     IReadOnlyList<string> EntitlingItems,
@@ -137,6 +169,11 @@ public sealed record MonitoringScopeReport(
     /// </summary>
     public AutomaticMappingSummary? AutomaticMappings { get; init; }
 
+    /// <summary>
+    /// Always set by the builder.
+    /// </summary>
+    public StrayTenantCheck? StrayTenants { get; init; }
+
     public int AcronisCustomerTenants =>
         InScope.Count
         + Excluded.Count
@@ -156,7 +193,8 @@ public static class MonitoringScopeReportBuilder
         MonitoringTenantSelectionResult selection,
         ReconciliationReport? reconciliation,
         bool monitoredEvidenceSupplied,
-        IReadOnlyList<TenantDto> tenants)
+        IReadOnlyList<TenantDto> tenants,
+        IReadOnlyCollection<string>? itemHolderCustomerNumbers = null)
     {
         ArgumentNullException.ThrowIfNull(entitlingItems);
         ArgumentNullException.ThrowIfNull(observations);
@@ -324,7 +362,70 @@ public static class MonitoringScopeReportBuilder
             discrepancies,
             ambiguous,
             unscopedRecords,
-            selection.Notices);
+            selection.Notices)
+        {
+            StrayTenants =
+                BuildStrayTenantCheck(
+                    excluded,
+                    unscopedTenants,
+                    itemHolderCustomerNumbers)
+        };
+    }
+
+    private static StrayTenantCheck BuildStrayTenantCheck(
+        IReadOnlyList<ExcludedScopeTenant> excluded,
+        IReadOnlyList<UnresolvedScopeTenant> unscopedTenants,
+        IReadOnlyCollection<string>? itemHolders)
+    {
+        var unmatched =
+            unscopedTenants
+                .Select(
+                    tenant => new StrayTenant(
+                        tenant.TenantName,
+                        tenant.TenantId,
+                        null,
+                        "Not matched to any Business Central customer. " +
+                        "Could be a stray tenant or a matching miss."))
+                .OrderBy(
+                    tenant => tenant.TenantName,
+                    StringComparer.OrdinalIgnoreCase)
+                .ThenBy(
+                    tenant => tenant.TenantId,
+                    StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+        if (itemHolders is null)
+        {
+            return new StrayTenantCheck(false, [], unmatched);
+        }
+
+        var holders =
+            itemHolders.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var leaks =
+            excluded
+                .Where(
+                    tenant =>
+                        tenant.Reason == ScopeExclusionReason.NotEntitled
+                        && !string.IsNullOrWhiteSpace(tenant.CustomerNumber)
+                        && !holders.Contains(tenant.CustomerNumber!.Trim()))
+                .Select(
+                    tenant => new StrayTenant(
+                        tenant.TenantName,
+                        tenant.TenantId,
+                        tenant.CustomerNumber,
+                        "Matched to customer " +
+                        $"{tenant.CustomerNumber}, which holds neither " +
+                        "the backup item nor the monitoring item."))
+                .OrderBy(
+                    tenant => tenant.TenantName,
+                    StringComparer.OrdinalIgnoreCase)
+                .ThenBy(
+                    tenant => tenant.TenantId,
+                    StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+        return new StrayTenantCheck(true, leaks, unmatched);
     }
 
     private static ReconciliationResult? ResultOf(

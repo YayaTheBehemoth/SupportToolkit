@@ -24,13 +24,22 @@ public sealed class BackupInventoryReviewService
 
     private readonly int _maxConcurrentTenants;
 
+    private readonly InProgressWaitOptions _inProgressWait;
+
+    private readonly TimeProvider _timeProvider;
+
+    private readonly Action<string>? _progress;
+
     public BackupInventoryReviewService(
         AcronisTenantResolver tenantResolver,
         IAcronisMicrosoft365InventoryProvider microsoft365Inventory,
         IAcronisDeviceInventoryProvider deviceInventory,
         BackupInventoryNormalizer normalizer,
         OperationalLogger? logger = null,
-        int maxConcurrentTenants = DefaultMaxConcurrentTenants)
+        int maxConcurrentTenants = DefaultMaxConcurrentTenants,
+        InProgressWaitOptions? inProgressWait = null,
+        TimeProvider? timeProvider = null,
+        Action<string>? progress = null)
     {
         if (maxConcurrentTenants < 1)
         {
@@ -48,6 +57,13 @@ public sealed class BackupInventoryReviewService
         );
         _logger = logger;
         _maxConcurrentTenants = maxConcurrentTenants;
+        _inProgressWait =
+            inProgressWait
+            ?? InProgressWaitOptions.Disabled;
+        _timeProvider =
+            timeProvider
+            ?? TimeProvider.System;
+        _progress = progress;
     }
 
     public async Task<AggregatedBackupReport> ReviewTenantAsync(
@@ -234,45 +250,22 @@ public sealed class BackupInventoryReviewService
         var outcomes =
             new TenantReviewOutcome?[tenants.Count];
 
-        await Parallel.ForEachAsync(
+        await RunTenantReviewsAsync(
+            tenants,
             Enumerable.Range(
                 0,
                 tenants.Count
-            ),
-            new ParallelOptions
-            {
-                MaxDegreeOfParallelism =
-                    _maxConcurrentTenants,
-
-                CancellationToken =
-                    cancellationToken
-            },
-            async (
-                index,
-                iterationCancellationToken) =>
-            {
-                var tenant =
-                    tenants[index];
-
-                _logger?.Info(
-                    $"Starting tenant review " +
-                    $"{index + 1}/{tenants.Count}."
-                );
-
-                outcomes[index] =
-                    await ReviewTenantSafelyAsync(
-                        tenant,
-                        index + 1,
-                        tenants.Count,
-                        iterationCancellationToken
-                    );
-
-                _logger?.Info(
-                    $"Completed tenant review " +
-                    $"{index + 1}/{tenants.Count}."
-                );
-            }
+            ).ToArray(),
+            outcomes,
+            cancellationToken
         );
+
+        var waitSummary =
+            await WaitForInProgressAsync(
+                tenants,
+                outcomes,
+                cancellationToken
+            );
 
         var reports =
             new List<TenantBackupReport>();
@@ -311,7 +304,10 @@ public sealed class BackupInventoryReviewService
                     reports.AsReadOnly(),
 
                 Failures =
-                    failures.AsReadOnly()
+                    failures.AsReadOnly(),
+
+                InProgressWait =
+                    waitSummary
             };
 
         stopwatch.Stop();
@@ -326,6 +322,193 @@ public sealed class BackupInventoryReviewService
         );
 
         return report;
+    }
+
+    /// <summary>
+    /// Reviews the tenants at the given indices with bounded
+    /// concurrency, storing each outcome at its original index.
+    /// </summary>
+    private async Task RunTenantReviewsAsync(
+        IReadOnlyList<TenantDto> tenants,
+        IReadOnlyList<int> indices,
+        TenantReviewOutcome?[] outcomes,
+        CancellationToken cancellationToken)
+    {
+        await Parallel.ForEachAsync(
+            indices,
+            new ParallelOptions
+            {
+                MaxDegreeOfParallelism =
+                    _maxConcurrentTenants,
+
+                CancellationToken =
+                    cancellationToken
+            },
+            async (
+                index,
+                iterationCancellationToken) =>
+            {
+                var tenant =
+                    tenants[index];
+
+                _logger?.Info(
+                    $"Starting tenant review " +
+                    $"{index + 1}/{tenants.Count}."
+                );
+
+                outcomes[index] =
+                    await ReviewTenantSafelyAsync(
+                        tenant,
+                        index + 1,
+                        tenants.Count,
+                        iterationCancellationToken
+                    );
+
+                _logger?.Info(
+                    $"Completed tenant review " +
+                    $"{index + 1}/{tenants.Count}."
+                );
+            }
+        );
+    }
+
+    /// <summary>
+    /// Waits for resources that are still running to finish, so a
+    /// report does not describe a moment in the middle of a backup.
+    ///
+    /// Only tenants that still have in-progress resources are
+    /// reviewed again. A tenant whose re-review fails becomes a failed
+    /// tenant review, exactly as if its review had failed the first
+    /// time; its earlier result is not kept. At the time limit the
+    /// remaining resources stay In progress and are counted as
+    /// pending, never as healthy. With nothing in progress, or waiting
+    /// disabled, no delay happens and no further call is made.
+    /// </summary>
+    private async Task<InProgressWaitSummary?> WaitForInProgressAsync(
+        IReadOnlyList<TenantDto> tenants,
+        TenantReviewOutcome?[] outcomes,
+        CancellationToken cancellationToken)
+    {
+        if (!_inProgressWait.Enabled)
+        {
+            return null;
+        }
+
+        var pending =
+            PendingIndices(outcomes);
+
+        if (pending.Count == 0)
+        {
+            return null;
+        }
+
+        var started =
+            _timeProvider.GetUtcNow();
+
+        var polls = 0;
+
+        while (pending.Count > 0)
+        {
+            var elapsed =
+                _timeProvider.GetUtcNow() - started;
+
+            var remaining =
+                _inProgressWait.MaxWait - elapsed;
+
+            if (remaining <= TimeSpan.Zero)
+            {
+                break;
+            }
+
+            _progress?.Invoke(
+                $"Waiting for in-progress backups: " +
+                $"{CountInProgress(outcomes, pending)} resource(s) in " +
+                $"{pending.Count} tenant(s) still running " +
+                $"({FormatDuration(elapsed)} of " +
+                $"{FormatDuration(_inProgressWait.MaxWait)})."
+            );
+
+            await Task.Delay(
+                remaining < _inProgressWait.PollInterval
+                    ? remaining
+                    : _inProgressWait.PollInterval,
+                _timeProvider,
+                cancellationToken
+            );
+
+            polls++;
+
+            await RunTenantReviewsAsync(
+                tenants,
+                pending,
+                outcomes,
+                cancellationToken
+            );
+
+            pending =
+                PendingIndices(outcomes);
+        }
+
+        var total =
+            _timeProvider.GetUtcNow() - started;
+
+        var pendingResources =
+            CountInProgress(outcomes, pending);
+
+        _progress?.Invoke(
+            pending.Count == 0
+                ? $"In-progress backups finished after " +
+                  $"{FormatDuration(total)}."
+                : $"Stopped waiting after {FormatDuration(total)}: " +
+                  $"{pendingResources} resource(s) in " +
+                  $"{pending.Count} tenant(s) are still in progress."
+        );
+
+        return new InProgressWaitSummary(
+            _inProgressWait.MaxWait,
+            total,
+            polls,
+            pendingResources,
+            pending.Count,
+            TimedOut:
+                pending.Count > 0
+        );
+    }
+
+    private static List<int> PendingIndices(
+        TenantReviewOutcome?[] outcomes)
+    {
+        var pending =
+            new List<int>();
+
+        for (var index = 0; index < outcomes.Length; index++)
+        {
+            if (outcomes[index]?.Report is { InProgressCount: > 0 })
+            {
+                pending.Add(index);
+            }
+        }
+
+        return pending;
+    }
+
+    private static int CountInProgress(
+        TenantReviewOutcome?[] outcomes,
+        IReadOnlyList<int> indices)
+    {
+        return indices.Sum(
+            index => outcomes[index]?.Report?.InProgressCount ?? 0
+        );
+    }
+
+    private static string FormatDuration(
+        TimeSpan duration)
+    {
+        return duration.TotalHours >= 1
+            ? $"{(int)duration.TotalHours}h {duration.Minutes}m"
+            : duration.TotalMinutes >= 1
+                ? $"{(int)duration.TotalMinutes}m {duration.Seconds}s"
+                : $"{(int)duration.TotalSeconds}s";
     }
 
     private static void ValidateCandidates(
