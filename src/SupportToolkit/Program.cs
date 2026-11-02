@@ -6,8 +6,6 @@ using SupportToolkit.Core.Modules;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.Services;
-using SupportToolkit.Modules.BackupHealth;
-using SupportToolkit.Modules.BackupHealth.Services;
 using SupportToolkit.Ui.Interactive;
 
 var configurationStore =
@@ -35,6 +33,10 @@ var businessCentralDiagnosticsCommand =
     new BusinessCentralSubscriptionDevCommand(
         configurationResolver);
 
+var zendeskBulkDeleteCommand =
+    new ZendeskBulkDeleteDevCommand(
+        configurationResolver);
+
 var backupAggregatorWorkflow =
     new BackupAggregatorWorkflow(
         configurationResolver);
@@ -43,15 +45,8 @@ var backupAggregatorScopedWorkflow =
     new BackupAggregatorScopedWorkflow(
         configurationResolver);
 
-var backupHealthWorkflow =
-    new BackupHealthWorkflow(
-        configurationResolver);
-
 ISupportToolkitModule[] modules =
 [
-    new BackupHealthModule(
-        backupHealthWorkflow),
-
     new BackupAggregatorModule(
         backupAggregatorWorkflow,
         backupAggregatorScopedWorkflow)
@@ -62,7 +57,6 @@ var interactiveShell =
         configurationStore,
         configureCommand,
         backupAggregatorWorkflow,
-        backupHealthWorkflow,
         backupAggregatorScopedWorkflow);
 
 var firstRunStartup =
@@ -126,6 +120,38 @@ try
         return await tenantDirectoryCommand.RunAsync(
             Console.Out,
             showNames: args.Length == 4);
+    }
+
+    /*
+     * Host-level developer utility: Zendesk bulk delete, sign-in, search
+     * and preview only. Nothing is deleted. Interactive only.
+     *
+     * --production explicitly authorizes the interactive Zendesk
+     * sign-in and read-only calls, using the profile's Zendesk deletion
+     * connection (not the ticketing connection).
+     */
+    if (args.Length >= 2
+        && string.Equals(
+            args[0],
+            "dev",
+            StringComparison.OrdinalIgnoreCase)
+        && string.Equals(
+            args[1],
+            "zendesk-bulk-delete",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        if (!ZendeskBulkDeleteDevCommand.TryParseArguments(
+                args.Skip(2).ToArray(),
+                out var bulkDeleteOptions,
+                out var bulkDeleteError))
+        {
+            Console.Error.WriteLine(bulkDeleteError);
+            return 1;
+        }
+
+        return await zendeskBulkDeleteCommand.RunAsync(
+            Console.Out,
+            bulkDeleteOptions!);
     }
 
     /*
@@ -406,6 +432,10 @@ static void PrintUsage(
         "  dev acronis-tenants --production [--names]");
     Console.WriteLine(
         "  dev bc-subscriptions --production");
+    Console.WriteLine(
+        "  dev zendesk-bulk-delete --production [--organization <name>] [--sender <name>] " +
+        "[--requester <email>] [--domain <domain>] [--text <text>] " +
+        "[--dry-run | --delete [--include <ids>] [--exclude <ids>] [--receipt-dir <path>]]");
     Console.WriteLine();
 
     Console.WriteLine("  dev monitoring-scope");

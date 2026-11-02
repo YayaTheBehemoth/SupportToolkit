@@ -19,6 +19,12 @@
         }
       }
     },
+    "zendeskDeletion": {
+      "example-deletion": {
+        "subdomain": "example",
+        "clientId": "example-public-client-id"
+      }
+    },
     "businessCentral": {
       "example-bc": {
         "tenantId": "00000000-0000-0000-0000-000000000001",
@@ -35,23 +41,26 @@
   "profiles": {
     "local-dev": {
       "modules": {
-        "backup-aggregator": "fixture",
-        "backup-health": "fixture"
+        "backup-aggregator": "fixture"
       }
     },
     "zendesk-sandbox": {
       "zendeskConnection": "example-sandbox",
       "zendeskDestination": "dev",
       "modules": {
-        "backup-aggregator": "fixture",
-        "backup-health": "fixture"
+        "backup-aggregator": "fixture"
+      }
+    },
+    "zendesk-deletion": {
+      "zendeskDeletionConnection": "example-deletion",
+      "modules": {
+        "backup-aggregator": "fixture"
       }
     },
     "readonly-validation": {
       "acronisConnection": "example-production",
       "modules": {
-        "backup-aggregator": "production",
-        "backup-health": "fixture"
+        "backup-aggregator": "production"
       }
     },
     "scoped-review": {
@@ -64,8 +73,7 @@
         }
       },
       "modules": {
-        "backup-aggregator": "production",
-        "backup-health": "fixture"
+        "backup-aggregator": "production"
       }
     }
   }

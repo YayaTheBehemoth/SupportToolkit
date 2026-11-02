@@ -10,7 +10,6 @@ The project focuses on reducing manual investigation, improving operational cons
 SupportToolkit currently includes:
 
 - **BackupAggregator** — Consolidated Acronis backup inventory reviews.
-- **BackupHealth** — Acronis backup health evaluation.
 - **Zendesk ticketing** — Ticket generation and submission from backup reviews.
 - **Monitoring scope** — Business Central subscription entitlement decides which Acronis tenants are reviewed.
 - **Configuration management** — Reusable provider connections, runtime profiles, and secure credential storage.
@@ -18,7 +17,7 @@ SupportToolkit currently includes:
 
 The application supports fixture-based development and production integrations through the same underlying workflows.
 
-**Current release:** [`v0.2.4`](https://github.com/YayaTheBehemoth/SupportToolkit/releases) (Windows x64 prerelease). See [Release history](#release-history) for what changed and why, and [Development branches](#development-branches) for work that is not part of `main` yet.
+**Current release:** [`v0.3.0`](https://github.com/YayaTheBehemoth/SupportToolkit/releases) (Windows x64 prerelease). See [Release history](#release-history) for what changed and why, and [Development branches](#development-branches) for work that is not part of `main` yet.
 
 ## Getting started
 
@@ -62,7 +61,7 @@ Run:
 SupportToolkit.exe
 ```
 
-The interactive menu provides access to BackupAggregator, BackupHealth, profile switching, configuration, and debug logging.
+The interactive menu provides access to BackupAggregator, profile switching, configuration, and debug logging.
 
 Direct CLI commands are also available for scripting and development.
 
@@ -78,9 +77,9 @@ Direct CLI commands are also available for scripting and development.
 | `backup-aggregator ticket submit` | Create a Zendesk ticket from a completed review. | **Writes to Zendesk.** |
 | `backup-aggregator scoped-review` | Review only tenants entitled to monitoring in Business Central, plus the operator's own tenant. | Read-only Acronis and Business Central calls; interactive Business Central sign-in. |
 | `backup-aggregator ticket preview --scoped` / `ticket submit --scoped` | Ticket from a complete scoped review. | `submit` **writes to Zendesk.** |
-| `backup-health` | Acronis backup health evaluation. | Read-only in production mode. |
 | `dev acronis-tenants --production [--names]` | Tenant discovery diagnostics. | Read-only Acronis calls. |
 | `dev bc-subscriptions [--production]` | Business Central subscription evidence diagnostics. | Read-only; `--production` signs in interactively. |
+| `dev zendesk-bulk-delete --production [--organization <name>] [--sender <name>] [--requester <email>] [--domain <domain>] [--text <text>] [--dry-run \| --delete [--include <ids>] [--exclude <ids>] [--receipt-dir <path>]]` | Zendesk bulk delete: sign in, search, preview; with `--dry-run` shows the requests, with `--delete` deletes the selection after two typed confirmations and writes a receipt. | Read-only by default. **`--delete` deletes Zendesk tickets** (recoverable for 30 days); browser sign-in, interactive only. |
 | `dev customer-matching --production [--names] [--why]` | Dry run of the automatic customer-to-tenant matching. | Read-only Acronis and Business Central calls. |
 | `dev monitoring-scope`, `dev customer-mapping` | Fixture-only scope and mapping walkthroughs. | None. |
 
@@ -310,31 +309,6 @@ Interactive mode offers only the scoped review. The unmonitored all-tenant revie
 
 ---
 
-## BackupHealth
-
-BackupHealth evaluates Acronis backup health information and presents exceptions requiring operator attention.
-
-The workflow:
-
-1. Retrieves backup resource and diagnostic information.
-2. Constructs a normalized backup health snapshot.
-3. Evaluates resources against backup health rules.
-4. Presents exceptions and supporting diagnostics in the console.
-
-The current evaluation includes stale backup activity detection using a 48-hour threshold.
-
-### Command
-
-```cmd
-dotnet run --project src\SupportToolkit -- backup-health
-```
-
-BackupHealth supports fixture and production modes.
-
-It is separate from BackupAggregator: BackupHealth evaluates backup health conditions, while BackupAggregator produces consolidated inventory reviews.
-
----
-
 ## Zendesk ticketing
 
 SupportToolkit includes a shared ticketing capability currently used by BackupAggregator.
@@ -400,6 +374,86 @@ If a request times out, fails, or returns an invalid response, ticket creation m
 
 ---
 
+## Zendesk bulk delete
+
+SupportToolkit has an interactive way to find and bulk-delete Zendesk tickets, for example everything for a customer that has left. It signs in, searches, shows a preview, and, only when asked with `--delete`, deletes the tickets you selected after two typed confirmations and writes a receipt. Without `--delete` it only reads. It is a developer command for now; a user interface is planned.
+
+### Two Zendesk connections
+
+SupportToolkit has two Zendesk connections, separated by function. They are configured, resolved and reported independently, and share no credentials, scope, client or token.
+
+| | Ticketing | Deletion |
+|---|---|---|
+| Purpose | Create private tickets from backup reviews | Interactive search and bulk delete |
+| OAuth client | Confidential, client credentials | Public, PKCE |
+| Secret | Yes, in the credential store | None: never asked for or stored |
+| Scope | `tickets:write` | `read tickets:write` |
+| Sign-in | Unattended-capable | Browser, operator present |
+| Configuration | `connections.zendesk`, profile `zendeskConnection` and `zendeskDestination` | `connections.zendeskDeletion`, profile `zendeskDeletionConnection` |
+| Environment overrides | `ZENDESK_*` | None |
+
+Both may point at the same Zendesk subdomain; they still use different OAuth clients. A missing deletion connection does not affect ticketing, and the reverse. `configure status` shows them in separate sections.
+
+### Sign-in
+
+The deletion connection is a public OAuth client with PKCE (S256); no client secret exists. The sign-in opens your browser, listens on a free loopback port and sends `http://localhost:{port}` as the redirect URI (the OAuth client registers `http://localhost`; Zendesk ignores the port). It requests `read tickets:write`: `tickets:read` alone is not enough, because search and the signed-in user's identity need `read`. The token is kept in memory only and is gone when the program exits. If Zendesk reports no token lifetime, none is assumed; a rejected or expired token is not replaced silently and needs a new sign-in.
+
+### Preview
+
+```cmd
+dotnet run --project src\SupportToolkit -- dev zendesk-bulk-delete --production --organization "Example Org"
+```
+
+At least one search key is required, because an empty search would select every ticket. The command refuses to run with redirected input or output.
+
+| Key | Matches | Zendesk query |
+|---|---|---|
+| `--organization <name>` | the ticket's organization | `organization:"name"` |
+| `--sender <name>` | the requester by name, full or partial (the sender of an email ticket) | `requester:"name"` |
+| `--requester <email>` | one requester by email address | `requester:address` |
+| `--domain <domain>` | requesters at an email domain | `requester:*@domain` |
+| `--text <text>` | free text, passed through as written (Zendesk operators such as `status:closed` work) | the text |
+
+Keys are combined with AND, and every search is restricted to tickets. Zendesk documents `requester:` as taking a name or an email address, and says wildcards do not work for email address searches, so **`--domain` may return nothing** and is unverified; prefer `--sender`, `--requester` or `--organization`.
+
+- **Search completeness.** Zendesk search returns at most 1,000 results, can repeat a ticket across pages, and reports a total count. Results are de-duplicated, and the reported count is compared with the unique tickets received. If they differ, or more than 1,000 match, the preview says **INCOMPLETE SEARCH** and exits with code 2. It is never presented as complete.
+- **Exception-first.** Totals, status counts, and breakdowns by organization and requester domain (so strays stand out). Tickets that are not closed are listed as exceptions and not selected. Tickets closed less than 24 hours ago cannot be deleted through the API and are flagged; the closing time is approximated by the last update, and a missing time is treated as too recent. Closed tickets are selected by default.
+- **Names.** Search results carry only organization and requester IDs, so names and domains come from two further read-only lookups. If a lookup fails the preview still appears, with those names marked unknown and a note saying so.
+
+The preview contains customer-related names and ticket subjects. It is for your own console and must not be pasted into public places.
+
+### Selection and deletion
+
+```cmd
+dotnet run --project src\SupportToolkit -- dev zendesk-bulk-delete --production --sender "Example Sender" --dry-run
+dotnet run --project src\SupportToolkit -- dev zendesk-bulk-delete --production --sender "Example Sender" --delete
+dotnet run --project src\SupportToolkit -- dev zendesk-bulk-delete --production --sender "Example Sender" --delete --include 12,15 --exclude 20
+```
+
+| Option | Meaning |
+|---|---|
+| `--dry-run` | Shows the exact requests that would be sent. Sends nothing and writes no receipt. |
+| `--delete` | Deletes the selected tickets after two typed confirmations. |
+| `--include <ids>` | Adds tickets to the selection, such as `12,15,20`. This is the only way to include a ticket that is not closed. |
+| `--exclude <ids>` | Removes tickets from the selection. |
+| `--receipt-dir <path>` | Where the receipt is written. Defaults to a `SupportToolkit\receipts` folder under your local application data. |
+
+- **Selection.** Closed tickets are selected by default. A ticket closed less than 24 hours ago can never be selected, because the API cannot delete it. An ID that is not in the search result is an error, not ignored.
+- **A frozen list.** Before anything is asked, the exact ticket IDs are printed. Only those IDs are ever sent: the search is never run again at delete time.
+- **Two confirmations.** First you type the number of tickets to delete. If any selected ticket is not closed, they are listed and you type their count too. Any other answer cancels, and nothing is sent.
+- **An incomplete search is never deleted from.** Narrow the search first.
+- **How Zendesk deletes.** The request starts a background job for up to 100 tickets, and the job is followed to its end, one at a time. Zendesk reports success per ticket. There are no automatic retries.
+- **Nothing unclear is called deleted.** A ticket is *Deleted* only when Zendesk's job says so. If a request or job ends unclearly (an error, a job that fails or does not finish) the ticket is *Unknown*, the run stops, the remaining tickets are *Not attempted*, and the exit code is `2`. For an *Unknown* ticket, check Zendesk's deleted tickets view.
+- **Recovery.** Zendesk keeps deleted tickets for 30 days. Deleted archived tickets (closed for a long time) skip that view and can only be restored through the API by ID, which is why the receipt exists.
+
+### Receipts
+
+Before the first request, a receipt listing every ticket ID is written. If that cannot be written, nothing is deleted. It is rewritten when the run ends, including a run that stopped or was cancelled. It records the Zendesk instance, who signed in, the search, the time, the typed confirmations, and each ticket's ID, its status when planned, its outcome and its job ID. It never contains ticket subjects or content.
+
+A receipt still identifies a customer's tickets, so the folder is refused if it lies inside a git working tree. Keep receipts private and do not share them publicly.
+
+---
+
 ## Configuration management
 
 SupportToolkit separates runtime profiles, reusable provider connections, ticket destinations, and credentials.
@@ -429,6 +483,8 @@ Provider connections contain reusable integration metadata.
 An Acronis connection defines the API datacenter and client identity.
 
 A Zendesk connection defines the Zendesk instance and client identity. It also defines the Zendesk users that created tickets are attributed to. See [Ticket submitter and requester](#ticket-submitter-and-requester).
+
+A Zendesk deletion connection is a separate kind of connection: it defines only the instance and a public OAuth client identifier, with no secret, destination or user IDs. See [Two Zendesk connections](#two-zendesk-connections).
 
 Multiple profiles may reference the same connection without duplicating its credentials.
 
@@ -574,6 +630,10 @@ Earlier versions had a global `allowWrites` profile setting and a `SUPPORTTOOLKI
 
 The switch was removed because it duplicated the safeguards that actually gate a write: an explicitly invoked submit operation, a configured Zendesk connection, a valid destination, and (in the interactive console) a confirmation prompt.
 
+### Retired BackupHealth module
+
+The `backup-health` command was retired because BackupAggregator covers the needed visibility. A saved profile that still has a `backup-health` entry under `modules` still loads; the entry is ignored and dropped the next time the configuration is saved. Provider connections, including the shared Acronis connection, are not affected. `SUPPORTTOOLKIT_BACKUP_HEALTH_MODE` is obsolete and ignored; `configure status` reminds you to remove it if it is set.
+
 ---
 
 ## Environment overrides
@@ -583,8 +643,7 @@ Runtime modes can be overridden independently of saved profile settings.
 For example:
 
 ```cmd
-set SUPPORTTOOLKIT_BACKUP_AGGREGATOR_MODE=fixture
-set SUPPORTTOOLKIT_BACKUP_HEALTH_MODE=production
+set SUPPORTTOOLKIT_BACKUP_AGGREGATOR_MODE=production
 ```
 
 Supported values are `fixture` and `production`.
@@ -593,7 +652,6 @@ Clear an override in Windows CMD:
 
 ```cmd
 set SUPPORTTOOLKIT_BACKUP_AGGREGATOR_MODE=
-set SUPPORTTOOLKIT_BACKUP_HEALTH_MODE=
 ```
 
 Provider configuration also supports selected environment overrides.
@@ -690,7 +748,7 @@ dotnet run --project src\SupportToolkit -- dev acronis-tenants --production --na
 
 Customer names are not displayed unless `--names` is explicitly supplied.
 
-This command uses the active profile's configured Acronis connection and does not require changing BackupAggregator or BackupHealth to production mode.
+This command uses the active profile's configured Acronis connection and does not require changing BackupAggregator to production mode.
 
 Production diagnostic output should be handled as potentially sensitive.
 
@@ -707,7 +765,6 @@ dotnet run --project src\SupportToolkit
 The main menu provides:
 
 - BackupAggregator
-- BackupHealth
 - Profile switching
 - Configuration wizard
 - Debug logging toggle
@@ -753,8 +810,7 @@ src/
     │   │   ├── Services/
     │   │   └── Ticketing/
     │   │
-    │   └── BackupHealth/
-    │       ├── Evaluation/
+    │   └── ZendeskBulkDelete/
     │       ├── Models/
     │       ├── Reporting/
     │       └── Services/
@@ -779,7 +835,7 @@ Modules implement operational workflows and own their domain-specific logic, mod
 
 Providers handle integration with external systems.
 
-Acronis integrations are separated by responsibility, including tenant discovery, Microsoft 365 resources, devices, and backup health data.
+Acronis integrations are separated by responsibility, including tenant discovery, Microsoft 365 resources, and devices.
 
 Zendesk implements the shared ticket-provider capability.
 
@@ -814,6 +870,10 @@ A configured connection alone does not authorize automatic ticket creation.
 Submission requires valid destination routing, and the interactive console additionally requests confirmation.
 
 Tickets are always attributed to explicitly configured submitter and requester user IDs, never implicitly to the OAuth token's identity.
+
+### Zendesk deletion
+
+The deletion connection is a different connection from ticketing, with its own public OAuth client and no stored secret. It has two separate HTTP pipelines. The read-only one permits only GET requests to four allowlisted endpoints (search, the signed-in user, and user and organization lookups) and can never delete. The deletion pipeline is built only when `--delete` is used, and permits exactly two requests: `DELETE` of `destroy_many` with 1 to 100 distinct positive numeric ticket IDs and no other parameter, and `GET` of a job status. Every other method, path or host is blocked before a token is requested. Sign-in is interactive in the operator's browser on every run, and the token lives in memory only.
 
 ### Business Central
 
@@ -951,7 +1011,7 @@ Synthetic fixtures do not prove real API contracts, authorization or completenes
 
 SupportToolkit is under active development.
 
-BackupAggregator, BackupHealth, and Zendesk ticket submission are implemented on `main`, with automated test coverage and selected production integration validation:
+BackupAggregator and Zendesk ticket submission are implemented on `main`, with automated test coverage and selected production integration validation:
 
 - Acronis production reads and comparisons against the Acronis portal have been exercised for BackupAggregator and tenant discovery.
 - Business Central reads (subscriptions and customer names) and the automatic matching were exercised with read-only commands against a live environment; the scoped review has had limited end-to-end validation.

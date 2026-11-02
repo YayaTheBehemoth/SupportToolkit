@@ -281,6 +281,11 @@ public sealed class JsonSupportToolkitConfigurationStore
                 string,
                 BusinessCentralConnectionConfiguration>();
 
+        configuration.Connections.ZendeskDeletion ??=
+            new Dictionary<
+                string,
+                ZendeskDeletionConnectionConfiguration>();
+
         configuration.Profiles ??=
             new Dictionary<
                 string,
@@ -297,8 +302,32 @@ public sealed class JsonSupportToolkitConfigurationStore
                 new Dictionary<
                     string,
                     ModuleMonitoringScopeConfiguration>();
+
+            /*
+             * Retired module entries are tolerated on load and dropped
+             * on the next save, like the retired allowWrites property.
+             * Connections and every other setting are left untouched.
+             */
+            foreach (var retired in profile.Modules.Keys
+                         .Where(
+                             key => RetiredModules.Contains(
+                                 key.Trim(),
+                                 StringComparer.OrdinalIgnoreCase))
+                         .ToArray())
+            {
+                profile.Modules.Remove(retired);
+            }
         }
     }
+
+    /// <summary>
+    /// Module commands that no longer exist. BackupHealth was retired
+    /// in favour of BackupAggregator.
+    /// </summary>
+    private static readonly string[] RetiredModules =
+    [
+        "backup-health"
+    ];
 
     private static bool IsDevelopmentBuild()
     {

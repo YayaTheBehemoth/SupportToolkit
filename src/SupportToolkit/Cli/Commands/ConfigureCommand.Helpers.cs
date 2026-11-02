@@ -40,11 +40,6 @@ public sealed partial class ConfigureCommand
                    profile,
                    BackupAggregatorCommand
                )
-               == SupportToolkitMode.Production
-            || GetConfiguredMode(
-                   profile,
-                   BackupHealthCommand
-               )
                == SupportToolkitMode.Production;
     }
 

@@ -46,6 +46,20 @@ public sealed class SupportToolkitConnections
         get;
         set;
     } = new();
+
+    /// <summary>
+    /// Zendesk connections used for interactive ticket deletion.
+    ///
+    /// Deliberately separate from Zendesk (ticket creation): a different
+    /// OAuth client, a different sign-in flow, a different scope, and no
+    /// shared credentials.
+    /// </summary>
+    public Dictionary<string, ZendeskDeletionConnectionConfiguration>
+        ZendeskDeletion
+    {
+        get;
+        set;
+    } = new();
 }
 
 /// <summary>
@@ -64,6 +78,12 @@ public sealed class SupportToolkitProfile
     public string? ZendeskConnection { get; set; }
 
     public string? ZendeskDestination { get; set; }
+
+    /// <summary>
+    /// The Zendesk connection used for interactive ticket deletion.
+    /// Independent of ZendeskConnection, which is used to create tickets.
+    /// </summary>
+    public string? ZendeskDeletionConnection { get; set; }
 
     public string? BusinessCentralConnection { get; set; }
 
@@ -200,6 +220,25 @@ public sealed class ZendeskConnectionConfiguration
         get;
         set;
     } = new();
+}
+
+/// <summary>
+/// Non-secret metadata of a Zendesk connection used for interactive
+/// ticket deletion.
+///
+/// The OAuth client is public and signs in with PKCE in the operator's
+/// browser, so no client secret exists, is asked for, or is stored.
+/// There are no destinations or user IDs: deletion acts as the signed-in
+/// operator. This is a different connection from the ticketing one even
+/// when both point at the same Zendesk subdomain.
+/// </summary>
+public sealed class ZendeskDeletionConnectionConfiguration
+{
+    public string Subdomain { get; set; } =
+        string.Empty;
+
+    public string ClientId { get; set; } =
+        string.Empty;
 }
 
 /// <summary>

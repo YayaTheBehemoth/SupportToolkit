@@ -17,9 +17,6 @@ public sealed partial class ConfigureCommand
     private const string BackupAggregatorCommand =
         "backup-aggregator";
 
-    private const string BackupHealthCommand =
-        "backup-health";
-
     private readonly ISupportToolkitConfigurationStore
         _configurationStore;
 

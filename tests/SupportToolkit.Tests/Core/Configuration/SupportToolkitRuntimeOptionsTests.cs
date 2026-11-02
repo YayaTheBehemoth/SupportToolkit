@@ -47,7 +47,7 @@ public class SupportToolkitRuntimeOptionsTests
                 ["SUPPORTTOOLKIT_BACKUP_AGGREGATOR_MODE"] =
                     "fixture",
 
-                ["SUPPORTTOOLKIT_BACKUP_HEALTH_MODE"] =
+                ["SUPPORTTOOLKIT_EXAMPLE_MODULE_MODE"] =
                     "production"
             };
 
@@ -68,9 +68,9 @@ public class SupportToolkitRuntimeOptionsTests
                 ReadEnvironment
             );
 
-        var backupHealth =
+        var exampleModule =
             SupportToolkitRuntimeOptions.FromEnvironment(
-                "backup-health",
+                "example-module",
                 ReadEnvironment
             );
 
@@ -81,7 +81,7 @@ public class SupportToolkitRuntimeOptionsTests
 
         Assert.Equal(
             SupportToolkitMode.Production,
-            backupHealth.Mode
+            exampleModule.Mode
         );
     }
 
@@ -111,17 +111,17 @@ public class SupportToolkitRuntimeOptionsTests
                 () =>
                     SupportToolkitRuntimeOptions
                         .FromEnvironment(
-                            "backup-health",
+                            "example-module",
                             variable =>
                                 variable
-                                == "SUPPORTTOOLKIT_BACKUP_HEALTH_MODE"
+                                == "SUPPORTTOOLKIT_EXAMPLE_MODULE_MODE"
                                     ? "banana"
                                     : null
                         )
             );
 
         Assert.Contains(
-            "SUPPORTTOOLKIT_BACKUP_HEALTH_MODE",
+            "SUPPORTTOOLKIT_EXAMPLE_MODULE_MODE",
             exception.Message
         );
 
