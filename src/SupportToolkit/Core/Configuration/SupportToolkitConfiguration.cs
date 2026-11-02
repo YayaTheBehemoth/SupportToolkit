@@ -9,7 +9,7 @@ namespace SupportToolkit.Core.Configuration;
 ///
 /// Authentication secrets belong in ISecretStore.
 /// </summary>
-public sealed class SupportToolkitConfiguration
+public sealed class SupportToolkitConfiguration : ConfigurationNode
 {
     public string ActiveProfile { get; set; } = "local-dev";
 
@@ -26,7 +26,7 @@ public sealed class SupportToolkitConfiguration
 /// <summary>
 /// Named external connections available to profiles.
 /// </summary>
-public sealed class SupportToolkitConnections
+public sealed class SupportToolkitConnections : ConfigurationNode
 {
     public Dictionary<string, AcronisConnectionConfiguration> Acronis
     {
@@ -71,7 +71,7 @@ public sealed class SupportToolkitConnections
 /// ZendeskDestination selects an explicitly configured group within
 /// the profile's Zendesk connection.
 /// </summary>
-public sealed class SupportToolkitProfile
+public sealed class SupportToolkitProfile : ConfigurationNode
 {
     public string? AcronisConnection { get; set; }
 
@@ -116,7 +116,7 @@ public sealed class SupportToolkitProfile
 /// <summary>
 /// Non-secret Acronis connection metadata.
 /// </summary>
-public sealed class AcronisConnectionConfiguration
+public sealed class AcronisConnectionConfiguration : ConfigurationNode
 {
     public string DatacenterUrl { get; set; } =
         string.Empty;
@@ -130,7 +130,7 @@ public sealed class AcronisConnectionConfiguration
 /// Unset values use the defaults in InProgressWaitSettings. A maximum
 /// wait of 0 disables waiting.
 /// </summary>
-public sealed class ModuleReviewConfiguration
+public sealed class ModuleReviewConfiguration : ConfigurationNode
 {
     public int? InProgressMaxWaitSeconds { get; set; }
 
@@ -140,7 +140,7 @@ public sealed class ModuleReviewConfiguration
 /// <summary>
 /// Settings one module needs to use the shared monitoring scope.
 /// </summary>
-public sealed class ModuleMonitoringScopeConfiguration
+public sealed class ModuleMonitoringScopeConfiguration : ConfigurationNode
 {
     /// <summary>
     /// Item number that identifies the module's monitoring service
@@ -184,7 +184,7 @@ public sealed class ModuleMonitoringScopeConfiguration
 /// Hosts, authority and scope are pinned in code and are not
 /// configurable. Values here are validated by the provider's options.
 /// </summary>
-public sealed class BusinessCentralConnectionConfiguration
+public sealed class BusinessCentralConnectionConfiguration : ConfigurationNode
 {
     public string TenantId { get; set; } =
         string.Empty;
@@ -224,7 +224,7 @@ public sealed class BusinessCentralConnectionConfiguration
 /// are attributed to. Both are required for ticket submission; null
 /// means not configured. They are user IDs within this instance.
 /// </summary>
-public sealed class ZendeskConnectionConfiguration
+public sealed class ZendeskConnectionConfiguration : ConfigurationNode
 {
     public string Subdomain { get; set; } =
         string.Empty;
@@ -253,7 +253,7 @@ public sealed class ZendeskConnectionConfiguration
 /// operator. This is a different connection from the ticketing one even
 /// when both point at the same Zendesk subdomain.
 /// </summary>
-public sealed class ZendeskDeletionConnectionConfiguration
+public sealed class ZendeskDeletionConnectionConfiguration : ConfigurationNode
 {
     public string Subdomain { get; set; } =
         string.Empty;
@@ -268,7 +268,7 @@ public sealed class ZendeskDeletionConnectionConfiguration
 /// GroupId is the Zendesk group_id used for ticket routing.
 /// Zero is invalid and must be rejected during resolution.
 /// </summary>
-public sealed class ZendeskDestinationConfiguration
+public sealed class ZendeskDestinationConfiguration : ConfigurationNode
 {
     public long GroupId { get; set; }
 }

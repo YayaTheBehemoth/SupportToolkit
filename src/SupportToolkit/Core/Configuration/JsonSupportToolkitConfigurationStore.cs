@@ -322,6 +322,23 @@ public sealed class JsonSupportToolkitConfigurationStore
             {
                 profile.Modules.Remove(retired);
             }
+
+            /*
+             * Settings this build does not recognise are kept (see
+             * ConfigurationNode), except the ones retired on purpose.
+             */
+            if (profile.UnrecognizedSettings is not null)
+            {
+                foreach (var retired in profile.UnrecognizedSettings.Keys
+                             .Where(
+                                 key => RetiredProfileSettings.Contains(
+                                     key,
+                                     StringComparer.OrdinalIgnoreCase))
+                             .ToArray())
+                {
+                    profile.UnrecognizedSettings.Remove(retired);
+                }
+            }
         }
     }
 
@@ -332,6 +349,16 @@ public sealed class JsonSupportToolkitConfigurationStore
     private static readonly string[] RetiredModules =
     [
         "backup-health"
+    ];
+
+    /// <summary>
+    /// Profile settings that no longer exist and are dropped on save
+    /// instead of being kept as unrecognised. The old allowWrites switch
+    /// was retired because its safeguards live elsewhere.
+    /// </summary>
+    private static readonly string[] RetiredProfileSettings =
+    [
+        "allowWrites"
     ];
 
     private static bool IsDevelopmentBuild()
