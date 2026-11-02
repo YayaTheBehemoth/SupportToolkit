@@ -833,6 +833,15 @@ Core contains shared configuration, secure credential storage, logging, error ha
 
 The raw CLI and interactive console are separate presentation layers over the same workflows.
 
+### Keeping workflows interface-agnostic
+
+Workflows and providers return models and take callbacks. They do not write to a console, and they do not know about the interfaces built on them. That lets another interface (for example a local web page) reuse them without changing them.
+
+- **Progress** is a callback the host supplies to the workflow constructor. The console host passes `ConsoleProgress.Write`; a different host passes its own.
+- **Whether a ticket can be created** is decided in one place, `BackupAggregatorWorkflow.PrepareScopedTicketDraft` and `PrepareScopedTicketSubmissionAsync`. They return a typed result (ready, or not ready with a kind and reasons) instead of throwing for expected conditions. A submission plan bundles the exact draft, the Zendesk destination and the review's numbers, and is what the operator confirms.
+- **The review an operator is working with** is held by `BackupReviewSession`, not by the console menu. It owns the rules: nothing can be prepared before a review, a plan is valid only for the review it was prepared from, and a plan is submitted once. The console menu, and any other interface, are thin adapters over it.
+- **A test enforces the layering** (`LayeringTests`): nothing in `Core`, `Providers` or `Modules` may use the console, reference the `Ui` or `Cli` layers, or reference a web or desktop UI framework. Console reporters (`Reporting/Console*.cs`) and a module's CLI command class (`Modules/<Name>/<Name>Module.cs`) are the adapters. Fix a failure by moving the console code up, not by extending the test's allowlist.
+
 ---
 
 ## Security principles

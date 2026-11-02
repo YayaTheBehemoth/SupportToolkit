@@ -8,6 +8,7 @@ using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Modules.BackupHealth;
 using SupportToolkit.Modules.BackupHealth.Services;
+using SupportToolkit.Ui;
 using SupportToolkit.Ui.Interactive;
 
 var configurationStore =
@@ -45,11 +46,13 @@ var businessCentralDiagnosticsCommand =
 
 var backupAggregatorWorkflow =
     new BackupAggregatorWorkflow(
-        configurationResolver);
+        configurationResolver,
+        ConsoleProgress.Write);
 
 var backupAggregatorScopedWorkflow =
     new BackupAggregatorScopedWorkflow(
-        configurationResolver);
+        configurationResolver,
+        progress: ConsoleProgress.Write);
 
 var backupHealthWorkflow =
     new BackupHealthWorkflow(
