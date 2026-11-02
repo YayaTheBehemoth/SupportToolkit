@@ -14,13 +14,17 @@ public sealed class WebAppState
 {
     public WebAppState(
         ConfigurationStatusService status,
-        AggregatorWebSession? aggregator = null)
+        AggregatorWebSession? aggregator = null,
+        BulkDeleteWebSession? bulkDelete = null)
     {
         Status =
             status ?? throw new ArgumentNullException(nameof(status));
 
         Aggregator = aggregator;
+        BulkDelete = bulkDelete;
     }
+
+    public ViewSettings View { get; } = new();
 
     public ConfigurationStatusService Status { get; }
 
@@ -28,4 +32,9 @@ public sealed class WebAppState
     /// The Backup Aggregator review, or null in a host that has none.
     /// </summary>
     public AggregatorWebSession? Aggregator { get; }
+
+    /// <summary>
+    /// The Zendesk bulk delete, or null in a host that has none.
+    /// </summary>
+    public BulkDeleteWebSession? BulkDelete { get; }
 }

@@ -58,7 +58,7 @@
                 @(session.IsRunning ? "running" : "done")
             </span>
         </header>
-        <pre class="log">@string.Join("\n", session.Progress.Snapshot().TakeLast(15))</pre>
+        <pre class="log">@string.Join("\n", session.Progress.Snapshot().TakeLast(State.View.IsDetailed ? 15 : 1))</pre>
     </section>
 }
 
@@ -112,26 +112,19 @@
         </div>
     }
 
-    <div class="grid">
-        <section class="card">
-            <header><h3>Tenants</h3></header>
-            <dl>
-                <dt>Attempted</dt><dd>@inventory.TenantsAttempted</dd>
-                <dt>Reviewed</dt><dd>@inventory.TenantsReviewed</dd>
-                <dt>Failed</dt><dd>@inventory.TenantsFailed</dd>
-                <dt>Needing attention</dt><dd>@inventory.TenantsRequiringAttention</dd>
-            </dl>
-        </section>
-        <section class="card">
-            <header><h3>Resources</h3></header>
-            <dl>
-                <dt>Checked</dt><dd>@inventory.ResourcesChecked</dd>
-                <dt>Healthy</dt><dd>@inventory.Healthy</dd>
-                <dt>Require attention</dt><dd>@inventory.RequireAttention</dd>
-                <dt>Unclassified</dt><dd>@inventory.Unclassified</dd>
-            </dl>
-        </section>
-    </div>
+    @* Totals only: the problem counts are on the tabs below. *@
+    <section class="card">
+        <header><h3>Checked</h3></header>
+        <dl>
+            <dt>Tenants reviewed</dt><dd>@inventory.TenantsReviewed of @inventory.TenantsAttempted</dd>
+            @if (State.View.IsDetailed)
+            {
+                <dt>Tenants needing attention</dt><dd>@inventory.TenantsRequiringAttention</dd>
+            }
+            <dt>Backup resources checked</dt><dd>@inventory.ResourcesChecked</dd>
+            <dt>Healthy</dt><dd>@inventory.Healthy</dd>
+        </dl>
+    </section>
 
     @if (inventory.NothingReviewed)
     {
@@ -142,8 +135,15 @@
         </p>
     }
 
+    @* Scope and reconciliation are technical: if the view is simplified
+       while one is open, fall back to the first tab. *@
+    @if (!State.View.IsDetailed && _tab is "scope" or "reconciliation")
+    {
+        _tab = "attention";
+    }
+
     <div class="tabs" role="tablist">
-        @foreach (var (key, title) in Tabs(inventory, scope))
+        @foreach (var (key, title) in Tabs(inventory, scope, State.View.IsDetailed))
         {
             var selected = key;
             <button type="button" role="tab"
@@ -151,6 +151,11 @@
                     @onclick="() => _tab = selected">@title</button>
         }
     </div>
+
+    @if (!State.View.IsDetailed && scope is not null)
+    {
+        <p class="muted">How tenants were chosen, and the reconciliation, are in the Detailed view.</p>
+    }
 
     @switch (_tab)
     {
@@ -189,10 +194,9 @@
     <h2>Ticket</h2>
 
     <div class="actions">
-        <button type="button" class="secondary" @onclick="PreviewTicket">Preview ticket</button>
         <button type="button"
                 disabled="@(completeness.TicketOutcome == TicketOutcome.Blocked || session.IsSubmitting)"
-                @onclick="Prepare">Prepare submission</button>
+                @onclick="Prepare">Prepare ticket</button>
     </div>
 
     @if (completeness.TicketOutcome == TicketOutcome.AllowedWithIncompleteScopeBanner)
@@ -211,10 +215,12 @@
         </div>
     }
 
+    @* Only when the ticket cannot be created for want of a destination:
+       the text is still shown, so it can be read. *@
     @if (_draft is not null)
     {
         <section class="card">
-            <header><h3>@_draft.Subject</h3><span class="badge neutral">preview</span></header>
+            <header><h3>@_draft.Subject</h3><span class="badge neutral">draft only</span></header>
             <pre class="log">@_draft.Body</pre>
         </section>
     }
@@ -222,17 +228,20 @@
     @if (session.PendingPlan is { } plan)
     {
         <section class="card confirm">
-            <header><h3>Confirm submission</h3></header>
+            <header><h3>Confirm ticket</h3></header>
             <dl>
                 <dt>Zendesk instance</dt><dd>@plan.Destination.InstanceHost</dd>
                 <dt>Destination</dt><dd>@plan.Destination.DestinationName</dd>
-                <dt>Group ID</dt><dd>@plan.Destination.GroupId</dd>
-                <dt>Subject</dt><dd>@plan.Draft.Subject</dd>
-                <dt>Tenants reviewed</dt><dd>@plan.Review.TenantCount of @plan.Review.TenantsAttempted</dd>
-                <dt>Require attention</dt><dd>@plan.Review.FindingsCount</dd>
-                <dt>Unclassified</dt><dd>@plan.Review.UnclassifiedCount</dd>
+                @if (State.View.IsDetailed)
+                {
+                    <dt>Group ID</dt><dd>@plan.Destination.GroupId</dd>
+                }
             </dl>
-            <p>This creates a real ticket in the destination above, with exactly the preview shown.</p>
+
+            <h3 class="tenant">@plan.Draft.Subject</h3>
+            <pre class="log">@plan.Draft.Body</pre>
+
+            <p>This creates a real ticket in the destination above, with exactly this text.</p>
             <div class="actions">
                 <button type="button" class="danger" @onclick="Submit">Create ticket</button>
                 <button type="button" class="secondary" @onclick="session.CancelPendingSubmission">Cancel</button>
@@ -276,6 +285,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        State.View.Changed += OnChanged;
+
         if (State.Aggregator is { } session)
         {
             session.Changed += OnChanged;
@@ -294,18 +305,18 @@
         State.Aggregator!.Start();
     }
 
-    private void PreviewTicket()
-    {
-        var preparation = State.Aggregator!.PreviewTicket();
-        _draft = preparation.Value;
-        _notReady = preparation.NotReady;
-    }
-
     private async Task Prepare()
     {
         var preparation = await State.Aggregator!.PrepareSubmissionAsync();
-        _draft = preparation.Value?.Draft;
+
         _notReady = preparation.NotReady;
+
+        // The confirmation shows the text itself. If only the Zendesk
+        // destination is missing, still show the draft so it can be read.
+        _draft =
+            _notReady is { Kind: TicketNotReadyKind.DestinationUnavailable }
+                ? State.Aggregator.PreviewTicket().Value
+                : null;
     }
 
     private async Task Submit()
@@ -315,13 +326,13 @@
     }
 
     private static IEnumerable<(string Key, string Title)> Tabs(
-        BackupReviewView inventory, ScopeView? scope)
+        BackupReviewView inventory, ScopeView? scope, bool detailed)
     {
         yield return ("attention", $"Attention ({inventory.RequireAttention})");
         yield return ("unclassified", $"Unclassified ({inventory.Unclassified})");
         yield return ("incomplete", $"Incomplete ({inventory.TenantsFailed})");
 
-        if (scope is not null)
+        if (scope is not null && detailed)
         {
             yield return ("scope", "Scope");
             yield return ("reconciliation", "Reconciliation");
@@ -348,6 +359,8 @@
 
     public void Dispose()
     {
+        State.View.Changed -= OnChanged;
+
         if (State.Aggregator is { } session)
         {
             session.Changed -= OnChanged;

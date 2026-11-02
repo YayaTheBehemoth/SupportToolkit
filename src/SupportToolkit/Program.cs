@@ -6,6 +6,7 @@ using SupportToolkit.Core.Modules;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.Services;
+using SupportToolkit.Modules.ZendeskBulkDelete.Services;
 using SupportToolkit.Ui;
 using SupportToolkit.Ui.Web;
 using SupportToolkit.Ui.Interactive;
@@ -133,7 +134,44 @@ try
                     new BackupReviewSession(
                         webWorkflow,
                         webScopedWorkflow),
-                    webProgress)));
+                    webProgress),
+                new BulkDeleteWebSession(
+                    async token =>
+                    {
+                        try
+                        {
+                            var connection =
+                                await configurationResolver
+                                    .GetZendeskDeletionConnectionAsync(token);
+
+                            return new BulkDeleteAvailability(
+                                true,
+                                connection.Subdomain,
+                                null);
+                        }
+                        catch (InvalidOperationException exception)
+                        {
+                            return new BulkDeleteAvailability(
+                                false,
+                                null,
+                                exception.Message);
+                        }
+                    },
+                    async token =>
+                    {
+                        // Deletion is enabled here, and only here: this is
+                        // the connection that can delete, used after the
+                        // operator's typed confirmations.
+                        var session =
+                            await ZendeskBulkDeleteSession.CreateAsync(
+                                configurationResolver,
+                                enableDeletion: true,
+                                cancellationToken: token);
+
+                        return new BulkDeleteConnection(
+                            BulkDeleteReviewSession.From(session),
+                            session);
+                    })));
     }
 
     /*

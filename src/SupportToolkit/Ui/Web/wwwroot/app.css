@@ -178,3 +178,25 @@ h3.tenant { margin: 20px 0 8px; }
 .topbar button.exit { background: #c0392b; border-color: #c0392b; color: #fff; font-weight: 600; }
 .exit-panel { display: flex; flex-direction: column; gap: 8px; max-width: 1132px; margin: 16px auto 0; padding: 14px 18px; background: var(--warn-bg); color: var(--warn-fg); border: 1px solid #f0dc9c; border-radius: 8px; }
 .goodbye { text-align: center; padding-top: 80px; }
+
+input[type=text] { font: inherit; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px; width: 100%; box-sizing: border-box; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 16px; margin-bottom: 8px; }
+.form-grid label, .card.confirm label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; font-size: 14px; }
+.card.confirm label { margin: 10px 0; }
+tr.exception td { background: var(--warn-bg); }
+.ids { word-break: break-word; font-family: Consolas, monospace; font-size: 13px; max-height: 160px; overflow: auto; }
+
+.term { display: inline-block; margin-right: 14px; }
+
+.seg { display: inline-flex; margin-right: 14px; border: 1px solid #cfe3e6; border-radius: 6px; overflow: hidden; }
+.seg button { background: transparent; color: #cfe3e6; border: none; border-radius: 0; padding: 4px 12px; }
+.seg button.on { background: #fff; color: #1d4f5a; font-weight: 600; }
+
+.steps { display: flex; gap: 8px; list-style: none; padding: 0; margin: 16px 0; flex-wrap: wrap; }
+.steps li { display: flex; align-items: center; gap: 8px; padding: 6px 14px 6px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--muted); }
+.steps li .num { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: #eceff3; font-size: 12px; font-weight: 600; }
+.steps li.current { border-color: var(--accent); color: inherit; font-weight: 600; }
+.steps li.current .num { background: var(--accent); color: #fff; }
+.steps li.done { color: var(--ok-fg); }
+.steps li.done .num { background: var(--ok-bg); color: var(--ok-fg); }
+progress { width: 100%; height: 14px; margin: 6px 0 10px; }

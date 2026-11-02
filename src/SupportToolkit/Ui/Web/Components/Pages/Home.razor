@@ -120,6 +120,13 @@ else
 
     private async Task SwitchAsync(string profileName)
     {
+        if (State.BulkDelete is { IsDeleting: true } or { Busy: not null })
+        {
+            _message = "Zendesk bulk delete is working. Wait for it to finish before changing profile.";
+            _messageIsError = true;
+            return;
+        }
+
         _busy = true;
 
         try
@@ -128,6 +135,12 @@ else
 
             _message = result.Message;
             _messageIsError = !result.Succeeded;
+
+            // A Zendesk sign-in belongs to one instance: forget it.
+            if (result.Succeeded && State.BulkDelete is { } bulkDelete)
+            {
+                await bulkDelete.ResetAsync();
+            }
 
             await LoadAsync();
         }

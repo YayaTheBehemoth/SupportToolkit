@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 @inject IHostApplicationLifetime Lifetime
 @inject WebAppState State
 
@@ -26,8 +27,13 @@
         <nav>
             <NavLink href="" Match="NavLinkMatch.All">Profile</NavLink>
             <NavLink href="aggregator">Backup Aggregator</NavLink>
+            <NavLink href="zendesk">Zendesk bulk delete</NavLink>
         </nav>
         <span class="spacer"></span>
+        <div class="seg" role="group" aria-label="How much detail to show">
+            <button type="button" class="@(State.View.IsDetailed ? "" : "on")" @onclick="() => State.View.Set(false)">Simple</button>
+            <button type="button" class="@(State.View.IsDetailed ? "on" : "")" @onclick="() => State.View.Set(true)">Detailed</button>
+        </div>
         <button type="button" class="exit" @onclick="AskExit">Exit SupportToolkit</button>
     </header>
 
@@ -41,6 +47,10 @@
                 @if (State.Aggregator is { IsRunning: true })
                 {
                     <text>A review is still running and will be stopped.</text>
+                }
+                @if (State.BulkDelete is { IsDeleting: true })
+                {
+                    <text>A ticket deletion is still running. Exiting stops it after the request in progress, and those tickets will then be unknown. Waiting is safer.</text>
                 }
             </span>
             <span class="actions">
@@ -62,6 +72,13 @@
 </div>
 
 @code {
+    protected override void OnInitialized() =>
+        State.View.Changed += OnViewChanged;
+
+    private void OnViewChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => State.View.Changed -= OnViewChanged;
+
     private bool _confirmingExit;
     private bool _closing;
 
@@ -70,6 +87,13 @@
     private async Task ExitAsync()
     {
         State.Aggregator?.Cancel();
+
+        // A running deletion is stopped cleanly and its receipt written.
+        if (State.BulkDelete is { } bulkDelete)
+        {
+            await bulkDelete.CancelAndWaitAsync(TimeSpan.FromSeconds(20));
+        }
+
         _closing = true;
         StateHasChanged();
 
