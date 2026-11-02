@@ -1,0 +1,102 @@
+@* Connection and environment detail. Not shown anywhere for now: the page
+   keeps the profile selector only. Render <StatusDetails Status="..." /> to bring it back. *@
+
+<p class="muted">
+        Configuration file: <code>@Status.ConfigurationPath</code>
+</p>
+
+    @if (Status.Runtime is not null)
+    {
+        <h2>Active profile: @Status.ActiveProfile</h2>
+
+        <div class="grid">
+            <ConnectionCard Connection="Status.Runtime.Acronis" />
+            <ConnectionCard Connection="Status.Runtime.BusinessCentral" />
+            <ConnectionCard Connection="Status.Runtime.ZendeskTicketing" />
+            <ConnectionCard Connection="Status.Runtime.ZendeskDeletion" />
+
+            <section class="card">
+                <header>
+                    <h3>Review wait for in-progress backups</h3>
+                    <span class="badge @(Status.Runtime.ReviewWait.IsValid ? "ok" : "bad")">
+                        @(Status.Runtime.ReviewWait.IsValid ? "valid" : "invalid")
+                    </span>
+                </header>
+
+                @if (!Status.Runtime.ReviewWait.IsValid)
+                {
+                    <p class="problem">@Status.Runtime.ReviewWait.Problem</p>
+                }
+                else if (Status.Runtime.ReviewWait.IsDisabled)
+                {
+                    <p class="muted">Waiting is disabled.</p>
+                }
+                else
+                {
+                    <dl>
+                        <dt>Longest wait</dt>
+                        <dd>@Status.Runtime.ReviewWait.MaxWaitSeconds seconds</dd>
+                        <dt>Poll every</dt>
+                        <dd>@Status.Runtime.ReviewWait.PollIntervalSeconds seconds</dd>
+                    </dl>
+                }
+            </section>
+        </div>
+    }
+
+    @if (Status.SavedConnections.Count > 0)
+    {
+        <h2>Saved connections</h2>
+
+        <div class="grid">
+            @foreach (var saved in Status.SavedConnections)
+            {
+                <section class="card">
+                    <header>
+                        <h3>@saved.Name</h3>
+                        <span class="badge neutral">@saved.Kind</span>
+                    </header>
+                    <dl>
+                        @foreach (var detail in saved.Details)
+                        {
+                            <dt>@detail.Label</dt>
+                            <dd>@detail.Value</dd>
+                        }
+                    </dl>
+                </section>
+            }
+        </div>
+    }
+
+    <h2>Environment overrides</h2>
+
+    @if (Status.EnvironmentOverridesSet.Count == 0)
+    {
+        <p class="muted">None.</p>
+    }
+    else
+    {
+        <ul>
+            @foreach (var variable in Status.EnvironmentOverridesSet)
+            {
+                <li><code>@variable</code> is set (value hidden)</li>
+            }
+        </ul>
+    }
+
+    @foreach (var obsolete in Status.ObsoleteEnvironmentVariablesSet)
+    {
+        <div class="banner warn">
+            <code>@obsolete</code> is obsolete and ignored. Remove it from your environment.
+        </div>
+    }
+
+    <p class="muted">
+        Readiness is checked locally. No provider sign-in or API request is made
+        to show this page.
+
+</p>
+
+@code {
+    [Parameter, EditorRequired] public ConfigurationStatus Status { get; set; } = default!;
+}

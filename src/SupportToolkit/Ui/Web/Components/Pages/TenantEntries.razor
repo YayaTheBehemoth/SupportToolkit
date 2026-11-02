@@ -1,0 +1,39 @@
+@using SupportToolkit.Modules.BackupAggregator.Presentation
+@using SupportToolkit.Modules.BackupAggregator.Reporting
+
+@if (Tenants.Count == 0)
+{
+    <p class="muted">@Empty</p>
+}
+
+@foreach (var tenant in Tenants)
+{
+    <h3 class="tenant">@tenant.Tenant</h3>
+    <table>
+        <thead>
+        <tr>
+            <th>Resource</th>
+            <th>@(ShowReason ? "Reason" : "Status")</th>
+            <th>Plan</th>
+            <th>Last activity (UTC)</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var entry in tenant.Entries)
+        {
+            <tr>
+                <td>@entry.Resource</td>
+                <td>@(ShowReason ? entry.UnclassifiedReason : entry.Status)</td>
+                <td>@(entry.Plan ?? "-")</td>
+                <td>@BackupReportEntryPresentation.FormatTimestamp(entry.LastActivity)</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<TenantEntriesView> Tenants { get; set; } = [];
+    [Parameter] public string Empty { get; set; } = "";
+    [Parameter] public bool ShowReason { get; set; }
+}

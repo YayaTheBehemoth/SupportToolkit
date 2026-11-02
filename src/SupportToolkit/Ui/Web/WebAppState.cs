@@ -13,11 +13,19 @@ namespace SupportToolkit.Ui.Web;
 public sealed class WebAppState
 {
     public WebAppState(
-        ConfigurationStatusService status)
+        ConfigurationStatusService status,
+        AggregatorWebSession? aggregator = null)
     {
         Status =
             status ?? throw new ArgumentNullException(nameof(status));
+
+        Aggregator = aggregator;
     }
 
     public ConfigurationStatusService Status { get; }
+
+    /// <summary>
+    /// The Backup Aggregator review, or null in a host that has none.
+    /// </summary>
+    public AggregatorWebSession? Aggregator { get; }
 }

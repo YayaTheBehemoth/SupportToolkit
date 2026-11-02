@@ -1,0 +1,25 @@
+@using SupportToolkit.Modules.BackupAggregator.Presentation
+
+<h3 class="tenant">@Title (@Tenants.Count)</h3>
+
+@if (Tenants.Count > 0)
+{
+    <table>
+        <thead><tr><th>Tenant</th><th>Customer</th><th>Detail</th></tr></thead>
+        <tbody>
+        @foreach (var tenant in Tenants)
+        {
+            <tr>
+                <td>@tenant.Name@(tenant.IsOperatorTenant ? " (operator's own tenant)" : "")</td>
+                <td>@(tenant.CustomerNumber ?? "-")</td>
+                <td>@(tenant.Detail ?? "")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public IReadOnlyList<ScopeTenantView> Tenants { get; set; } = [];
+}

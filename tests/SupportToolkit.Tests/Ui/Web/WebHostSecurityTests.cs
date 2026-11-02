@@ -183,7 +183,7 @@ public class WebHostSecurityTests : IClassFixture<WebHostFixture>
     }
 
     [Fact]
-    public async Task WithTheCookie_ThePageShowsTheStatus_AndNoSecret()
+    public async Task WithTheCookie_TheHomePageShowsTheProfileSelector_AndNoSecret()
     {
         var cookie = await SignIn();
 
@@ -194,11 +194,13 @@ public class WebHostSecurityTests : IClassFixture<WebHostFixture>
         var html = await response.Content.ReadAsStringAsync();
 
         Assert.Contains("<h1", html);
-        Assert.Contains("Status", html);
-        Assert.Contains("Active profile: work", html);
+        Assert.Contains("Profile", html);
+        Assert.Contains("Spare", html);
+        // The connection detail is hidden for now.
+        Assert.DoesNotContain("Saved connections", html);
+        Assert.DoesNotContain("Environment overrides", html);
         Assert.Contains("FIXTURE: synthetic data only", html);
 
-        // Saved connections are listed, with only whether a secret exists.
         Assert.Contains("Acronis", html);
 
         Assert.DoesNotContain(AcronisSecret, html);

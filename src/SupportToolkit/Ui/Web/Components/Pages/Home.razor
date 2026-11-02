@@ -1,7 +1,8 @@
 @page "/"
 @inject WebAppState State
 
-<h1>Status</h1>
+<h1>Profile</h1>
+<p class="muted">Choose which profile SupportToolkit works with. Everything you do in this window uses the profile marked below.</p>
 
 @if (_loadError is not null)
 {
@@ -48,49 +49,6 @@ else
         </div>
     }
 
-    <p class="muted">
-        Configuration file: <code>@_status.ConfigurationPath</code>
-    </p>
-
-    @if (_status.Runtime is not null)
-    {
-        <h2>Active profile: @_status.ActiveProfile</h2>
-
-        <div class="grid">
-            <ConnectionCard Connection="_status.Runtime.Acronis" />
-            <ConnectionCard Connection="_status.Runtime.BusinessCentral" />
-            <ConnectionCard Connection="_status.Runtime.ZendeskTicketing" />
-            <ConnectionCard Connection="_status.Runtime.ZendeskDeletion" />
-
-            <section class="card">
-                <header>
-                    <h3>Review wait for in-progress backups</h3>
-                    <span class="badge @(_status.Runtime.ReviewWait.IsValid ? "ok" : "bad")">
-                        @(_status.Runtime.ReviewWait.IsValid ? "valid" : "invalid")
-                    </span>
-                </header>
-
-                @if (!_status.Runtime.ReviewWait.IsValid)
-                {
-                    <p class="problem">@_status.Runtime.ReviewWait.Problem</p>
-                }
-                else if (_status.Runtime.ReviewWait.IsDisabled)
-                {
-                    <p class="muted">Waiting is disabled.</p>
-                }
-                else
-                {
-                    <dl>
-                        <dt>Longest wait</dt>
-                        <dd>@_status.Runtime.ReviewWait.MaxWaitSeconds seconds</dd>
-                        <dt>Poll every</dt>
-                        <dd>@_status.Runtime.ReviewWait.PollIntervalSeconds seconds</dd>
-                    </dl>
-                }
-            </section>
-        </div>
-    }
-
     @if (_status.HasProfiles)
     {
         <h2>Profiles</h2>
@@ -134,57 +92,6 @@ else
         </table>
     }
 
-    @if (_status.SavedConnections.Count > 0)
-    {
-        <h2>Saved connections</h2>
-
-        <div class="grid">
-            @foreach (var saved in _status.SavedConnections)
-            {
-                <section class="card">
-                    <header>
-                        <h3>@saved.Name</h3>
-                        <span class="badge neutral">@saved.Kind</span>
-                    </header>
-                    <dl>
-                        @foreach (var detail in saved.Details)
-                        {
-                            <dt>@detail.Label</dt>
-                            <dd>@detail.Value</dd>
-                        }
-                    </dl>
-                </section>
-            }
-        </div>
-    }
-
-    <h2>Environment overrides</h2>
-
-    @if (_status.EnvironmentOverridesSet.Count == 0)
-    {
-        <p class="muted">None.</p>
-    }
-    else
-    {
-        <ul>
-            @foreach (var variable in _status.EnvironmentOverridesSet)
-            {
-                <li><code>@variable</code> is set (value hidden)</li>
-            }
-        </ul>
-    }
-
-    @foreach (var obsolete in _status.ObsoleteEnvironmentVariablesSet)
-    {
-        <div class="banner warn">
-            <code>@obsolete</code> is obsolete and ignored. Remove it from your environment.
-        </div>
-    }
-
-    <p class="muted">
-        Readiness is checked locally. No provider sign-in or API request is made
-        to show this page.
-    </p>
 }
 
 @code {

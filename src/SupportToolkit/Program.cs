@@ -109,13 +109,31 @@ try
             return 1;
         }
 
+        // The web host shows progress on the page, not in the console.
+        var webProgress = new ProgressFeed();
+
+        var webWorkflow =
+            new BackupAggregatorWorkflow(
+                configurationResolver,
+                webProgress.Write);
+
+        var webScopedWorkflow =
+            new BackupAggregatorScopedWorkflow(
+                configurationResolver,
+                progress: webProgress.Write);
+
         return await WebHostRunner.RunAsync(
             serveOptions!,
             new WebAppState(
                 new ConfigurationStatusService(
                     configurationStore,
                     configurationResolver,
-                    secretStore)));
+                    secretStore),
+                new AggregatorWebSession(
+                    new BackupReviewSession(
+                        webWorkflow,
+                        webScopedWorkflow),
+                    webProgress)));
     }
 
     /*

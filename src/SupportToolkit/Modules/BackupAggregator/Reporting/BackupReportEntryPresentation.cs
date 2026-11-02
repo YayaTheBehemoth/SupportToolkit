@@ -3,7 +3,7 @@ using SupportToolkit.Modules.BackupAggregator.Models;
 
 namespace SupportToolkit.Modules.BackupAggregator.Reporting;
 
-internal static class BackupReportEntryPresentation
+public static class BackupReportEntryPresentation
 {
     public static string GetDisplayStatus(
         BackupReportEntry entry)

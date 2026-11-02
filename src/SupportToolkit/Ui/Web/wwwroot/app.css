@@ -166,3 +166,15 @@ button.link {
 button.link:hover { color: #fff; text-decoration: underline; }
 
 #blazor-error-ui { display: none; }
+
+.actions { display: flex; gap: 10px; margin: 12px 0 16px; flex-wrap: wrap; }
+.log { margin: 0; padding: 10px 12px; background: #f6f8fa; border: 1px solid var(--border); border-radius: 6px; white-space: pre-wrap; word-break: break-word; font-size: 13px; max-height: 320px; overflow: auto; }
+.tabs { display: flex; gap: 4px; margin: 20px 0 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.tabs .tab { background: transparent; color: var(--accent); border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; }
+.tabs .tab.selected { background: var(--surface); border-color: var(--border); color: inherit; font-weight: 600; }
+h3.tenant { margin: 20px 0 8px; }
+.card.confirm { border-color: #efb4b2; }
+
+.topbar button.exit { background: #c0392b; border-color: #c0392b; color: #fff; font-weight: 600; }
+.exit-panel { display: flex; flex-direction: column; gap: 8px; max-width: 1132px; margin: 16px auto 0; padding: 14px 18px; background: var(--warn-bg); color: var(--warn-fg); border: 1px solid #f0dc9c; border-radius: 8px; }
+.goodbye { text-align: center; padding-top: 80px; }
