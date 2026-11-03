@@ -1,3 +1,4 @@
+using SupportToolkit.Core.Tenants;
 using SupportToolkit.Core.CustomerMapping;
 using SupportToolkit.Core.MonitoringScope;
 using SupportToolkit.Core.Reconciliation;
@@ -999,12 +1000,12 @@ public class MonitoringReconciliationCasesTests
         return new AcronisTenantObservation(id, true, false);
     }
 
-    private static TenantDto Tenant(
+    private static TenantRecord Tenant(
         string id,
         string name = "Synthetic Customer",
         string kind = "customer")
     {
-        return new TenantDto
+        return new TenantRecord
         {
             Id = id,
             Name = name,

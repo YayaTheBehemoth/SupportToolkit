@@ -1,6 +1,6 @@
 
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
-using SupportToolkit.Providers.Acronis.Tenants.Dtos;
+using SupportToolkit.Core.Tenants;
 
 namespace SupportToolkit.Modules.BackupAggregator.Fixtures;
 
@@ -13,11 +13,11 @@ namespace SupportToolkit.Modules.BackupAggregator.Fixtures;
 public static class MonitoringTenantSelectionFixtureFactory
 {
     public static (
-        IReadOnlyList<TenantDto> Tenants,
+        IReadOnlyList<TenantRecord> Tenants,
         IReadOnlyList<ResolvedMonitoringCustomerIdentity> Identities
     ) Create()
     {
-        IReadOnlyList<TenantDto> tenants =
+        IReadOnlyList<TenantRecord> tenants =
         [
             Tenant(
                 "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
@@ -79,11 +79,11 @@ public static class MonitoringTenantSelectionFixtureFactory
         );
     }
 
-    private static TenantDto Tenant(
+    private static TenantRecord Tenant(
         string id,
         string name)
     {
-        return new TenantDto
+        return new TenantRecord
         {
             Id = id,
             Name = name,

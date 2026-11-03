@@ -1,5 +1,5 @@
 using SupportToolkit.Core.CustomerMapping.Matching;
-using SupportToolkit.Providers.Acronis.Tenants.Dtos;
+using SupportToolkit.Core.Tenants;
 
 namespace SupportToolkit.Core.CustomerMapping;
 
@@ -29,7 +29,7 @@ public static class OperatorTenantDetector
         string? Notice);
 
     public static Detection Detect(
-        IEnumerable<TenantDto> tenants)
+        IEnumerable<TenantRecord> tenants)
     {
         ArgumentNullException.ThrowIfNull(tenants);
 
@@ -93,7 +93,7 @@ public static class OperatorTenantDetector
     }
 
     private static bool IsKind(
-        TenantDto tenant,
+        TenantRecord tenant,
         string kind)
     {
         return string.Equals(

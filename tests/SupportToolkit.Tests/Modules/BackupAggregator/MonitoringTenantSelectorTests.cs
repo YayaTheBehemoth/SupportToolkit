@@ -1,3 +1,4 @@
+using SupportToolkit.Core.Tenants;
 using SupportToolkit.Core.MonitoringScope;
 
 using SupportToolkit.Modules.BackupAggregator.Fixtures;
@@ -251,7 +252,7 @@ public class MonitoringTenantSelectorTests
     public void PartnerAndUnitTenants_AreNeverMatchedToACustomer()
     {
         var partner =
-            new TenantDto
+            new TenantRecord
             {
                 Id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                 Name = "Synthetic Partner",
@@ -259,7 +260,7 @@ public class MonitoringTenantSelectorTests
             };
 
         var unit =
-            new TenantDto
+            new TenantRecord
             {
                 Id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
                 Name = "Synthetic Unit",
@@ -294,11 +295,11 @@ public class MonitoringTenantSelectorTests
         );
     }
 
-    private static TenantDto Tenant(
+    private static TenantRecord Tenant(
         string id,
         string name = "Synthetic Customer")
     {
-        return new TenantDto
+        return new TenantRecord
         {
             Id = id,
             Name = name,

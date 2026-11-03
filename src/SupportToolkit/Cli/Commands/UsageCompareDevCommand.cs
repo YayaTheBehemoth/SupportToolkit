@@ -5,6 +5,7 @@ using SupportToolkit.Core.CustomerMapping.Matching;
 using SupportToolkit.Core.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
+using SupportToolkit.Providers.Acronis.Tenants;
 using SupportToolkit.Providers.Acronis;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 using SupportToolkit.Providers.Acronis.Usage;
@@ -611,7 +612,7 @@ public sealed class UsageCompareDevCommand
         var tenants =
             await session.Provider.GetTenantsAsync(cancellationToken);
 
-        var acronis = AcronisCustomerParties.ForResolution(tenants);
+        var acronis = AcronisCustomerParties.ForResolution(tenants.ToTenantRecords());
 
         var mapping =
             await new AutoCustomerMappingResolver()

@@ -5,6 +5,7 @@ using SupportToolkit.Modules.BackupAggregator.Fixtures;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Modules.BackupAggregator.Ticketing;
+using SupportToolkit.Modules.BackupAggregator.Production;
 
 namespace SupportToolkit.Tests.Modules.BackupAggregator;
 
@@ -375,7 +376,7 @@ public class BackupReviewSessionTests
 
                     return Task.FromResult(
                         new ScopedInventoryRuntime(
-                            new BackupInventoryReviewService(
+                            AcronisBackupInventory.CreateReviewService(
                                 new AcronisTenantResolver(
                                     new FixtureCustomerTenantProvider()),
                                 inventory,

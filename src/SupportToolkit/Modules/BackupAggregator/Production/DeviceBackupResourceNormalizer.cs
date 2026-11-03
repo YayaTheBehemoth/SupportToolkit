@@ -1,7 +1,7 @@
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Providers.Acronis.Devices.Dtos;
 
-namespace SupportToolkit.Modules.BackupAggregator.Services;
+namespace SupportToolkit.Modules.BackupAggregator.Production;
 
 public sealed class DeviceBackupResourceNormalizer
 {

@@ -6,6 +6,7 @@ using SupportToolkit.Providers.Acronis.Microsoft365;
 using SupportToolkit.Providers.Acronis.Microsoft365.Dtos;
 using SupportToolkit.Providers.Acronis.Tenants;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
+using SupportToolkit.Modules.BackupAggregator.Production;
 
 namespace SupportToolkit.Tests.Modules.BackupAggregator;
 
@@ -296,7 +297,7 @@ public class BackupInventoryReviewServiceTests
             );
 
         var service =
-            new BackupInventoryReviewService(
+            AcronisBackupInventory.CreateReviewService(
                 new AcronisTenantResolver(
                     new StubTenantProvider(
                         [
@@ -374,7 +375,7 @@ public class BackupInventoryReviewServiceTests
             IReadOnlyList<AcronisDeviceResourceDto>>
             devices)
     {
-        return new BackupInventoryReviewService(
+        return AcronisBackupInventory.CreateReviewService(
             new AcronisTenantResolver(
                 new StubTenantProvider(
                     tenants

@@ -2,7 +2,7 @@
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Providers.Acronis.Microsoft365.Dtos;
 
-namespace SupportToolkit.Modules.BackupAggregator.Services;
+namespace SupportToolkit.Modules.BackupAggregator.Production;
 
 public sealed class Microsoft365BackupResourceNormalizer
 {

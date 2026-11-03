@@ -3,8 +3,9 @@ using SupportToolkit.Providers.Acronis.Devices;
 using SupportToolkit.Providers.Acronis.Microsoft365;
 using SupportToolkit.Providers.Acronis.Tenants;
 using SupportToolkit.Providers.Acronis.Transport;
+using SupportToolkit.Modules.BackupAggregator.Services;
 
-namespace SupportToolkit.Modules.BackupAggregator.Services;
+namespace SupportToolkit.Modules.BackupAggregator.Production;
 
 /// <summary>
 /// Owns the production Acronis transport lifetime and composes the narrowly
@@ -100,7 +101,7 @@ public sealed class BackupAggregatorProductionSession
             );
 
         var reviewService =
-            new BackupInventoryReviewService(
+            AcronisBackupInventory.CreateReviewService(
                 new AcronisTenantResolver(
                     tenantProvider
                 ),

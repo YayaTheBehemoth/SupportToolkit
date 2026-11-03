@@ -9,6 +9,7 @@ using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Providers.Acronis.Tenants;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
+using SupportToolkit.Modules.BackupAggregator.Production;
 
 namespace SupportToolkit.Tests.Modules.BackupAggregator;
 
@@ -189,7 +190,7 @@ public class BackupAggregatorAutomaticScopeTests
                     new FixtureSmartSubscriptionEvidenceSource()),
                 _ => Task.FromResult(
                     new ScopedInventoryRuntime(
-                        new BackupInventoryReviewService(
+                        AcronisBackupInventory.CreateReviewService(
                             new AcronisTenantResolver(
                                 new FixtureCustomerTenantProvider()),
                             inventory,
@@ -272,7 +273,7 @@ public class BackupAggregatorAutomaticScopeTests
                 inventoryRuntimeFactory: _ =>
                     Task.FromResult(
                         new ScopedInventoryRuntime(
-                            new BackupInventoryReviewService(
+                            AcronisBackupInventory.CreateReviewService(
                                 new AcronisTenantResolver(
                                     new FakeTenants(tenants)),
                                 inventory,
@@ -810,7 +811,7 @@ public class BackupAggregatorAutomaticScopeTests
                 inventoryRuntimeFactory: _ =>
                     Task.FromResult(
                         new ScopedInventoryRuntime(
-                            new BackupInventoryReviewService(
+                            AcronisBackupInventory.CreateReviewService(
                                 new AcronisTenantResolver(
                                     new FakeTenants(tenants)),
                                 inventory,
