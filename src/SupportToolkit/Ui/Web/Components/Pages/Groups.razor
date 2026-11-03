@@ -1,0 +1,32 @@
+@using SupportToolkit.Modules.ZendeskBulkDelete.Models
+
+<section class="card">
+    <header><h3>@Title</h3></header>
+
+    @if (Items.Count == 0)
+    {
+        <p class="muted">None.</p>
+    }
+    else
+    {
+        <dl>
+            @foreach (var item in Items.Take(Limit))
+            {
+                <dt>@item.Name</dt>
+                <dd>@item.Count</dd>
+            }
+        </dl>
+
+        @if (Items.Count > Limit)
+        {
+            <p class="muted">+@(Items.Count - Limit) more</p>
+        }
+    }
+</section>
+
+@code {
+    private const int Limit = 10;
+
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public IReadOnlyList<PreviewGroup> Items { get; set; } = [];
+}

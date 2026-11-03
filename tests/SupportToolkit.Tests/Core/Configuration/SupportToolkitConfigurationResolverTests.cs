@@ -58,7 +58,7 @@ public class SupportToolkitConfigurationResolverTests
         var resolver = CreateResolver(configuration);
 
         var mode = await resolver.GetModuleModeAsync(
-            "backup-health"
+            "backup-aggregator"
         );
 
         Assert.Equal(SupportToolkitMode.Fixture, mode);

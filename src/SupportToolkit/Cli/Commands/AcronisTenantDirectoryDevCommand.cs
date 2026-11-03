@@ -2,10 +2,7 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using SupportToolkit.Core.Configuration;
-using SupportToolkit.Core.Logging;
-using SupportToolkit.Providers.Acronis.Tenants;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
-using SupportToolkit.Providers.Acronis.Transport;
 
 namespace SupportToolkit.Cli.Commands;
 
@@ -13,7 +10,7 @@ namespace SupportToolkit.Cli.Commands;
 /// Developer-only, read-only Acronis tenant directory inspection.
 ///
 /// Uses the active profile's configured Acronis connection, independently
-/// of BackupHealth and BackupAggregator module modes.
+/// of the BackupAggregator module mode.
 ///
 /// The CLI dispatcher must require an explicit --production argument.
 /// </summary>
@@ -44,62 +41,20 @@ public sealed class AcronisTenantDirectoryDevCommand
     {
         ArgumentNullException.ThrowIfNull(output);
 
-        /*
-         * Resolve the existing Acronis connection.
-         * Never accept credentials on the command line.
-         */
-        var connection =
-            await _configurationResolver.GetAcronisConnectionAsync(
+        using var session =
+            await AcronisDevSession.CreateAsync(
+                _configurationResolver,
                 cancellationToken);
-
-        var options =
-            AcronisOptions.Create(
-                connection.DatacenterUrl,
-                connection.ClientId,
-                connection.ClientSecret);
-
-        /*
-         * Preserve the established read-only Acronis boundary.
-         * No external write endpoints are available to this command.
-         */
-        using var httpClient =
-            new HttpClient(
-                new AcronisReadOnlyHandler(
-                    options.DatacenterUrl,
-                    new HttpClientHandler
-                    {
-                        AllowAutoRedirect = false
-                    }))
-            {
-                Timeout = TimeSpan.FromSeconds(30)
-            };
-
-        var logger =
-            OperationalLogger.FromEnvironment();
-
-        var diagnosticLogger =
-            logger.DebugEnabled ? logger : null;
-
-        var apiClient =
-            new AcronisApiClient(
-                httpClient,
-                options,
-                logger: diagnosticLogger);
-
-        var provider =
-            new AcronisTenantProvider(
-                apiClient,
-                diagnosticLogger);
 
         /*
          * This is the same production tenant-discovery implementation
-         * used by BackupHealth and BackupAggregator.
+         * used by BackupAggregator.
          *
          * Its shared paginator fetches every page or fails.
          * No backup resource inventory is requested.
          */
         var tenants =
-            await provider.GetTenantsAsync(
+            await session.Provider.GetTenantsAsync(
                 cancellationToken);
 
         return WriteReport(

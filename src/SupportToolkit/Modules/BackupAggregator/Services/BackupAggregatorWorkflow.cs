@@ -6,6 +6,7 @@ using SupportToolkit.Core.Logging;
 using SupportToolkit.Core.Ticketing.Models;
 using SupportToolkit.Core.Ticketing.Services;
 using SupportToolkit.Modules.BackupAggregator.Models;
+using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.Ticketing;
 using SupportToolkit.Providers.Acronis.Transport;
 using SupportToolkit.Providers.Zendesk.Tickets;
@@ -28,14 +29,25 @@ public sealed class BackupAggregatorWorkflow
     private readonly SupportToolkitConfigurationResolver
         _configurationResolver;
 
+    private readonly Action<string>? _progress;
+
+    /// <param name="progress">
+    /// Where operator-facing progress messages from a production review
+    /// go (for example while waiting for in-progress backups). Supplied
+    /// by the host; the workflow itself never writes to a console. Null
+    /// discards them.
+    /// </param>
     public BackupAggregatorWorkflow(
-        SupportToolkitConfigurationResolver configurationResolver)
+        SupportToolkitConfigurationResolver configurationResolver,
+        Action<string>? progress = null)
     {
         _configurationResolver =
             configurationResolver
             ?? throw new ArgumentNullException(
                 nameof(configurationResolver)
             );
+
+        _progress = progress;
     }
 
     public Task<SupportToolkitMode> GetModeAsync(
@@ -134,6 +146,191 @@ public sealed class BackupAggregatorWorkflow
             .Create(
                 report
             );
+    }
+
+    /// <summary>
+    /// Builds a ticket draft from a completed scoped review.
+    ///
+    /// A ticket asserts that every monitored tenant was reviewed, so a
+    /// scoped review that is incomplete (an unmatched tenant, an
+    /// unresolved scope, a failed tenant review) produces no draft at
+    /// all, and the reasons are stated.
+    /// </summary>
+    public TicketDraft CreateScopedTicketDraft(
+        ScopedBackupInventoryReviewResult result)
+    {
+        ArgumentNullException.ThrowIfNull(
+            result
+        );
+
+        var preparation =
+            PrepareScopedTicketDraft(
+                result
+            );
+
+        if (!preparation.IsReady)
+        {
+            throw new InvalidOperationException(
+                "No ticket can be created because the monitored review " +
+                "is not complete: " +
+                string.Join(" ", preparation.NotReady.Reasons)
+            );
+        }
+
+        return preparation.Value;
+    }
+
+    /// <summary>
+    /// The one place that decides whether a scoped review may produce a
+    /// ticket. A review that is missing or incomplete is a typed result,
+    /// not an exception, so any interface can present the reasons.
+    /// It needs no Zendesk configuration: previewing a draft does not
+    /// depend on where it would be sent.
+    /// </summary>
+    public TicketPreparation<TicketDraft> PrepareScopedTicketDraft(
+        ScopedBackupInventoryReviewResult? review)
+    {
+        if (review is null)
+        {
+            return TicketPreparation<TicketDraft>.Blocked(
+                TicketNotReadyKind.NoReview,
+                "Run the monitored review first."
+            );
+        }
+
+        var blockers =
+            review.TicketBlockers;
+
+        if (blockers.Count > 0)
+        {
+            return TicketPreparation<TicketDraft>.Blocked(
+                new TicketNotReady(
+                    TicketNotReadyKind.ReviewIncomplete,
+                    blockers
+                )
+            );
+        }
+
+        return TicketPreparation<TicketDraft>.Ready(
+            new BackupReviewTicketDraftFactory()
+                .Create(
+                    review.Inventory,
+                    review.TicketScopeNote,
+                    review.TicketScopeTenantLines,
+                    review.TicketStrayLines,
+                    review.TicketScopeWarning
+                )
+        );
+    }
+
+    /// <summary>
+    /// Prepares a submission for an operator to confirm: the draft, the
+    /// Zendesk destination it would go to, and the review's headline
+    /// numbers. Everything is validated locally, before any prompt and
+    /// without calling Zendesk or exposing credentials.
+    /// </summary>
+    public async Task<TicketPreparation<TicketSubmissionPlan>>
+        PrepareScopedTicketSubmissionAsync(
+            ScopedBackupInventoryReviewResult? review,
+            CancellationToken cancellationToken = default)
+    {
+        var draft =
+            PrepareScopedTicketDraft(
+                review
+            );
+
+        if (!draft.IsReady)
+        {
+            return TicketPreparation<TicketSubmissionPlan>.Blocked(
+                draft.NotReady
+            );
+        }
+
+        ZendeskTicketDestinationPreview destination;
+
+        try
+        {
+            destination =
+                await GetTicketSubmissionTargetAsync(
+                    cancellationToken
+                );
+        }
+        catch (InvalidOperationException exception)
+        {
+            return TicketPreparation<TicketSubmissionPlan>.Blocked(
+                TicketNotReadyKind.DestinationUnavailable,
+                exception.Message
+            );
+        }
+
+        return TicketPreparation<TicketSubmissionPlan>.Ready(
+            new TicketSubmissionPlan(
+                draft.Value,
+                destination,
+                ReviewSummary.From(review!)
+            )
+        );
+    }
+
+    /// <summary>
+    /// Submits exactly the plan an operator confirmed. It fails closed if
+    /// the configured destination is no longer the confirmed one. The
+    /// idempotency key and the Zendesk write path are the existing ones.
+    /// </summary>
+    public async Task<CreatedTicket>
+        SubmitPlannedTicketAsync(
+            TicketSubmissionPlan plan,
+            CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(
+            plan
+        );
+
+        return await SubmitTicketDraftAsync(
+            plan.Draft,
+            cancellationToken,
+            plan.Destination
+        );
+    }
+
+    /// <summary>
+    /// Submits a ticket for a completed scoped review. Same gate and
+    /// destination rules as the full review.
+    /// </summary>
+    public async Task<CreatedTicket>
+        SubmitScopedTicketAsync(
+            ScopedBackupInventoryReviewResult result,
+            CancellationToken cancellationToken = default)
+    {
+        return await SubmitTicketDraftAsync(
+            CreateScopedTicketDraft(
+                result
+            ),
+            cancellationToken
+        );
+    }
+
+    /// <summary>
+    /// Interactive submission of a scoped review: fails closed if the
+    /// destination selected for the confirmation prompt has changed.
+    /// </summary>
+    public async Task<CreatedTicket>
+        SubmitScopedTicketToConfirmedDestinationAsync(
+            ScopedBackupInventoryReviewResult result,
+            ZendeskTicketDestinationPreview confirmedDestination,
+            CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(
+            confirmedDestination
+        );
+
+        return await SubmitTicketDraftAsync(
+            CreateScopedTicketDraft(
+                result
+            ),
+            cancellationToken,
+            confirmedDestination
+        );
     }
 
     /// <summary>
@@ -348,13 +545,22 @@ public sealed class BackupAggregatorWorkflow
                 resolvedConnection.ClientSecret
             );
 
+        var wait =
+            await InProgressWaitSetup.LoadAsync(
+                _configurationResolver,
+                BackupAggregatorModule.ModuleCommand,
+                cancellationToken
+            );
+
         var logger =
             OperationalLogger.FromEnvironment();
 
         return BackupAggregatorProductionSession
             .Create(
                 acronisOptions,
-                logger
+                logger,
+                wait,
+                _progress
             );
     }
 

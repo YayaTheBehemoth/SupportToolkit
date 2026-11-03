@@ -60,6 +60,20 @@ public sealed class AcronisTenantResolver
     }
 
     /// <summary>
+    /// Every tenant in the configured subtree, whatever its kind. Used
+    /// where the hierarchy matters, such as recognizing the operator's
+    /// own company, which also exists as a partner tenant.
+    /// </summary>
+    public async Task<IReadOnlyList<TenantDto>>
+        GetAllTenantsAsync(
+            CancellationToken cancellationToken = default)
+    {
+        return await _tenantProvider.GetTenantsAsync(
+            cancellationToken
+        );
+    }
+
+    /// <summary>
     /// Returns the Account Management tenants explicitly identified by
     /// Acronis as customer tenants.
     ///

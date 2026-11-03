@@ -1,0 +1,30 @@
+@* Where you are in the bulk delete: a guide, not a control. *@
+
+<ol class="steps" aria-label="Progress">
+    @for (var index = 0; index < Labels.Length; index++)
+    {
+        var state = index < Current ? "done" : index == Current ? "current" : "";
+
+        <li class="@state">
+            <span class="num">@(index < Current ? "✓" : (index + 1).ToString())</span>
+            <span>@Labels[index]</span>
+        </li>
+    }
+</ol>
+
+@code {
+    private static readonly string[] Labels = ["Sign in", "Search", "Choose tickets", "Confirm"];
+
+    [Parameter, EditorRequired] public SupportToolkit.Modules.ZendeskBulkDelete.Services.BulkDeleteStage Stage { get; set; }
+
+    /// <summary>The step in progress; 4 means all four are done.</summary>
+    private int Current =>
+        Stage switch
+        {
+            SupportToolkit.Modules.ZendeskBulkDelete.Services.BulkDeleteStage.SignedOut => 0,
+            SupportToolkit.Modules.ZendeskBulkDelete.Services.BulkDeleteStage.SignedIn => 1,
+            SupportToolkit.Modules.ZendeskBulkDelete.Services.BulkDeleteStage.Previewed => 2,
+            SupportToolkit.Modules.ZendeskBulkDelete.Services.BulkDeleteStage.Planned => 3,
+            _ => 4
+        };
+}

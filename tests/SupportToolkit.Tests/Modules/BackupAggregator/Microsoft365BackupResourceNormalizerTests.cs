@@ -271,7 +271,7 @@ public class Microsoft365BackupResourceNormalizerTests
                     kind:
                         "GROUP",
                     internalId:
-                        "GROUP.c65366dd-00d2-35e9-9dc1-1aad8254f1be"
+                        "GROUP.11111111-2222-4333-8444-555555555555"
                 ),
 
                 CreateResource(
@@ -287,7 +287,7 @@ public class Microsoft365BackupResourceNormalizerTests
                     kind:
                         "TEAM",
                     internalId:
-                        "TEAM.c65366dd-00d2-35e9-9dc1-1aad8254f1be"
+                        "TEAM.11111111-2222-4333-8444-555555555555"
                 )
             };
 
@@ -328,7 +328,7 @@ public class Microsoft365BackupResourceNormalizerTests
                     kind:
                         "GROUP",
                     internalId:
-                        "GROUP.49a72b1c-44fb-3621-8377-18ba772216eb"
+                        "GROUP.66666666-7777-4888-8999-aaaaaaaaaaaa"
                 ),
 
                 CreateResource(
@@ -344,7 +344,7 @@ public class Microsoft365BackupResourceNormalizerTests
                     kind:
                         "TEAM",
                     internalId:
-                        "TEAM.49a72b1c-44fb-3621-8377-18ba772216eb"
+                        "TEAM.66666666-7777-4888-8999-aaaaaaaaaaaa"
                 )
             };
 

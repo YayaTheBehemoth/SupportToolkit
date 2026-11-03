@@ -9,19 +9,6 @@ namespace SupportToolkit.Cli.Commands;
 
 public sealed partial class ConfigureCommand
 {
-    private static readonly string[] RuntimeEnvironmentVariables =
-    [
-        "SUPPORTTOOLKIT_CONFIG",
-        "SUPPORTTOOLKIT_BACKUP_AGGREGATOR_MODE",
-        "SUPPORTTOOLKIT_BACKUP_HEALTH_MODE",
-        "ACRONIS_DATACENTER_URL",
-        "ACRONIS_CLIENT_ID",
-        "ACRONIS_CLIENT_SECRET",
-        "ZENDESK_SUBDOMAIN",
-        "ZENDESK_CLIENT_ID",
-        "ZENDESK_CLIENT_SECRET"
-    ];
-
     private async Task<int> WriteStatusAsync()
     {
         var configuration =
@@ -85,25 +72,34 @@ public sealed partial class ConfigureCommand
                 BackupAggregatorCommand,
                 "Backup Aggregator");
 
-        var healthMode =
-            await WriteEffectiveModeAsync(
-                resolver,
-                BackupHealthCommand,
-                "Backup Health");
-
         Console.WriteLine();
 
         await WriteEffectiveAcronisAsync(
             profile,
             resolver,
-            aggregatorMode == SupportToolkitMode.Production
-                || healthMode == SupportToolkitMode.Production);
+            aggregatorMode == SupportToolkitMode.Production);
 
         Console.WriteLine();
 
         await WriteEffectiveZendeskAsync(
             profile,
             resolver);
+
+        Console.WriteLine();
+
+        await WriteEffectiveZendeskDeletionAsync(
+            profile,
+            resolver);
+
+        Console.WriteLine();
+
+        await WriteEffectiveBusinessCentralAsync(
+            profile,
+            resolver);
+
+        Console.WriteLine();
+
+        await WriteEffectiveReviewWaitAsync(resolver);
 
         Console.WriteLine();
 
@@ -309,7 +305,7 @@ public sealed partial class ConfigureCommand
 
         var found = false;
 
-        foreach (var variable in RuntimeEnvironmentVariables)
+        foreach (var variable in RuntimeEnvironmentVariables.Overrides)
         {
             if (!IsEnvironmentVariableSet(variable))
             {
@@ -328,16 +324,20 @@ public sealed partial class ConfigureCommand
         }
 
         /*
-         * The obsolete flag is intentionally not part of the
+         * Obsolete variables are intentionally not part of the
          * runtime resolver anymore.
          */
-        if (IsEnvironmentVariableSet(
-                "SUPPORTTOOLKIT_ALLOW_WRITES"))
+        foreach (var obsolete in RuntimeEnvironmentVariables.Obsolete)
         {
+            if (!IsEnvironmentVariableSet(obsolete))
+            {
+                continue;
+            }
+
             Console.WriteLine();
 
             Console.WriteLine(
-                "  NOTE: SUPPORTTOOLKIT_ALLOW_WRITES is obsolete " +
+                $"  NOTE: {obsolete} is obsolete " +
                 "and ignored. Remove it from your environment.");
         }
 
@@ -413,16 +413,18 @@ public sealed partial class ConfigureCommand
                 $"{DisplayOptionalValue(profile.ZendeskDestination)}");
 
             Console.WriteLine(
+                $"    Zendesk deletion:    " +
+                $"{DisplayOptionalValue(profile.ZendeskDeletionConnection)}");
+
+            Console.WriteLine(
+                $"    Business Central:    " +
+                $"{DisplayOptionalValue(profile.BusinessCentralConnection)}");
+
+            Console.WriteLine(
                 $"    Backup Aggregator:   " +
                 $"{FormatMode(GetConfiguredMode(
                     profile,
                     BackupAggregatorCommand))}");
-
-            Console.WriteLine(
-                $"    Backup Health:       " +
-                $"{FormatMode(GetConfiguredMode(
-                    profile,
-                    BackupHealthCommand))}");
         }
 
         Console.WriteLine();
@@ -532,6 +534,8 @@ public sealed partial class ConfigureCommand
         }
 
         Console.WriteLine();
+
+        WriteSavedZendeskDeletionConnections(configuration);
     }
 
     private static string DisplayZendeskUserId(
@@ -543,5 +547,29 @@ public sealed partial class ConfigureCommand
             <= 0 => $"{userId} (invalid; must be positive)",
             _ => userId.Value.ToString(CultureInfo.InvariantCulture)
         };
+    }
+
+    private static async Task WriteEffectiveReviewWaitAsync(
+        SupportToolkitConfigurationResolver resolver)
+    {
+        Console.WriteLine("Review wait for in-progress backups");
+
+        try
+        {
+            var settings =
+                await resolver.GetInProgressWaitSettingsAsync(
+                    BackupAggregatorCommand);
+
+            Console.WriteLine(
+                settings.MaxWaitSeconds == 0
+                    ? "  Waiting: disabled"
+                    : $"  Waiting: up to {settings.MaxWaitSeconds}s, " +
+                      $"checking every {settings.PollIntervalSeconds}s");
+        }
+        catch (InvalidOperationException exception)
+        {
+            Console.WriteLine("  Waiting: invalid setting");
+            Console.WriteLine($"  Reason: {exception.Message}");
+        }
     }
 }

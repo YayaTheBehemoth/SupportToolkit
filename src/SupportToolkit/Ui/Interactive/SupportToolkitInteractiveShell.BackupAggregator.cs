@@ -1,33 +1,44 @@
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.ErrorHandling;
+using SupportToolkit.Core.Logging;
 using SupportToolkit.Core.Ticketing.Models;
 using SupportToolkit.Core.Ticketing.Reporting;
-using SupportToolkit.Modules.BackupAggregator.Models;
+using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Services;
-using SupportToolkit.Modules.BackupHealth.Models;
-using SupportToolkit.Modules.BackupHealth.Reporting;
-using SupportToolkit.Modules.BackupHealth.Services;
+using SupportToolkit.Modules.BackupAggregator.Ticketing;
 
 namespace SupportToolkit.Ui.Interactive;
 
 public sealed partial class SupportToolkitInteractiveShell
 {
+    /// <summary>
+    /// The interactive BackupAggregator offers the monitored review
+    /// only: the tenants Business Central entitles, plus the
+    /// operator's own. The unmonitored all-tenant review and its
+    /// ticket remain available as command-line operations for
+    /// development; they are not part of the operator's menu.
+    ///
+    /// This is a console adapter. What may be done with a review, and
+    /// when, is decided by BackupReviewSession; this class only prompts
+    /// and prints.
+    /// </summary>
     private async Task RunBackupAggregatorMenuAsync(
         CancellationToken cancellationToken)
     {
-        AggregatedBackupReport? currentFullReview =
-            null;
+        // The review lives as long as the operator stays in this menu.
+        var session =
+            new BackupReviewSession(
+                _backupAggregatorWorkflow,
+                _backupAggregatorScopedWorkflow);
 
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var mode =
-                await _backupAggregatorWorkflow
-                    .GetModeAsync(
-                        cancellationToken
-                    );
+            var availability =
+                await session.GetAvailabilityAsync(
+                    cancellationToken);
 
             Console.WriteLine(
                 "Backup Aggregator"
@@ -40,35 +51,65 @@ public sealed partial class SupportToolkitInteractiveShell
             Console.WriteLine();
 
             Console.WriteLine(
-                $"Mode:        {FormatMode(mode)}"
+                $"Mode:             {FormatMode(availability.Mode)}"
             );
 
+            if (!availability.IsAvailable)
+            {
+                Console.WriteLine();
+
+                Console.WriteLine(
+                    "The monitored review needs a Business Central " +
+                    "connection in the active profile."
+                );
+
+                Console.WriteLine(
+                    "Select one with 'configure', or use fixture mode."
+                );
+
+                Console.WriteLine();
+
+                Console.WriteLine(
+                    "1. Back"
+                );
+
+                Console.WriteLine();
+
+                ReadMenuChoice(
+                    minimum:
+                        1,
+                    maximum:
+                        1
+                );
+
+                Console.WriteLine();
+
+                return;
+            }
+
             Console.WriteLine(
-                $"Full review: {FormatReviewState(currentFullReview)}"
+                "Monitored review: " +
+                FormatScopedReviewState(session.CurrentSummary)
             );
 
             Console.WriteLine();
 
             Console.WriteLine(
-                currentFullReview is null
-                    ? "1. Review all tenants"
-                    : "1. Refresh full review"
+                session.CurrentReview is null
+                    ? "1. Review monitored tenants (Business Central)"
+                    : "1. Refresh monitored review"
             );
 
             Console.WriteLine(
-                "2. Review one tenant"
+                "2. Preview ticket"
             );
 
             Console.WriteLine(
-                "3. Preview ticket"
+                "3. Submit ticket"
             );
 
             Console.WriteLine(
-                "4. Submit ticket"
-            );
-
-            Console.WriteLine(
-                "5. Back"
+                "4. Back"
             );
 
             Console.WriteLine();
@@ -78,7 +119,7 @@ public sealed partial class SupportToolkitInteractiveShell
                     minimum:
                         1,
                     maximum:
-                        5
+                        4
                 );
 
             Console.WriteLine();
@@ -86,129 +127,86 @@ public sealed partial class SupportToolkitInteractiveShell
             switch (choice)
             {
                 case 1:
-                    currentFullReview =
-                        await ReviewAllTenantsAsync(
-                            cancellationToken
-                        );
+                    await ReviewScopedAsync(
+                        session,
+                        cancellationToken
+                    );
 
                     break;
 
                 case 2:
-                    await ReviewOneTenantAsync(
-                        cancellationToken
+                    PreviewScopedTicket(
+                        session
                     );
 
                     break;
 
                 case 3:
-                    PreviewTicket(
-                        currentFullReview
-                    );
-
-                    break;
-
-                case 4:
-                    await SubmitTicketAsync(
-                        currentFullReview,
+                    await SubmitScopedTicketAsync(
+                        session,
                         cancellationToken
                     );
 
                     break;
 
-                case 5:
+                default:
                     return;
             }
         }
     }
 
-    private async Task<AggregatedBackupReport?>
-        ReviewAllTenantsAsync(
-            CancellationToken cancellationToken)
+    private static string FormatScopedReviewState(
+        ReviewSummary? review)
     {
-        WriteProgress(
-            "Loading backup data..."
-        );
-
-        try
+        if (review is null)
         {
-            var report =
-                await _backupAggregatorWorkflow
-                    .ReviewAllTenantsAsync(
-                        cancellationToken
-                    );
-
-            Console.WriteLine();
-
-            _backupAggregatorReporter
-                .Write(
-                    report
-                );
-
-            Pause();
-
-            return report;
+            return "not run";
         }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            WriteError(
-                exception
-            );
 
-            Pause();
-
-            return null;
-        }
+        return
+            $"{review.TenantCount} tenant(s), " +
+            $"{review.FindingsCount} finding(s), " +
+            (review.IsComplete
+                ? "complete"
+                : "incomplete");
     }
 
-    private async Task ReviewOneTenantAsync(
+    private async Task ReviewScopedAsync(
+        BackupReviewSession session,
         CancellationToken cancellationToken)
     {
-        Console.Write(
-            "Tenant name: "
-        );
-
-        var tenantName =
-            Console.ReadLine();
-
-        if (string.IsNullOrWhiteSpace(
-                tenantName))
-        {
-            Console.WriteLine();
-
-            Console.WriteLine(
-                "Tenant review cancelled."
-            );
-
-            Console.WriteLine();
-
-            return;
-        }
-
-        Console.WriteLine();
-
         WriteProgress(
-            "Loading backup data..."
+            "Loading monitoring scope and backup data..."
         );
 
         try
         {
-            var report =
-                await _backupAggregatorWorkflow
-                    .ReviewTenantAsync(
-                        tenantName,
-                        cancellationToken
-                    );
+            var result =
+                await session.RunReviewAsync(
+                    cancellationToken
+                );
+
+            new ConsoleScopedReviewReporter(
+                    OperationalLogger.FromEnvironment().DebugEnabled)
+                .Write(Console.Out, result);
 
             Console.WriteLine();
 
             _backupAggregatorReporter
-                .Write(
-                    report
-                );
+                .Write(result.Inventory);
+
+            if (result.TicketBlockers.Count > 0)
+            {
+                Console.WriteLine();
+
+                Console.WriteLine(
+                    "A ticket cannot be created from this review yet:");
+
+                foreach (var blocker in result.TicketBlockers)
+                {
+                    Console.WriteLine($"  - {blocker}");
+                }
+            }
         }
         catch (OperationCanceledException)
         {
@@ -224,29 +222,27 @@ public sealed partial class SupportToolkitInteractiveShell
         Pause();
     }
 
-    private void PreviewTicket(
-        AggregatedBackupReport? currentFullReview)
+    private void PreviewScopedTicket(
+        BackupReviewSession session)
     {
-        if (currentFullReview is null)
-        {
-            WriteFullReviewRequired();
-
-            Pause();
-
-            return;
-        }
-
         try
         {
-            var draft =
-                _backupAggregatorWorkflow
-                    .CreateTicketDraft(
-                        currentFullReview
-                    );
+            var preparation =
+                session.PreviewTicket();
+
+            if (!preparation.IsReady)
+            {
+                WriteTicketNotReady(
+                    preparation.NotReady);
+
+                Pause();
+
+                return;
+            }
 
             _ticketDraftPreviewer
                 .Write(
-                    draft
+                    preparation.Value
                 );
         }
         catch (Exception exception)
@@ -259,29 +255,24 @@ public sealed partial class SupportToolkitInteractiveShell
         Pause();
     }
 
-    private async Task SubmitTicketAsync(
-        AggregatedBackupReport? currentFullReview,
+    /// <summary>
+    /// The confirmation-and-submission flow: the session validates the
+    /// draft and the destination before any prompt, the operator
+    /// confirms, and exactly the confirmed plan is submitted.
+    /// </summary>
+    private async Task SubmitScopedTicketAsync(
+        BackupReviewSession session,
         CancellationToken cancellationToken)
     {
-        if (currentFullReview is null)
-        {
-            WriteFullReviewRequired();
-
-            Pause();
-
-            return;
-        }
-
-        ZendeskTicketDestinationPreview destination;
+        TicketPreparation<TicketSubmissionPlan> preparation;
 
         try
         {
-            // Fail before prompting if the report is incomplete or the
-            // selected Zendesk destination/credentials are invalid.
-            _backupAggregatorWorkflow.CreateTicketDraft(currentFullReview);
-
-            destination =
-                await _backupAggregatorWorkflow.GetTicketSubmissionTargetAsync(
+            // Fails before prompting if there is no review, the review
+            // is incomplete, or the selected Zendesk destination and
+            // credentials are invalid.
+            preparation =
+                await session.PrepareSubmissionAsync(
                     cancellationToken);
         }
         catch (OperationCanceledException)
@@ -295,6 +286,20 @@ public sealed partial class SupportToolkitInteractiveShell
             return;
         }
 
+        if (!preparation.IsReady)
+        {
+            WriteTicketNotReady(
+                preparation.NotReady);
+
+            Pause();
+
+            return;
+        }
+
+        var plan = preparation.Value;
+        var destination = plan.Destination;
+        var review = plan.Review;
+
         Console.WriteLine("Confirm ticket submission");
         Console.WriteLine("-------------------------");
         Console.WriteLine();
@@ -302,10 +307,10 @@ public sealed partial class SupportToolkitInteractiveShell
         Console.WriteLine($"Destination alias: {destination.DestinationName}");
         Console.WriteLine($"Zendesk group ID: {destination.GroupId}");
         Console.WriteLine(
-            $"Review: {currentFullReview.TenantCount}/" +
-            $"{currentFullReview.TenantsAttempted} tenants, " +
-            $"{currentFullReview.FindingsCount} findings, " +
-            $"{currentFullReview.UnknownRowsCount} unclassified");
+            $"Review: {review.TenantCount}/" +
+            $"{review.TenantsAttempted} monitored tenants, " +
+            $"{review.FindingsCount} findings, " +
+            $"{review.UnclassifiedCount} unclassified");
         Console.WriteLine();
 
         if (!ReadConfirmation(
@@ -336,12 +341,10 @@ public sealed partial class SupportToolkitInteractiveShell
         try
         {
             var ticket =
-                await _backupAggregatorWorkflow
-                    .SubmitTicketToConfirmedDestinationAsync(
-                        currentFullReview,
-                        destination,
-                        cancellationToken
-                    );
+                await session.SubmitAsync(
+                    plan,
+                    cancellationToken
+                );
 
             Console.WriteLine();
 
@@ -361,5 +364,41 @@ public sealed partial class SupportToolkitInteractiveShell
         }
 
         Pause();
+    }
+
+    /// <summary>
+    /// Prints why a ticket cannot be prepared, worded as before.
+    /// </summary>
+    private void WriteTicketNotReady(
+        TicketNotReady notReady)
+    {
+        switch (notReady.Kind)
+        {
+            case TicketNotReadyKind.NoReview:
+                Console.WriteLine(
+                    "Run the monitored review first (option 1), " +
+                    "then try again."
+                );
+
+                Console.WriteLine();
+
+                break;
+
+            case TicketNotReadyKind.ReviewIncomplete:
+                WriteError(
+                    new InvalidOperationException(
+                        "No ticket can be created because the " +
+                        "monitored review is not complete: " +
+                        string.Join(" ", notReady.Reasons)));
+
+                break;
+
+            default:
+                WriteError(
+                    new InvalidOperationException(
+                        string.Join(" ", notReady.Reasons)));
+
+                break;
+        }
     }
 }

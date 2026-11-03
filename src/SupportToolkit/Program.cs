@@ -6,9 +6,10 @@ using SupportToolkit.Core.Modules;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.Services;
-using SupportToolkit.Modules.BackupHealth;
-using SupportToolkit.Modules.BackupHealth.Services;
 using SupportToolkit.Modules.Compliance;
+using SupportToolkit.Modules.ZendeskBulkDelete.Services;
+using SupportToolkit.Ui;
+using SupportToolkit.Ui.Web;
 using SupportToolkit.Ui.Interactive;
 
 var configurationStore =
@@ -32,21 +33,37 @@ var tenantDirectoryCommand =
     new AcronisTenantDirectoryDevCommand(
         configurationResolver);
 
-var backupAggregatorWorkflow =
-    new BackupAggregatorWorkflow(
+var usageProbeCommand =
+    new AcronisUsageDevCommand(
         configurationResolver);
 
-var backupHealthWorkflow =
-    new BackupHealthWorkflow(
+var usageCompareCommand =
+    new UsageCompareDevCommand(
         configurationResolver);
+
+var businessCentralDiagnosticsCommand =
+    new BusinessCentralSubscriptionDevCommand(
+        configurationResolver);
+
+var zendeskBulkDeleteCommand =
+    new ZendeskBulkDeleteDevCommand(
+        configurationResolver);
+
+var backupAggregatorWorkflow =
+    new BackupAggregatorWorkflow(
+        configurationResolver,
+        ConsoleProgress.Write);
+
+var backupAggregatorScopedWorkflow =
+    new BackupAggregatorScopedWorkflow(
+        configurationResolver,
+        progress: ConsoleProgress.Write);
 
 ISupportToolkitModule[] modules =
 [
-    new BackupHealthModule(
-        backupHealthWorkflow),
-
     new BackupAggregatorModule(
-        backupAggregatorWorkflow),
+        backupAggregatorWorkflow,
+        backupAggregatorScopedWorkflow),
 
     new ComplianceModule()
 ];
@@ -56,7 +73,7 @@ var interactiveShell =
         configurationStore,
         configureCommand,
         backupAggregatorWorkflow,
-        backupHealthWorkflow);
+        backupAggregatorScopedWorkflow);
 
 var firstRunStartup =
     new FirstRunStartup(
@@ -78,6 +95,88 @@ try
     {
         PrintUsage(modules);
         return 0;
+    }
+
+    /*
+     * The local web UI. The web host is built only here, so every other
+     * command (and --help) never touches it. It listens on 127.0.0.1 only.
+     */
+    if (string.Equals(
+            args[0],
+            "serve",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        if (!WebServeArguments.TryParse(
+                args.Skip(1).ToArray(),
+                out var serveOptions,
+                out var serveError))
+        {
+            Console.Error.WriteLine(serveError);
+            return 1;
+        }
+
+        // The web host shows progress on the page, not in the console.
+        var webProgress = new ProgressFeed();
+
+        var webWorkflow =
+            new BackupAggregatorWorkflow(
+                configurationResolver,
+                webProgress.Write);
+
+        var webScopedWorkflow =
+            new BackupAggregatorScopedWorkflow(
+                configurationResolver,
+                progress: webProgress.Write);
+
+        return await WebHostRunner.RunAsync(
+            serveOptions!,
+            new WebAppState(
+                new ConfigurationStatusService(
+                    configurationStore,
+                    configurationResolver,
+                    secretStore),
+                new AggregatorWebSession(
+                    new BackupReviewSession(
+                        webWorkflow,
+                        webScopedWorkflow),
+                    webProgress),
+                new BulkDeleteWebSession(
+                    async token =>
+                    {
+                        try
+                        {
+                            var connection =
+                                await configurationResolver
+                                    .GetZendeskDeletionConnectionAsync(token);
+
+                            return new BulkDeleteAvailability(
+                                true,
+                                connection.Subdomain,
+                                null);
+                        }
+                        catch (InvalidOperationException exception)
+                        {
+                            return new BulkDeleteAvailability(
+                                false,
+                                null,
+                                exception.Message);
+                        }
+                    },
+                    async token =>
+                    {
+                        // Deletion is enabled here, and only here: this is
+                        // the connection that can delete, used after the
+                        // operator's typed confirmations.
+                        var session =
+                            await ZendeskBulkDeleteSession.CreateAsync(
+                                configurationResolver,
+                                enableDeletion: true,
+                                cancellationToken: token);
+
+                        return new BulkDeleteConnection(
+                            BulkDeleteReviewSession.From(session),
+                            session);
+                    })));
     }
 
     /*
@@ -121,6 +220,292 @@ try
         return await tenantDirectoryCommand.RunAsync(
             Console.Out,
             showNames: args.Length == 4);
+    }
+
+    /*
+     * Host-level developer utility: Zendesk bulk delete, sign-in, search
+     * and preview only. Nothing is deleted. Interactive only.
+     *
+     * --production explicitly authorizes the interactive Zendesk
+     * sign-in and read-only calls, using the profile's Zendesk deletion
+     * connection (not the ticketing connection).
+     */
+    if (args.Length >= 2
+        && string.Equals(
+            args[0],
+            "dev",
+            StringComparison.OrdinalIgnoreCase)
+        && string.Equals(
+            args[1],
+            "zendesk-bulk-delete",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        if (!ZendeskBulkDeleteDevCommand.TryParseArguments(
+                args.Skip(2).ToArray(),
+                out var bulkDeleteOptions,
+                out var bulkDeleteError))
+        {
+            Console.Error.WriteLine(bulkDeleteError);
+            return 1;
+        }
+
+        return await zendeskBulkDeleteCommand.RunAsync(
+            Console.Out,
+            bulkDeleteOptions!);
+    }
+
+    /*
+     * Host-level developer utility.
+     *
+     * --production explicitly authorizes read-only Acronis calls.
+     * --names adds one row per customer tenant (customer names);
+     * --out writes those rows to a file outside any git working tree.
+     */
+    if (args.Length >= 2
+        && string.Equals(
+            args[0],
+            "dev",
+            StringComparison.OrdinalIgnoreCase)
+        && string.Equals(
+            args[1],
+            "acronis-usage",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        if (!AcronisUsageDevCommand.TryParseArguments(
+                args.Skip(2).ToArray(),
+                out var usageOptions,
+                out var usageError))
+        {
+            Console.Error.WriteLine(usageError);
+            return 1;
+        }
+
+        return await usageProbeCommand.RunAsync(
+            Console.Out,
+            usageOptions!);
+    }
+
+    /*
+     * Host-level developer utility: read-only comparison of Business
+     * Central backup quantities with Acronis usage. --production
+     * explicitly authorizes the read-only reads.
+     */
+    if (args.Length >= 2
+        && string.Equals(
+            args[0],
+            "dev",
+            StringComparison.OrdinalIgnoreCase)
+        && string.Equals(
+            args[1],
+            "usage-compare",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        if (!UsageCompareDevCommand.TryParseArguments(
+                args.Skip(2).ToArray(),
+                out var compareOptions,
+                out var compareError))
+        {
+            Console.Error.WriteLine(compareError);
+            return 1;
+        }
+
+        return await usageCompareCommand.RunAsync(
+            Console.Out,
+            compareOptions!);
+    }
+
+    /*
+     * Host-level developer utility.
+     *
+     * --production explicitly authorizes a read-only Business Central
+     * read with an interactive sign-in. Output is aggregate counts only.
+     */
+    if (args.Length >= 2
+        && string.Equals(
+            args[0],
+            "dev",
+            StringComparison.OrdinalIgnoreCase)
+        && string.Equals(
+            args[1],
+            "bc-subscriptions",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        if (args.Length != 3
+            || !string.Equals(
+                args[2],
+                "--production",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine(
+                "Usage: SupportToolkit dev bc-subscriptions " +
+                "--production");
+
+            return 1;
+        }
+
+        return await businessCentralDiagnosticsCommand.RunAsync(
+            Console.Out);
+    }
+
+    /*
+     * Host-level developer utility.
+     *
+     * --production explicitly authorizes read-only Business Central
+     * (interactive sign-in) and Acronis reads. Nothing is stored.
+     * --names additionally prints names and customer numbers.
+     */
+    if (args.Length >= 2
+        && string.Equals(
+            args[0],
+            "dev",
+            StringComparison.OrdinalIgnoreCase)
+        && string.Equals(
+            args[1],
+            "customer-matching",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        var matchingOptions =
+            args.Skip(2).ToArray();
+
+        var validMatchingArguments =
+            matchingOptions.Length is >= 1 and <= 3
+            && matchingOptions.Contains(
+                "--production",
+                StringComparer.OrdinalIgnoreCase)
+            && matchingOptions.All(
+                option =>
+                    option.Equals(
+                        "--production",
+                        StringComparison.OrdinalIgnoreCase)
+                    || option.Equals(
+                        "--names",
+                        StringComparison.OrdinalIgnoreCase)
+                    || option.Equals(
+                        "--why",
+                        StringComparison.OrdinalIgnoreCase))
+            && matchingOptions.Distinct(
+                StringComparer.OrdinalIgnoreCase).Count()
+                == matchingOptions.Length;
+
+        if (!validMatchingArguments)
+        {
+            Console.Error.WriteLine(
+                "Usage: SupportToolkit dev customer-matching " +
+                "--production [--names] [--why]");
+
+            return 1;
+        }
+
+        return await new CustomerMatchingDevCommand(
+                configurationResolver)
+            .RunAsync(
+                Console.Out,
+                showNames: matchingOptions.Contains(
+                    "--names",
+                    StringComparer.OrdinalIgnoreCase),
+                explainUnmatched: matchingOptions.Contains(
+                    "--why",
+                    StringComparer.OrdinalIgnoreCase));
+    }
+
+    /*
+     * Fixture-only monitoring-scope investigation.
+     *
+     * No external providers are accessed.
+     */
+    if (args.Length >= 2
+        && string.Equals(
+            args[0],
+            "dev",
+            StringComparison.OrdinalIgnoreCase)
+        && string.Equals(
+            args[1],
+            "monitoring-scope",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        if (args.Length != 2)
+        {
+            Console.Error.WriteLine(
+                "Usage: SupportToolkit dev monitoring-scope"
+            );
+
+            return 1;
+        }
+
+        return new MonitoringScopeFixtureCommand()
+            .Run(
+                Console.Out,
+                DateOnly.FromDateTime(
+                    DateTime.Today
+                )
+            );
+    }
+
+    /*
+     * Fixture-only customer mapping and shadow reconciliation.
+     *
+     * No external providers are accessed and nothing is persisted.
+     */
+    if (args.Length >= 2
+        && string.Equals(
+            args[0],
+            "dev",
+            StringComparison.OrdinalIgnoreCase)
+        && string.Equals(
+            args[1],
+            "customer-mapping",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        if (args.Length != 2)
+        {
+            Console.Error.WriteLine(
+                "Usage: SupportToolkit dev customer-mapping"
+            );
+
+            return 1;
+        }
+
+        return await new CustomerMappingFixtureCommand()
+            .RunAsync(
+                Console.Out,
+                DateOnly.FromDateTime(
+                    DateTime.Today
+                )
+            );
+    }
+
+    /*
+     * Fixture-only scoped BackupAggregator execution.
+     *
+     * Uses synthetic tenant selection and in-memory inventory
+     * providers. Does not affect production module dispatch.
+     */
+    if (args.Length >= 2
+        && string.Equals(
+            args[0],
+            "dev",
+            StringComparison.OrdinalIgnoreCase)
+        && string.Equals(
+            args[1],
+            "scoped-backup-review",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        if (args.Length != 2)
+        {
+            Console.Error.WriteLine(
+                "Usage: SupportToolkit dev scoped-backup-review"
+            );
+
+            return 1;
+        }
+
+        return await new ScopedBackupReviewFixtureCommand()
+            .RunAsync(
+                Console.Out,
+                DateOnly.FromDateTime(
+                    DateTime.Today
+                )
+            );
     }
 
     /*
@@ -203,14 +588,6 @@ static HttpErrorContext ResolveHttpErrorContext(
 
     if (string.Equals(
             command,
-            BackupHealthModule.ModuleCommand,
-            StringComparison.OrdinalIgnoreCase))
-    {
-        return HttpErrorContext.Acronis;
-    }
-
-    if (string.Equals(
-            command,
             BackupAggregatorModule.ModuleCommand,
             StringComparison.OrdinalIgnoreCase))
     {
@@ -256,13 +633,33 @@ static void PrintUsage(
     Console.WriteLine("Application commands:");
     Console.WriteLine(
         "  configure            Configure persistent settings and credentials.");
+    Console.WriteLine(
+        "  serve [--port <n>] [--no-browser]");
+    Console.WriteLine(
+        "                       Open the local web UI (127.0.0.1 only).");
     Console.WriteLine();
 
     Console.WriteLine("Developer diagnostics:");
     Console.WriteLine(
         "  dev acronis-tenants --production [--names]");
+    Console.WriteLine(
+        "  dev acronis-usage --production [--metric <name>]... [--tenant <text>] [--names [--out <path>]]");
+    Console.WriteLine(
+        "  dev usage-compare --production [--metric <name>] [--names]");
+    Console.WriteLine(
+        "  dev bc-subscriptions --production");
+    Console.WriteLine(
+        "  dev zendesk-bulk-delete --production [--organization <name>] [--sender <name>] " +
+        "[--requester <email>] [--domain <domain>] [--text <text>] " +
+        "[--dry-run | --delete [--include <ids>] [--exclude <ids>] [--receipt-dir <path>]]");
     Console.WriteLine();
 
+    Console.WriteLine("  dev monitoring-scope");
+    Console.WriteLine("  dev scoped-backup-review");
+    Console.WriteLine("  dev customer-mapping");
+    Console.WriteLine(
+        "  dev customer-matching --production [--names] [--why]");
+    Console.WriteLine();
     Console.WriteLine("Modules:");
 
     foreach (var module in modules)

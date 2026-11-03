@@ -3,7 +3,7 @@ using SupportToolkit.Modules.BackupAggregator.Models;
 
 namespace SupportToolkit.Modules.BackupAggregator.Reporting;
 
-internal static class BackupReportEntryPresentation
+public static class BackupReportEntryPresentation
 {
     public static string GetDisplayStatus(
         BackupReportEntry entry)
@@ -101,16 +101,7 @@ internal static class BackupReportEntryPresentation
             return $"Completed - {ToDisplayText(result)}";
         }
 
-        if (string.Equals(
-                state,
-                "running",
-                StringComparison.OrdinalIgnoreCase
-            )
-            || string.Equals(
-                state,
-                "backup",
-                StringComparison.OrdinalIgnoreCase
-            ))
+        if (BackupResourceStates.IsInProgress(state))
         {
             return "In progress";
         }

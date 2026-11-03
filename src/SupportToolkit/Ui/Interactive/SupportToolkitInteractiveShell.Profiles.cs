@@ -5,9 +5,6 @@ using SupportToolkit.Core.Ticketing.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Modules.BackupAggregator.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Services;
-using SupportToolkit.Modules.BackupHealth.Models;
-using SupportToolkit.Modules.BackupHealth.Reporting;
-using SupportToolkit.Modules.BackupHealth.Services;
 
 namespace SupportToolkit.Ui.Interactive;
 
