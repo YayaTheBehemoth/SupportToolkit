@@ -87,7 +87,7 @@ public class CustomerMatchingInputTests
         Assert.Equal(1, build.DeletedCustomerTenants);
         Assert.Equal(
             [TenantA, TenantB],
-            build.Parties.Select(party => party.Id).Order());
+            build.Parties.Select(party => party.Id).Order(StringComparer.Ordinal));
         Assert.DoesNotContain(build.Parties, party => party.Id == OwnCustomer);
     }
 
