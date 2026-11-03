@@ -398,6 +398,31 @@ public class ZendeskSearchTests
         Assert.Equal("Example Org 11", names[11]);
     }
 
+    [Fact]
+    public async Task TheTicketText_IsReadFromTheSearchResult_AndMissingTextIsNull()
+    {
+        var server =
+            new FakeZendesk(
+                total: 2,
+                rawPages:
+                [
+                    """
+                    {"count":2,"next_page":null,"results":[
+                      {"id":1,"result_type":"ticket","status":"closed",
+                       "description":"Example ticket text"},
+                      {"id":2,"result_type":"ticket","status":"closed"}]}
+                    """
+                ]);
+
+        var result =
+            await Provider(server).SearchTicketsAsync(Criteria());
+
+        Assert.Equal("Example ticket text", result.Tickets[0].Description);
+
+        // No text is unknown, not an empty string.
+        Assert.Null(result.Tickets[1].Description);
+    }
+
     private static ZendeskSearchCriteria Criteria() =>
         new(FreeText: "example");
 

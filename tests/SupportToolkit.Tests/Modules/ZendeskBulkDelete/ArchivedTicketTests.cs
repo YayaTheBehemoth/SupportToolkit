@@ -65,3 +65,52 @@ public class ArchivedTicketTests
         Assert.Equal("Example ticket text", preview.Tickets[0].Description);
     }
 }
+
+/// <summary>
+/// The ticket text is customer content. It is shown on screen and kept in
+/// memory only: it must never be written to the receipt.
+/// </summary>
+public class TicketTextPrivacyTests : IDisposable
+{
+    private readonly string _receipts = NewTempDirectory();
+
+    public void Dispose()
+    {
+        Directory.Delete(_receipts, recursive: true);
+    }
+
+    [Fact]
+    public async Task TheTicketText_AndSubject_NeverReachTheReceipt()
+    {
+        const string Secret = "EXAMPLE-PRIVATE-TICKET-TEXT-7f3a";
+
+        var tickets =
+            Closed(3)
+                .Select(t => t with { Description = Secret })
+                .ToArray();
+
+        var preview = Preview(tickets);
+
+        // The text is in the preview, as the page needs it...
+        Assert.All(preview.Preview.Tickets, t => Assert.Equal(Secret, t.Description));
+
+        var plan = Plan(tickets);
+
+        await Executor(new FakeDeleteApi(), _receipts)
+            .ExecuteAsync(plan, new DeletionConfirmation(3, null));
+
+        // ...but not in anything written to disk.
+        var written =
+            Directory.GetFiles(_receipts)
+                .Select(File.ReadAllText)
+                .ToArray();
+
+        Assert.NotEmpty(written);
+
+        foreach (var content in written)
+        {
+            Assert.DoesNotContain(Secret, content);
+            Assert.DoesNotContain("Example subject", content);
+        }
+    }
+}
