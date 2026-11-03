@@ -19,9 +19,9 @@ This is a modular .NET 10/C# MSP automation CLI. Implementation and tests in thi
 
 SupportToolkitNotes has a separate sanitized documentation workflow; permission there never grants Git permission here.
 
-## Current snapshot (3 Nov 2026; verify before relying)
+## Current snapshot (4 Nov 2026; verify before relying)
 
-- Released `main`: `v0.4.0`, which adds the local web UI (`serve`: Profile, Backup Aggregator and Zendesk bulk delete pages, with a Simple/Detailed view), `configure import` with double-click launchers in the zip, and settings that survive a save. `v0.3.0` added the Business Central monitoring scope; `v0.2.4` and `v0.2.3` are earlier baselines.
+- Released `main`: `v0.4.1`, which adds the provider-agnostic usage report (`usage-report`, web page `/usage`), the manual/automatic review mode, Zendesk archive warnings, Nordic-letter name matching, and moves all Backup Aggregator provider wiring into `Modules/BackupAggregator/Production/` (enforced by `LayeringTests`). `v0.4.0` added the local web UI (`serve`: Profile, Backup Aggregator and Zendesk bulk delete pages, with a Simple/Detailed view), `configure import` with double-click launchers in the zip, and settings that survive a save. `v0.3.0` added the Business Central monitoring scope; `v0.2.4` and `v0.2.3` are earlier baselines.
 - `feature/compliance-investigation`: fixture-driven compliance evidence and consolidated report; no production Graph authorization. It contains `main` as of `v0.4.0`.
 - Business Central entitlement and tenant scoping shipped in `v0.3.0`; its live validation was limited and read-only.
 - Zendesk ticket routing and the bulk delete (including real deletion) were tested only in a personal account or sandbox; company end-to-end integration needs separate authorized validation.

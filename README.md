@@ -19,7 +19,7 @@ SupportToolkit currently includes:
 
 The application supports fixture-based development and production integrations through the same underlying workflows.
 
-**Current release:** [`v0.4.0`](https://github.com/YayaTheBehemoth/SupportToolkit/releases) (Windows x64 prerelease). See [Release history](#release-history) for what changed and why, and [Development branches](#development-branches) for work that is not part of `main` yet.
+**Current release:** [`v0.4.1`](https://github.com/YayaTheBehemoth/SupportToolkit/releases) (Windows x64 prerelease). See [Release history](#release-history) for what changed and why, and [Development branches](#development-branches) for work that is not part of `main` yet.
 
 ## Getting started
 
@@ -1140,6 +1140,7 @@ Releases are published as Windows x64 prereleases on the [GitHub Releases page](
 
 | Version | Tagged commit date | Summary | Why |
 |---|---|---|---|
+| `v0.4.1` | 2026-11-04 | Usage report (`usage-report`, and a Usage report page in `serve`): each customer's Acronis storage beside the quantity and amount billed in Business Central, with inactive subscriptions, usage not yet reported and tenants without a subscription listed apart. Manual reviews no longer wait for in-progress backups; automatic runs still do. Zendesk bulk delete warns about likely-archived tickets and can fold out a ticket's text. Customer matching accepts a Danish letter written plain (`ø` as `o`, `å` as `a`). The Backup Aggregator's rules no longer depend on Acronis, Business Central or Zendesk; its output is unchanged. | Finance compared usage with billing by hand every month. A new customer whose name was written without `ø` in Acronis went unmatched. |
 | `v0.4.0` | 2026-11-03 | Local web UI (`serve`, or double-click `Start SupportToolkit.cmd`): profile selection, the Backup Aggregator review and ticket, and Zendesk bulk delete with typed confirmations and receipts, with a Simple / Detailed view. `configure import` moves a handed-over settings file into place and asks for the secrets it needs. Saving now keeps settings the program does not recognise. The console and its commands are unchanged. | The console was hard to hand to colleagues. Both interfaces now sit on the same session rules, so they cannot diverge. |
 | `v0.3.0` | 2026-10-27 | Business Central monitoring scope: entitlement from subscription records decides which Acronis tenants are reviewed, with automatic name-based customer matching, always-included operator tenant, scope completeness reporting and scoped tickets. Interactive console offers the scoped review only. | The review needed to cover exactly the customers entitled to monitoring, not every tenant. |
 | `v0.2.4` | 2026-10-19 | Corrected Teams and SharePoint workload accounting in BackupAggregator. | Comparisons against live data showed Team-associated Groups with their own protected SITE workload being collapsed into the Team, undercounting resources. |
