@@ -29,8 +29,9 @@
 <div class="banner prod">
     <strong>This deletes real tickets from @(_availability.Subdomain).zendesk.com</strong>
     <span>
-        Zendesk keeps deleted tickets for 30 days. Nothing is deleted until you
-        have typed the confirmations below.
+        Zendesk keeps deleted tickets for 30 days, except old closed tickets that
+        Zendesk has archived: those cannot be restored from Zendesk's deleted
+        tickets at all. Nothing is deleted until you have typed the confirmations below.
     </span>
 </div>
 
@@ -215,7 +216,7 @@ else if (session is not null)
     <table>
         <thead>
         <tr>
-            <th></th><th>Ticket</th><th>Status</th>
+            <th></th><th></th><th>Ticket</th><th>Status</th>
             @if (State.View.IsDetailed) { <th>Updated (UTC)</th> }
             <th>Organization</th>
             @if (State.View.IsDetailed) { <th>Domain</th> }
@@ -228,6 +229,8 @@ else if (session is not null)
             var id = ticket.Id;
             var selectable = ticket.Flag != DeletionPreviewFlag.ClosedWithin24Hours;
 
+            var open = _expanded.Contains(id);
+
             <tr class="@(ticket.Flag is null ? "" : "exception")">
                 <td>
                     <input type="checkbox"
@@ -235,14 +238,43 @@ else if (session is not null)
                            disabled="@(!selectable || !idle)"
                            @onchange="e => Toggle(id, (bool)e.Value!)" />
                 </td>
+                <td>
+                    <button type="button" class="secondary fold"
+                            aria-expanded="@open"
+                            title="@(open ? "Hide the ticket text" : "Show the ticket text")"
+                            @onclick="() => Fold(id)">@(open ? "▾" : "▸")</button>
+                </td>
                 <td>#@ticket.Id</td>
                 <td>@ticket.Status</td>
                 @if (State.View.IsDetailed) { <td>@Date(ticket.UpdatedAt)</td> }
                 <td>@ticket.Organization</td>
                 @if (State.View.IsDetailed) { <td>@ticket.RequesterDomain</td> }
                 <td>@Subject(ticket.Subject)</td>
-                <td class="muted">@Describe(ticket.Flag)</td>
+                <td class="muted">
+                    @Describe(ticket.Flag)
+                    @if (ticket.LikelyArchived)
+                    {
+                        <span class="badge warn">probably archived: not restorable from Zendesk</span>
+                    }
+                </td>
             </tr>
+
+            @if (open)
+            {
+                <tr class="ticket-text">
+                    <td></td>
+                    <td colspan="@(State.View.IsDetailed ? 8 : 6)">
+                        @if (string.IsNullOrWhiteSpace(ticket.Description))
+                        {
+                            <span class="muted">Zendesk returned no ticket text for this ticket.</span>
+                        }
+                        else
+                        {
+                            <pre>@ticket.Description</pre>
+                        }
+                    </td>
+                </tr>
+            }
         }
         </tbody>
     </table>
@@ -267,6 +299,19 @@ else if (session is not null)
             <dt>Not closed</dt><dd>@plan.NonClosed.Count</dd>
         </dl>
         <p class="muted">Only the tickets you ticked will be deleted. The search is not run again.</p>
+
+        @if (plan.LikelyArchived.Count > 0)
+        {
+            <div class="banner bad">
+                <strong>@plan.LikelyArchived.Count of these tickets were closed long ago and are probably archived.</strong>
+                <span>
+                    A deleted archived ticket does NOT appear in Zendesk's deleted tickets and cannot be
+                    restored from the Zendesk interface. It can only be restored through the API by ticket
+                    ID, using the receipt.
+                </span>
+                <span>@string.Join("  ", plan.LikelyArchived.Select(t => "#" + t.Id))</span>
+            </div>
+        }
 
         @if (State.View.IsDetailed)
         {
@@ -412,6 +457,8 @@ else if (session is not null)
     private string _domain = "";
     private string _text = "";
 
+    private readonly HashSet<long> _expanded = [];
+
     private string? _selectionMessage;
     private bool _showDryRun;
     private string _typedCount = "";
@@ -451,6 +498,7 @@ else if (session is not null)
     {
         _selectionMessage = null;
         _showDryRun = false;
+        _expanded.Clear();
         ClearTyped();
 
         State.BulkDelete!.StartSearch(
@@ -467,6 +515,14 @@ else if (session is not null)
             selected
                 ? State.BulkDelete!.Select([id])
                 : State.BulkDelete!.Deselect([id]);
+
+    private void Fold(long id)
+    {
+        if (!_expanded.Remove(id))
+        {
+            _expanded.Add(id);
+        }
+    }
 
     private void SelectAll() =>
         _selectionMessage = State.BulkDelete!.SelectAll();

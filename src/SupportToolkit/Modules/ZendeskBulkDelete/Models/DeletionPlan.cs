@@ -6,7 +6,8 @@ public sealed record PlannedTicket(
     long Id,
     string Status,
     DeletionPreviewFlag? Flag,
-    DateTimeOffset? UpdatedAt);
+    DateTimeOffset? UpdatedAt,
+    bool LikelyArchived = false);
 
 /// <summary>
 /// The exact, frozen list of tickets a deletion will send.
@@ -61,6 +62,13 @@ public sealed class DeletionPlan
     /// </summary>
     public IReadOnlyList<PlannedTicket> NonClosed =>
         Tickets.Where(ticket => ticket.Flag is not null).ToArray();
+
+    /// <summary>
+    /// Closed tickets old enough to be archived. Once deleted they are not
+    /// in Zendesk's deleted-tickets view.
+    /// </summary>
+    public IReadOnlyList<PlannedTicket> LikelyArchived =>
+        Tickets.Where(ticket => ticket.LikelyArchived).ToArray();
 
     /// <summary>The IDs in request-sized groups, in order.</summary>
     public IReadOnlyList<IReadOnlyList<long>> Batches =>
@@ -121,7 +129,8 @@ public sealed class DeletionPlan
                         ticket.Id,
                         ticket.Status,
                         ticket.Flag,
-                        ticket.UpdatedAt))
+                        ticket.UpdatedAt,
+                        ticket.LikelyArchived))
                 .OrderBy(ticket => ticket.Id)
                 .ToArray());
     }

@@ -29,7 +29,9 @@ public sealed record DeletionPreviewTicket(
     string RequesterDomain,
     DateTimeOffset? UpdatedAt,
     bool Selected,
-    DeletionPreviewFlag? Flag);
+    DeletionPreviewFlag? Flag,
+    bool LikelyArchived = false,
+    string? Description = null);
 
 public sealed record PreviewGroup(
     string Name,

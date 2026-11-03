@@ -32,6 +32,9 @@ public sealed class ZendeskSearchTicketDto
     [JsonPropertyName("subject")]
     public string? Subject { get; init; }
 
+    [JsonPropertyName("description")]
+    public string? Description { get; init; }
+
     [JsonPropertyName("requester_id")]
     public long? RequesterId { get; init; }
 

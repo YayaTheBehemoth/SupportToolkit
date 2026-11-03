@@ -11,7 +11,8 @@ public sealed record ZendeskTicketSummary(
     long? RequesterId,
     long? OrganizationId,
     DateTimeOffset? CreatedAt,
-    DateTimeOffset? UpdatedAt);
+    DateTimeOffset? UpdatedAt,
+    string? Description = null);
 
 /// <summary>
 /// The tickets a search returned, with an explicit completeness verdict.
@@ -111,7 +112,8 @@ public sealed class ZendeskTicketSearchProvider
                         result.RequesterId,
                         result.OrganizationId,
                         ParseDate(result.CreatedAt),
-                        ParseDate(result.UpdatedAt)));
+                        ParseDate(result.UpdatedAt),
+                        result.Description));
             }
 
             if (string.IsNullOrWhiteSpace(dto.NextPage))
