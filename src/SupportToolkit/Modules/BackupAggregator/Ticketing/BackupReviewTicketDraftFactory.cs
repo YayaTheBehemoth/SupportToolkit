@@ -16,8 +16,16 @@ namespace SupportToolkit.Modules.BackupAggregator.Ticketing;
 /// </summary>
 public sealed class BackupReviewTicketDraftFactory
 {
+    /// <param name="scopeNote">
+    /// Optional line saying what the review covered, for reviews
+    /// limited to a subset of tenants. Omitted for a full review.
+    /// </param>
     public TicketDraft Create(
-        AggregatedBackupReport report)
+        AggregatedBackupReport report,
+        string? scopeNote = null,
+        IReadOnlyList<string>? scopeTenantLines = null,
+        IReadOnlyList<string>? strayLines = null,
+        string? scopeWarning = null)
     {
         ArgumentNullException.ThrowIfNull(
             report
@@ -31,12 +39,17 @@ public sealed class BackupReviewTicketDraftFactory
         {
             Subject =
                 BuildSubject(
-                    report
+                    report,
+                    scopeWarning
                 ),
 
             Body =
                 BuildBody(
-                    report
+                    report,
+                    scopeNote,
+                    scopeTenantLines,
+                    strayLines,
+                    scopeWarning
                 )
         };
     }
@@ -70,8 +83,28 @@ public sealed class BackupReviewTicketDraftFactory
     }
 
     private static string BuildSubject(
+        AggregatedBackupReport report,
+        string? scopeWarning)
+    {
+        var prefix =
+            string.IsNullOrWhiteSpace(scopeWarning)
+                ? string.Empty
+                : "[INCOMPLETE SCOPE] ";
+
+        return prefix + BuildSubjectCore(report);
+    }
+
+    private static string BuildSubjectCore(
         AggregatedBackupReport report)
     {
+        if (report.FindingsCount == 0
+            && report.UnknownRowsCount == 0
+            && report.InProgressPending > 0)
+        {
+            return
+                "Backup review - backups still in progress";
+        }
+
         if (report.FindingsCount == 0
             && report.UnknownRowsCount == 0)
         {
@@ -88,7 +121,11 @@ public sealed class BackupReviewTicketDraftFactory
     }
 
     private static string BuildBody(
-        AggregatedBackupReport report)
+        AggregatedBackupReport report,
+        string? scopeNote,
+        IReadOnlyList<string>? scopeTenantLines,
+        IReadOnlyList<string>? strayLines,
+        string? scopeWarning)
     {
         var builder =
             new StringBuilder();
@@ -97,7 +134,54 @@ public sealed class BackupReviewTicketDraftFactory
             "SUPPORTTOOLKIT // BACKUP REVIEW"
         );
 
+        if (!string.IsNullOrWhiteSpace(scopeWarning))
+        {
+            builder.AppendLine(
+                "!!! " + Inline(scopeWarning) + " !!!"
+            );
+
+            builder.AppendLine();
+        }
+
         builder.AppendLine();
+
+        if (!string.IsNullOrWhiteSpace(scopeNote))
+        {
+            builder.AppendLine(
+                "SCOPE"
+            );
+
+            builder.AppendLine(
+                Inline(
+                    scopeNote
+                )
+            );
+
+            foreach (var line in scopeTenantLines ?? [])
+            {
+                builder.AppendLine(
+                    "- " + Inline(line)
+                );
+            }
+
+            builder.AppendLine();
+        }
+
+        if (strayLines is { Count: > 0 })
+        {
+            builder.AppendLine(
+                "STRAY TENANT CHECK"
+            );
+
+            foreach (var line in strayLines)
+            {
+                builder.AppendLine(
+                    Inline(line)
+                );
+            }
+
+            builder.AppendLine();
+        }
 
         AppendSummary(
             builder,
@@ -151,6 +235,21 @@ public sealed class BackupReviewTicketDraftFactory
         builder.AppendLine(
             $"Unclassified: {report.UnknownRowsCount}"
         );
+
+        if (report.InProgressPending > 0)
+        {
+            var when =
+                report.InProgressWait is null
+                    ? "at review time"
+                    : "after waiting";
+
+            builder.AppendLine(
+                $"Still in progress {when}: " +
+                $"{report.InProgressPending} resource(s) in " +
+                $"{report.InProgressPendingTenants} tenant(s). Their " +
+                "result is not final."
+            );
+        }
 
         builder.AppendLine();
     }

@@ -3,6 +3,7 @@ using SupportToolkit.Modules.BackupAggregator.Reporting;
 
 namespace SupportToolkit.Tests.Modules.BackupAggregator;
 
+[Collection("ConsoleOutput")]
 public class ConsoleBackupAggregatorReporterTests
 {
     [Fact]

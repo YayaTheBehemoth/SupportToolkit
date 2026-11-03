@@ -11,7 +11,7 @@ This is a modular .NET 10/C# MSP automation CLI. Implementation and tests in thi
 - Preserve explicit unknown/failed/incomplete reporting; never turn missing or contradictory data into a success assertion.
 - Treat external integrations as read-only unless a particular write is explicitly authorized. Do not run real production API calls or create tickets as part of a coding task without approval.
 - Never include credentials, tokens, customer or tenant identifiers, private support tickets, real payloads, or internal investigative procedures in public code, tests, logs, documentation or AI prompts.
-- Do not impose a universal web, desktop, hosting, scheduling or persistent-state architecture. Module operational requirements and future user interfaces are still under discovery.
+- Do not impose a universal hosting, scheduling or persistent-state architecture. A local, loopback-only web UI (`serve`, in `src/SupportToolkit/Ui/Web`) exists by the user's decision, as one thin interface beside the console, not as a hosting model. Keep the rules in modules and sessions (for example `BackupReviewSession`, `BulkDeleteReviewSession`) so the console and the web cannot diverge; `LayeringTests` enforces that nothing below `Ui` uses the console or a web/desktop framework. Module operational requirements and any other user interface are still under discovery.
 
 ## Git ownership
 
@@ -19,11 +19,11 @@ This is a modular .NET 10/C# MSP automation CLI. Implementation and tests in thi
 
 SupportToolkitNotes has a separate sanitized documentation workflow; permission there never grants Git permission here.
 
-## Current snapshot (21 Oct 2026; verify before relying)
+## Current snapshot (3 Nov 2026; verify before relying)
 
-- Released `main`: `v0.2.4`, including a Teams/SharePoint workload accounting correction in BackupAggregator; `v0.2.3` was the earlier core stabilization baseline.
-- `feature/compliance-investigation`: fixture-driven compliance evidence and consolidated report; no production Graph authorization.
-- `feature/business-central-monitoring-scope`: fixture-driven entitlement and tenant scoping; no production BC acquisition or identity mapping.
-- Zendesk trial routing was tested in a personal account; company end-to-end integration needs separate authorized validation.
+- Released `main`: `v0.4.0`, which adds the local web UI (`serve`: Profile, Backup Aggregator and Zendesk bulk delete pages, with a Simple/Detailed view), `configure import` with double-click launchers in the zip, and settings that survive a save. `v0.3.0` added the Business Central monitoring scope; `v0.2.4` and `v0.2.3` are earlier baselines.
+- `feature/compliance-investigation`: fixture-driven compliance evidence and consolidated report; no production Graph authorization. It contains `main` as of `v0.4.0`.
+- Business Central entitlement and tenant scoping shipped in `v0.3.0`; its live validation was limited and read-only.
+- Zendesk ticket routing and the bulk delete (including real deletion) were tested only in a personal account or sandbox; company end-to-end integration needs separate authorized validation.
 
 For current priorities and decisions consult SupportToolkitNotes, especially `Strategy Checkpoint - 2026-10-20.md`, `Architecture and Decisions.md`, and `Roadmap.md`. If Notes aren't mounted locally, request the relevant files or use an authorized connector rather than assuming they are available.

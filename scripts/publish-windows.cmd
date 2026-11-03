@@ -67,6 +67,20 @@ if not exist "%PUBLISH_DIR%\SupportToolkit.exe" (
     goto failed
 )
 
+rem Launchers for people who should not need a console command.
+copy /y "scripts\launchers\*.cmd" "%PUBLISH_DIR%\" >nul
+if errorlevel 1 goto failed
+
+if not exist "%PUBLISH_DIR%\Start SupportToolkit.cmd" (
+    echo ERROR: Start SupportToolkit.cmd missing from the publish folder.
+    goto failed
+)
+
+if not exist "%PUBLISH_DIR%\Import config.cmd" (
+    echo ERROR: Import config.cmd missing from the publish folder.
+    goto failed
+)
+
 rem --------------------------------------------------
 rem 4. Create ZIP
 rem --------------------------------------------------
@@ -102,7 +116,7 @@ echo.
 echo [5/5] Validating ZIP package...
 
 powershell -NoProfile -NonInteractive -Command ^
-    "$ErrorActionPreference = 'Stop'; Add-Type -AssemblyName System.IO.Compression.FileSystem; $archive = (Resolve-Path '%PACKAGE_DIR%\%PACKAGE_NAME%').Path; $zip = [System.IO.Compression.ZipFile]::OpenRead($archive); try { if (-not ($zip.Entries | Where-Object { $_.FullName -eq 'SupportToolkit.exe' })) { throw 'SupportToolkit.exe missing from ZIP' }; foreach ($entry in $zip.Entries) { if ($entry.Name) { $stream = $entry.Open(); try { $stream.CopyTo([System.IO.Stream]::Null) } finally { $stream.Dispose() } } }; Write-Host 'ZIP validation passed.' } finally { $zip.Dispose() }"
+    "$ErrorActionPreference = 'Stop'; Add-Type -AssemblyName System.IO.Compression.FileSystem; $archive = (Resolve-Path '%PACKAGE_DIR%\%PACKAGE_NAME%').Path; $zip = [System.IO.Compression.ZipFile]::OpenRead($archive); try { foreach ($required in 'SupportToolkit.exe','Start SupportToolkit.cmd','Import config.cmd') { if (-not ($zip.Entries | Where-Object { $_.FullName -eq $required })) { throw ($required + ' missing from ZIP') } }; foreach ($entry in $zip.Entries) { if ($entry.Name) { $stream = $entry.Open(); try { $stream.CopyTo([System.IO.Stream]::Null) } finally { $stream.Dispose() } } }; Write-Host 'ZIP validation passed.' } finally { $zip.Dispose() }"
 
 if errorlevel 1 goto failed
 

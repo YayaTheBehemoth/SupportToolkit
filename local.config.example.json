@@ -18,28 +18,68 @@
           "operations": { "groupId": 222222 }
         }
       }
+    },
+    "zendeskDeletion": {
+      "example-deletion": {
+        "subdomain": "example",
+        "clientId": "example-public-client-id"
+      }
+    },
+    "businessCentral": {
+      "example-bc": {
+        "tenantId": "00000000-0000-0000-0000-000000000001",
+        "clientId": "00000000-0000-0000-0000-000000000002",
+        "environment": "example-environment",
+        "companyId": "00000000-0000-0000-0000-000000000003",
+        "companyName": "Example Company",
+        "apiPublisher": "example",
+        "apiGroup": "subscriptions",
+        "apiVersion": "v1.0"
+      }
     }
   },
   "profiles": {
     "local-dev": {
       "modules": {
-        "backup-aggregator": "fixture",
-        "backup-health": "fixture"
+        "backup-aggregator": "fixture"
       }
     },
     "zendesk-sandbox": {
       "zendeskConnection": "example-sandbox",
       "zendeskDestination": "dev",
       "modules": {
-        "backup-aggregator": "fixture",
-        "backup-health": "fixture"
+        "backup-aggregator": "fixture"
+      }
+    },
+    "zendesk-deletion": {
+      "zendeskDeletionConnection": "example-deletion",
+      "modules": {
+        "backup-aggregator": "fixture"
       }
     },
     "readonly-validation": {
       "acronisConnection": "example-production",
       "modules": {
-        "backup-aggregator": "production",
-        "backup-health": "fixture"
+        "backup-aggregator": "production"
+      }
+    },
+    "scoped-review": {
+      "acronisConnection": "example-production",
+      "businessCentralConnection": "example-bc",
+      "monitoringScope": {
+        "backup-aggregator": {
+          "monitoringItemNumber": "EXAMPLE-ADDON",
+          "serviceItemNumbers": ["EXAMPLE-BACKUP", "EXAMPLE-BACKUP-2"]
+        }
+      },
+      "review": {
+        "backup-aggregator": {
+          "inProgressMaxWaitSeconds": 1800,
+          "inProgressPollIntervalSeconds": 30
+        }
+      },
+      "modules": {
+        "backup-aggregator": "production"
       }
     }
   }

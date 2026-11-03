@@ -1,0 +1,370 @@
+@page "/aggregator"
+@implements IDisposable
+@inject WebAppState State
+
+<h1>Backup Aggregator</h1>
+
+@if (State.Aggregator is not { } session)
+{
+    <div class="banner warn">The Backup Aggregator is not available in this host.</div>
+    return;
+}
+
+@if (_availability is null)
+{
+    <p class="muted">Loading...</p>
+    return;
+}
+
+@{
+    var production = _availability.Mode == SupportToolkitMode.Production;
+}
+
+<div class="banner @(production ? "prod" : "ok")">
+    <strong>@(production ? "PRODUCTION: real customer data" : "FIXTURE: synthetic data only")</strong>
+    <span>
+        @(production
+            ? "This review reads live Acronis and Business Central data. Customer names appear on screen."
+            : "No external system is contacted.")
+    </span>
+</div>
+
+@if (!_availability.IsAvailable)
+{
+    <div class="banner warn">
+        <strong>The monitored review is not available.</strong>
+        <span>@_availability.Reason</span>
+    </div>
+    return;
+}
+
+<div class="actions">
+    <button type="button" disabled="@session.IsRunning" @onclick="Start">
+        @(session.Review.CurrentReview is null ? "Run review" : "Refresh review")
+    </button>
+
+    @if (session.IsRunning)
+    {
+        <button type="button" class="secondary" @onclick="session.Cancel">Cancel</button>
+    }
+</div>
+
+@if (session.IsRunning || session.Progress.Snapshot().Count > 0)
+{
+    <section class="card">
+        <header>
+            <h3>Progress</h3>
+            <span class="badge @(session.IsRunning ? "neutral" : "ok")">
+                @(session.IsRunning ? "running" : "done")
+            </span>
+        </header>
+        <pre class="log">@string.Join("\n", session.Progress.Snapshot().TakeLast(State.View.IsDetailed ? 15 : 1))</pre>
+    </section>
+}
+
+@switch (session.State)
+{
+    case ReviewRunState.Failed:
+        <div class="banner bad">
+            <strong>The review failed. No review is current.</strong>
+            <span>@session.Error</span>
+        </div>
+        break;
+    case ReviewRunState.Cancelled:
+        <div class="banner warn"><strong>The review was cancelled. No review is current.</strong></div>
+        break;
+}
+
+@if (session.Review.CurrentReview is { } review && !session.IsRunning)
+{
+    var inventory = BackupReviewView.From(review.Inventory);
+    var completeness = CompletenessView.From(review);
+    var scope = ScopeView.From(review);
+
+    <div class="banner @(completeness.OverallComplete ? "ok" : "warn")">
+        <strong>@(completeness.OverallComplete ? "Complete review" : "Incomplete review")</strong>
+        <span>
+            Inventory complete: @YesNo(completeness.InventoryComplete).
+            Monitoring scope complete: @YesNo(completeness.ScopeComplete).
+        </span>
+        @foreach (var blocker in completeness.Blockers)
+        {
+            <span>@blocker</span>
+        }
+    </div>
+
+    @if (inventory.Trust == InventoryTrust.AccountingError)
+    {
+        <div class="banner bad">
+            <strong>Accounting error: the result cannot be trusted.</strong>
+            <span>
+                Expected @inventory.ResourcesChecked resources, accounted for
+                @inventory.ResourcesAccounted. Detail is withheld.
+            </span>
+        </div>
+    }
+
+    @if (inventory.InProgressPending > 0)
+    {
+        <div class="banner warn">
+            @inventory.InProgressPending resource(s) were still in progress when the review ended.
+            Their result is not final.
+        </div>
+    }
+
+    @* Totals only: the problem counts are on the tabs below. *@
+    <section class="card">
+        <header><h3>Checked</h3></header>
+        <dl>
+            <dt>Tenants reviewed</dt><dd>@inventory.TenantsReviewed of @inventory.TenantsAttempted</dd>
+            @if (State.View.IsDetailed)
+            {
+                <dt>Tenants needing attention</dt><dd>@inventory.TenantsRequiringAttention</dd>
+            }
+            <dt>Backup resources checked</dt><dd>@inventory.ResourcesChecked</dd>
+            <dt>Healthy</dt><dd>@inventory.Healthy</dd>
+        </dl>
+    </section>
+
+    @if (inventory.NothingReviewed)
+    {
+        <p class="muted">
+            @(inventory.TenantsFailed > 0
+                ? "No backup resources were successfully reviewed."
+                : "No backup resources were available for review.")
+        </p>
+    }
+
+    @* Scope and reconciliation are technical: if the view is simplified
+       while one is open, fall back to the first tab. *@
+    @if (!State.View.IsDetailed && _tab is "scope" or "reconciliation")
+    {
+        _tab = "attention";
+    }
+
+    <div class="tabs" role="tablist">
+        @foreach (var (key, title) in Tabs(inventory, scope, State.View.IsDetailed))
+        {
+            var selected = key;
+            <button type="button" role="tab"
+                    class="tab @(_tab == key ? "selected" : "")"
+                    @onclick="() => _tab = selected">@title</button>
+        }
+    </div>
+
+    @if (!State.View.IsDetailed && scope is not null)
+    {
+        <p class="muted">How tenants were chosen, and the reconciliation, are in the Detailed view.</p>
+    }
+
+    @switch (_tab)
+    {
+        case "attention":
+            <TenantEntries Tenants="inventory.Attention" Empty="Nothing requires attention." />
+            break;
+        case "unclassified":
+            <TenantEntries Tenants="inventory.UnclassifiedTenants" Empty="Nothing is unclassified." ShowReason="true" />
+            break;
+        case "incomplete":
+            @if (inventory.Incomplete.Count == 0)
+            {
+                <p class="muted">Every attempted tenant was reviewed.</p>
+            }
+            else
+            {
+                <table>
+                    <thead><tr><th>Tenant</th><th>Stage</th><th>Reason</th></tr></thead>
+                    <tbody>
+                    @foreach (var failure in inventory.Incomplete)
+                    {
+                        <tr><td>@failure.Tenant</td><td>@failure.Stage</td><td>@failure.Reason</td></tr>
+                    }
+                    </tbody>
+                </table>
+            }
+            break;
+        case "scope":
+            <ScopeTables Scope="scope" />
+            break;
+        case "reconciliation":
+            <ReconciliationTables Scope="scope" />
+            break;
+    }
+
+    <h2>Ticket</h2>
+
+    <div class="actions">
+        <button type="button"
+                disabled="@(completeness.TicketOutcome == TicketOutcome.Blocked || session.IsSubmitting)"
+                @onclick="Prepare">Prepare ticket</button>
+    </div>
+
+    @if (completeness.TicketOutcome == TicketOutcome.AllowedWithIncompleteScopeBanner)
+    {
+        <p class="muted">A ticket can be created but will carry an INCOMPLETE SCOPE banner.</p>
+    }
+
+    @if (_notReady is not null)
+    {
+        <div class="banner warn">
+            <strong>@NotReadyTitle(_notReady.Kind)</strong>
+            @foreach (var reason in _notReady.Reasons)
+            {
+                <span>@reason</span>
+            }
+        </div>
+    }
+
+    @* Only when the ticket cannot be created for want of a destination:
+       the text is still shown, so it can be read. *@
+    @if (_draft is not null)
+    {
+        <section class="card">
+            <header><h3>@_draft.Subject</h3><span class="badge neutral">draft only</span></header>
+            <pre class="log">@_draft.Body</pre>
+        </section>
+    }
+
+    @if (session.PendingPlan is { } plan)
+    {
+        <section class="card confirm">
+            <header><h3>Confirm ticket</h3></header>
+            <dl>
+                <dt>Zendesk instance</dt><dd>@plan.Destination.InstanceHost</dd>
+                <dt>Destination</dt><dd>@plan.Destination.DestinationName</dd>
+                @if (State.View.IsDetailed)
+                {
+                    <dt>Group ID</dt><dd>@plan.Destination.GroupId</dd>
+                }
+            </dl>
+
+            <h3 class="tenant">@plan.Draft.Subject</h3>
+            <pre class="log">@plan.Draft.Body</pre>
+
+            <p>This creates a real ticket in the destination above, with exactly this text.</p>
+            <div class="actions">
+                <button type="button" class="danger" @onclick="Submit">Create ticket</button>
+                <button type="button" class="secondary" @onclick="session.CancelPendingSubmission">Cancel</button>
+            </div>
+        </section>
+    }
+
+    @if (session.IsSubmitting)
+    {
+        <p class="muted">Submitting...</p>
+    }
+
+    @if (session.SubmitError is not null)
+    {
+        <div class="banner bad">
+            <strong>The ticket was not confirmed created.</strong>
+            <span>@session.SubmitError</span>
+            <span>Check Zendesk before trying again.</span>
+        </div>
+    }
+
+    @if (session.CreatedTicket is { } created)
+    {
+        var link = created.ViewUrl ?? created.Url;
+
+        <div class="banner ok">
+            <strong>Ticket @created.Id @CreatedNote(created)</strong>
+            @if (link is not null && link.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                <a href="@link" target="_blank" rel="noopener noreferrer">Open in Zendesk</a>
+            }
+        </div>
+    }
+}
+
+@code {
+    private ScopedReviewAvailability? _availability;
+    private string _tab = "attention";
+    private TicketDraft? _draft;
+    private TicketNotReady? _notReady;
+
+    protected override async Task OnInitializedAsync()
+    {
+        State.View.Changed += OnChanged;
+
+        if (State.Aggregator is { } session)
+        {
+            session.Changed += OnChanged;
+            session.Progress.Changed += OnChanged;
+            _availability = await session.Review.GetAvailabilityAsync();
+        }
+    }
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private void Start()
+    {
+        _draft = null;
+        _notReady = null;
+        _tab = "attention";
+        State.Aggregator!.Start();
+    }
+
+    private async Task Prepare()
+    {
+        var preparation = await State.Aggregator!.PrepareSubmissionAsync();
+
+        _notReady = preparation.NotReady;
+
+        // The confirmation shows the text itself. If only the Zendesk
+        // destination is missing, still show the draft so it can be read.
+        _draft =
+            _notReady is { Kind: TicketNotReadyKind.DestinationUnavailable }
+                ? State.Aggregator.PreviewTicket().Value
+                : null;
+    }
+
+    private async Task Submit()
+    {
+        _draft = null;
+        await State.Aggregator!.SubmitAsync();
+    }
+
+    private static IEnumerable<(string Key, string Title)> Tabs(
+        BackupReviewView inventory, ScopeView? scope, bool detailed)
+    {
+        yield return ("attention", $"Attention ({inventory.RequireAttention})");
+        yield return ("unclassified", $"Unclassified ({inventory.Unclassified})");
+        yield return ("incomplete", $"Incomplete ({inventory.TenantsFailed})");
+
+        if (scope is not null && detailed)
+        {
+            yield return ("scope", "Scope");
+            yield return ("reconciliation", "Reconciliation");
+        }
+    }
+
+    private static string YesNo(bool value) => value ? "yes" : "no";
+
+    private static string CreatedNote(CreatedTicket created) =>
+        created.WasIdempotentReplay switch
+        {
+            true => "already existed (this was a repeat, nothing new was created)",
+            false => "created",
+            null => "reported by Zendesk (it did not say whether it was new)"
+        };
+
+    private static string NotReadyTitle(TicketNotReadyKind kind) =>
+        kind switch
+        {
+            TicketNotReadyKind.NoReview => "Run a review first.",
+            TicketNotReadyKind.ReviewIncomplete => "A ticket cannot be created from this review.",
+            _ => "The Zendesk destination is not ready."
+        };
+
+    public void Dispose()
+    {
+        State.View.Changed -= OnChanged;
+
+        if (State.Aggregator is { } session)
+        {
+            session.Changed -= OnChanged;
+            session.Progress.Changed -= OnChanged;
+        }
+    }
+}

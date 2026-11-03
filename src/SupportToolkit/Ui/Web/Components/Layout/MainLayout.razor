@@ -1,0 +1,105 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject IHostApplicationLifetime Lifetime
+@inject WebAppState State
+
+@if (_closing)
+{
+    <div class="shell">
+        <main class="goodbye">
+            <h1>SupportToolkit is closing</h1>
+            <p>
+                It has been switched off. You can close this browser tab now.
+            </p>
+            <p class="muted">
+                To use it again, start SupportToolkit again from the program
+                you opened it with.
+            </p>
+        </main>
+    </div>
+
+    return;
+}
+
+<div class="shell">
+    <header class="topbar">
+        <span class="brand">SupportToolkit</span>
+        <nav>
+            <NavLink href="" Match="NavLinkMatch.All">Profile</NavLink>
+            <NavLink href="aggregator">Backup Aggregator</NavLink>
+            <NavLink href="zendesk">Zendesk bulk delete</NavLink>
+        </nav>
+        <span class="spacer"></span>
+        <div class="seg" role="group" aria-label="How much detail to show">
+            <button type="button" class="@(State.View.IsDetailed ? "" : "on")" @onclick="() => State.View.Set(false)">Simple</button>
+            <button type="button" class="@(State.View.IsDetailed ? "on" : "")" @onclick="() => State.View.Set(true)">Detailed</button>
+        </div>
+        <button type="button" class="exit" @onclick="AskExit">Exit SupportToolkit</button>
+    </header>
+
+    @if (_confirmingExit)
+    {
+        <div class="exit-panel">
+            <strong>Switch SupportToolkit off?</strong>
+            <span>
+                Closing this browser tab does <em>not</em> switch SupportToolkit off.
+                It keeps running quietly on your computer until you do it here.
+                @if (State.Aggregator is { IsRunning: true })
+                {
+                    <text>A review is still running and will be stopped.</text>
+                }
+                @if (State.BulkDelete is { IsDeleting: true })
+                {
+                    <text>A ticket deletion is still running. Exiting stops it after the request in progress, and those tickets will then be unknown. Waiting is safer.</text>
+                }
+            </span>
+            <span class="actions">
+                <button type="button" class="danger" @onclick="ExitAsync">Yes, switch it off</button>
+                <button type="button" class="secondary" @onclick="() => _confirmingExit = false">Keep working</button>
+            </span>
+        </div>
+    }
+
+    <main>
+        @Body
+    </main>
+
+    <footer class="footnote">
+        When you are finished, press <strong>Exit SupportToolkit</strong> (top right).
+        Just closing this tab leaves it running in the background.
+        This page is only available on your own computer.
+    </footer>
+</div>
+
+@code {
+    protected override void OnInitialized() =>
+        State.View.Changed += OnViewChanged;
+
+    private void OnViewChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => State.View.Changed -= OnViewChanged;
+
+    private bool _confirmingExit;
+    private bool _closing;
+
+    private void AskExit() => _confirmingExit = true;
+
+    private async Task ExitAsync()
+    {
+        State.Aggregator?.Cancel();
+
+        // A running deletion is stopped cleanly and its receipt written.
+        if (State.BulkDelete is { } bulkDelete)
+        {
+            await bulkDelete.CancelAndWaitAsync(TimeSpan.FromSeconds(20));
+        }
+
+        _closing = true;
+        StateHasChanged();
+
+        // Let the browser show the message before the connection goes.
+        await Task.Delay(700);
+
+        Lifetime.StopApplication();
+    }
+}

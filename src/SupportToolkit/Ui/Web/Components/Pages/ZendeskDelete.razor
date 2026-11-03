@@ -1,0 +1,604 @@
+@page "/zendesk"
+@implements IDisposable
+@inject WebAppState State
+
+<h1>Zendesk bulk delete</h1>
+
+@if (State.BulkDelete is not { } web)
+{
+    <div class="banner warn">The Zendesk bulk delete is not available in this host.</div>
+    return;
+}
+
+@if (_availability is null)
+{
+    <p class="muted">Loading...</p>
+    return;
+}
+
+@if (!_availability.IsAvailable)
+{
+    <div class="banner warn">
+        <strong>Bulk delete is not available for this profile.</strong>
+        <span>@_availability.Reason</span>
+        <span>Choose a profile with a Zendesk deletion connection on the Profile page.</span>
+    </div>
+    return;
+}
+
+<div class="banner prod">
+    <strong>This deletes real tickets from @(_availability.Subdomain).zendesk.com</strong>
+    <span>
+        Zendesk keeps deleted tickets for 30 days. Nothing is deleted until you
+        have typed the confirmations below.
+    </span>
+</div>
+
+<Steps Stage="web.Session?.Stage ?? BulkDeleteStage.SignedOut" />
+
+@if (web.Error is not null)
+{
+    <div class="banner bad">
+        <strong>@web.Error</strong>
+        @if (web.NeedsSignIn)
+        {
+            <span class="actions"><button type="button" @onclick="() => web.StartSignIn()">Sign in again</button></span>
+        }
+    </div>
+}
+
+@if (web.Busy is not null)
+{
+    <section class="card">
+        <header>
+            <h3>@web.Busy</h3>
+            <span class="badge neutral">working</span>
+        </header>
+
+        @if (web.IsDeleting)
+        {
+            <progress max="100" value="@ProgressPercent(web.Session?.LatestProgress)"></progress>
+            <p>@PlainProgress(web.Session?.LatestProgress)</p>
+
+            @if (State.View.IsDetailed)
+            {
+                <p class="muted">@ProgressText(web.Session?.LatestProgress)</p>
+            }
+
+            <p class="muted">
+                You can leave this page; the deletion carries on. Cancelling stops after
+                the request in progress, and that request's tickets are then reported as
+                unknown, because Zendesk may still finish them.
+            </p>
+        }
+
+        <div class="actions">
+            <button type="button" class="secondary" @onclick="web.Cancel">Cancel</button>
+        </div>
+    </section>
+}
+
+@{
+    var session = web.Session;
+    var stage = session?.Stage ?? BulkDeleteStage.SignedOut;
+    var idle = web.Busy is null;
+}
+
+@if (stage == BulkDeleteStage.SignedOut)
+{
+    <section class="card">
+        <header><h3>1. Sign in</h3></header>
+        <p>
+            A Zendesk sign-in page opens in your browser. Sign in there, then come back to this
+            window. Your password is never entered here.
+        </p>
+        <div class="actions">
+            <button type="button" disabled="@(!idle)" @onclick="() => web.StartSignIn()">Sign in to Zendesk</button>
+        </div>
+    </section>
+}
+else if (session is not null)
+{
+    <p class="muted">
+        Signed in as <strong>@(session.Operator?.Name ?? "(no name)")</strong>
+        &lt;@(session.Operator?.Email ?? "no email")&gt; (@(session.Operator?.Role ?? "role unknown")),
+        working on <strong>@(session.Instance).zendesk.com</strong>.
+    </p>
+}
+
+@if (stage is BulkDeleteStage.SignedIn or BulkDeleteStage.Previewed)
+{
+    <section class="card">
+        <header><h3>@(stage == BulkDeleteStage.SignedIn ? "2. Search" : "Search again")</h3></header>
+
+        <div class="form-grid">
+            <label>Organization<input type="text" @bind="_organization" @bind:event="oninput" /></label>
+            <label>Sender name<input type="text" @bind="_sender" @bind:event="oninput" /></label>
+            <label>Requester email<input type="text" @bind="_requester" @bind:event="oninput" /></label>
+            <label>
+                Email domain
+                <input type="text" @bind="_domain" @bind:event="oninput" />
+                <small class="muted">May return nothing: Zendesk does not always search by domain.</small>
+            </label>
+            <label>Words in the ticket<input type="text" @bind="_text" @bind:event="oninput" /></label>
+        </div>
+
+        @if (web.SearchProblem is not null)
+        {
+            <p class="problem">@web.SearchProblem</p>
+        }
+
+        <div class="actions">
+            <button type="button" disabled="@(!idle)" @onclick="Search">Search</button>
+            <button type="button" class="secondary" disabled="@(!idle)" @onclick="ClearFields">Clear</button>
+        </div>
+        <p class="muted">At least one term is needed. Searching never deletes anything.</p>
+    </section>
+}
+
+@if (stage is BulkDeleteStage.Previewed or BulkDeleteStage.Planned && session?.Preview is { } result)
+{
+    var preview = result.Preview;
+
+    <h2>Search result</h2>
+    <p class="muted">
+        Searched for:
+        @foreach (var term in Terms(session.Criteria))
+        {
+            <span class="term">@term.Label: <strong>@term.Value</strong></span>
+        }
+    </p>
+
+    @if (!preview.IsSearchComplete)
+    {
+        <div class="banner bad">
+            <strong>Incomplete search: this is NOT every matching ticket.</strong>
+            <span>@preview.SearchIncompleteReason</span>
+            <span>Deleting from it is blocked. Narrow the search and try again.</span>
+        </div>
+    }
+
+    @if (preview.DuplicateCount > 0 && State.View.IsDetailed)
+    {
+        <p class="muted">Duplicate results removed: @preview.DuplicateCount</p>
+    }
+
+    @if (preview.DirectoryNote is not null)
+    {
+        <div class="banner warn">@preview.DirectoryNote</div>
+    }
+
+    <div class="grid">
+        <section class="card">
+            <header><h3>Found</h3></header>
+            <dl>
+                <dt>Tickets</dt><dd>@preview.Total</dd>
+                <dt>Selected by default (closed)</dt><dd>@preview.SelectedCount</dd>
+                <dt>Not selected (exceptions)</dt><dd>@preview.Exceptions.Count</dd>
+                <dt>Selected now</dt><dd>@session.SelectedCount</dd>
+            </dl>
+        </section>
+        <Groups Title="By organization" Items="preview.ByOrganization" />
+
+        @if (State.View.IsDetailed)
+        {
+            <Groups Title="By status" Items="preview.StatusCounts" />
+            <Groups Title="By requester domain" Items="preview.ByRequesterDomain" />
+        }
+    </div>
+}
+
+@if (stage == BulkDeleteStage.Previewed && session?.Preview is { } shown)
+{
+    var preview = shown.Preview;
+
+    <h2>3. Choose tickets</h2>
+    <p class="muted">
+        Closed tickets are chosen for you. Tickets that are not closed need to be ticked by hand
+        and need an extra confirmation later. A ticket closed less than 24 hours ago cannot be
+        deleted yet.
+    </p>
+
+    <div class="actions">
+        <button type="button" class="secondary" disabled="@(!idle)" @onclick="SelectAll">Select all</button>
+        <button type="button" class="secondary" disabled="@(!idle)" @onclick="ResetSelection">Choose closed tickets</button>
+        <button type="button" class="secondary" disabled="@(!idle)" @onclick="ClearSelection">Clear all</button>
+        <button type="button" disabled="@(!idle || session.SelectedCount == 0 || !preview.IsSearchComplete)"
+                @onclick="Prepare">Review @session.SelectedCount ticket(s)</button>
+    </div>
+
+    @if (_selectionMessage is not null)
+    {
+        <p class="problem">@_selectionMessage</p>
+    }
+
+    <table>
+        <thead>
+        <tr>
+            <th></th><th>Ticket</th><th>Status</th>
+            @if (State.View.IsDetailed) { <th>Updated (UTC)</th> }
+            <th>Organization</th>
+            @if (State.View.IsDetailed) { <th>Domain</th> }
+            <th>Subject</th><th></th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var ticket in preview.Tickets)
+        {
+            var id = ticket.Id;
+            var selectable = ticket.Flag != DeletionPreviewFlag.ClosedWithin24Hours;
+
+            <tr class="@(ticket.Flag is null ? "" : "exception")">
+                <td>
+                    <input type="checkbox"
+                           checked="@session.IsSelected(id)"
+                           disabled="@(!selectable || !idle)"
+                           @onchange="e => Toggle(id, (bool)e.Value!)" />
+                </td>
+                <td>#@ticket.Id</td>
+                <td>@ticket.Status</td>
+                @if (State.View.IsDetailed) { <td>@Date(ticket.UpdatedAt)</td> }
+                <td>@ticket.Organization</td>
+                @if (State.View.IsDetailed) { <td>@ticket.RequesterDomain</td> }
+                <td>@Subject(ticket.Subject)</td>
+                <td class="muted">@Describe(ticket.Flag)</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+@if (stage == BulkDeleteStage.Planned && session?.Plan is { } plan)
+{
+    var requirements = session.Requirements();
+    var check = session.CheckConfirmation(_typedCount, _typedNonClosed);
+
+    <h2>4. Check and confirm</h2>
+
+    <section class="card confirm">
+        <header><h3>Deletion plan</h3></header>
+        <dl>
+            <dt>Zendesk instance</dt><dd>@(plan.Instance).zendesk.com</dd>
+            <dt>Tickets to delete</dt><dd>@plan.Tickets.Count</dd>
+            @if (State.View.IsDetailed)
+            {
+                <dt>Requests</dt><dd>@plan.Batches.Count (up to @DeletionPlan.BatchSize tickets each)</dd>
+            }
+            <dt>Not closed</dt><dd>@plan.NonClosed.Count</dd>
+        </dl>
+        <p class="muted">Only the tickets you ticked will be deleted. The search is not run again.</p>
+
+        @if (State.View.IsDetailed)
+        {
+            <p class="ids">@string.Join("  ", plan.Tickets.Select(t => "#" + t.Id))</p>
+        }
+    </section>
+
+    <div class="actions">
+        @if (State.View.IsDetailed)
+        {
+            <button type="button" class="secondary" @onclick="DryRun">@(_showDryRun ? "Hide dry run" : "Dry run")</button>
+        }
+        <button type="button" class="secondary" @onclick="Back">Change selection</button>
+    </div>
+
+    @if (_showDryRun && State.View.IsDetailed)
+    {
+        <section class="card">
+            <header><h3>Dry run: this is what would be sent. Nothing is.</h3></header>
+            <ul>
+                @foreach (var batch in session.DryRun())
+                {
+                    <li>
+                        Request @batch.Number: delete @batch.TicketCount ticket(s)
+                        (#@batch.FirstId to #@batch.LastId)
+                    </li>
+                }
+            </ul>
+            <p class="muted">Each request starts a job at Zendesk, which is followed to its end.</p>
+        </section>
+    }
+
+    <section class="card confirm">
+        <header><h3>Type to confirm</h3></header>
+
+        <label>
+            Confirmation 1: type the number of tickets to delete (@requirements.TicketCount)
+            <input type="text" inputmode="numeric" @bind="_typedCount" @bind:event="oninput" />
+        </label>
+
+        @if (requirements.NeedsNonClosedConfirmation)
+        {
+            <div class="banner warn">
+                <strong>@requirements.NonClosed.Count of these tickets are NOT closed (or their closing time is unknown):</strong>
+                <span>@string.Join("  ", requirements.NonClosed.Select(t => $"#{t.Id} ({t.Status})"))</span>
+            </div>
+
+            <label>
+                Confirmation 2: type the number of tickets that are NOT closed (@requirements.NonClosed.Count)
+                <input type="text" inputmode="numeric" @bind="_typedNonClosed" @bind:event="oninput" />
+            </label>
+        }
+
+        <div class="actions">
+            <button type="button" class="danger" disabled="@(!check.IsReady || !idle || !session.CanDelete)"
+                    @onclick="() => Delete(check)">Delete @plan.Tickets.Count ticket(s) permanently</button>
+        </div>
+
+        @if (!session.CanDelete)
+        {
+            <p class="problem">Deletion is not enabled for this session.</p>
+        }
+    </section>
+}
+
+@if (stage == BulkDeleteStage.Finished && session is not null)
+{
+    <h2>Result</h2>
+
+    @if (session.CancelledMessage is not null)
+    {
+        <div class="banner warn">
+            <strong>The deletion was cancelled.</strong>
+            <span>@session.CancelledMessage</span>
+            <span>
+                Tickets in the request that was running may or may not have been deleted. Check
+                Zendesk's deleted tickets, and use the receipt.
+            </span>
+        </div>
+    }
+    else if (session.Result is { } done)
+    {
+        <div class="banner @(done.IsClean ? "ok" : "warn")">
+            <strong>@(done.IsClean ? "Every ticket was reported deleted." : "Not every ticket was confirmed deleted.")</strong>
+        </div>
+
+        <div class="grid">
+            <section class="card">
+                <header><h3>Outcome</h3></header>
+                <dl>
+                    <dt>Deleted</dt><dd>@done.Deleted</dd>
+                    <dt>Failed</dt><dd>@done.Failed</dd>
+                    <dt>Unknown</dt><dd>@done.Unknown</dd>
+                    <dt>Not attempted</dt><dd>@done.NotAttempted</dd>
+                </dl>
+            </section>
+        </div>
+
+        @if (done.Problems.Count > 0)
+        {
+            <h3 class="tenant">Not confirmed deleted</h3>
+            <p class="muted">
+                An unknown ticket may or may not have been deleted; check Zendesk's deleted tickets.
+            </p>
+            <ul>
+                @foreach (var group in done.Problems)
+                {
+                    <li>
+                        <strong>@group.State</strong>:
+                        @string.Join(", ", group.TicketIds.Select(id => "#" + id))
+                        @if (!string.IsNullOrWhiteSpace(group.Detail))
+                        {
+                            <span> - @group.Detail</span>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+
+        <p>Receipt: <code>@done.ReceiptPath</code></p>
+
+        @if (done.ReceiptWarning is not null)
+        {
+            <div class="banner warn">@done.ReceiptWarning</div>
+        }
+
+        <p class="muted">
+            Keep the receipt: it lists the ticket IDs needed to restore them. It is not shared or committed.
+        </p>
+    }
+
+    <div class="actions">
+        <button type="button" disabled="@(!idle)" @onclick="StartOver">Start another search</button>
+    </div>
+}
+
+@code {
+    private BulkDeleteAvailability? _availability;
+
+    private string _organization = "";
+    private string _sender = "";
+    private string _requester = "";
+    private string _domain = "";
+    private string _text = "";
+
+    private string? _selectionMessage;
+    private bool _showDryRun;
+    private string _typedCount = "";
+    private string _typedNonClosed = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        State.View.Changed += OnChanged;
+
+        if (State.BulkDelete is { } web)
+        {
+            web.Changed += OnChanged;
+            _availability = await web.GetAvailabilityAsync();
+        }
+    }
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private static IEnumerable<(string Label, string Value)> Terms(ZendeskSearchCriteria? criteria)
+    {
+        if (criteria is null)
+        {
+            yield break;
+        }
+
+        if (!string.IsNullOrWhiteSpace(criteria.Organization)) yield return ("Organization", criteria.Organization);
+        if (!string.IsNullOrWhiteSpace(criteria.SenderName)) yield return ("Sender name", criteria.SenderName);
+        if (!string.IsNullOrWhiteSpace(criteria.RequesterEmail)) yield return ("Requester email", criteria.RequesterEmail);
+        if (!string.IsNullOrWhiteSpace(criteria.EmailDomain)) yield return ("Email domain", criteria.EmailDomain);
+        if (!string.IsNullOrWhiteSpace(criteria.FreeText)) yield return ("Words in the ticket", criteria.FreeText);
+    }
+
+    private static string? Blank(string value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private void Search()
+    {
+        _selectionMessage = null;
+        _showDryRun = false;
+        ClearTyped();
+
+        State.BulkDelete!.StartSearch(
+            new ZendeskSearchCriteria(
+                Blank(_organization),
+                Blank(_requester),
+                Blank(_domain),
+                Blank(_text),
+                Blank(_sender)));
+    }
+
+    private void Toggle(long id, bool selected) =>
+        _selectionMessage =
+            selected
+                ? State.BulkDelete!.Select([id])
+                : State.BulkDelete!.Deselect([id]);
+
+    private void SelectAll() =>
+        _selectionMessage = State.BulkDelete!.SelectAll();
+
+    private void ResetSelection() =>
+        _selectionMessage = State.BulkDelete!.ResetSelection();
+
+    private void ClearSelection() =>
+        _selectionMessage = State.BulkDelete!.ClearSelection();
+
+    private void Prepare()
+    {
+        ClearTyped();
+        _showDryRun = false;
+
+        var attempt = State.BulkDelete!.PreparePlan();
+
+        _selectionMessage = attempt.Problem;
+    }
+
+    private void Back()
+    {
+        ClearTyped();
+        State.BulkDelete!.DiscardPlan();
+    }
+
+    private void DryRun() => _showDryRun = !_showDryRun;
+
+    private void Delete(ConfirmationCheck check)
+    {
+        if (check.Confirmation is { } confirmation)
+        {
+            ClearTyped();
+            State.BulkDelete!.StartDelete(confirmation);
+        }
+    }
+
+    private void StartOver()
+    {
+        _selectionMessage = null;
+
+        // A new job starts with empty fields, not the last search's terms.
+        ClearFields();
+
+        State.BulkDelete!.StartOver();
+    }
+
+    private void ClearFields()
+    {
+        _organization = "";
+        _sender = "";
+        _requester = "";
+        _domain = "";
+        _text = "";
+    }
+
+    private static int ProgressPercent(DeletionProgress? progress)
+    {
+        if (progress is null || progress.BatchCount == 0)
+        {
+            return 0;
+        }
+
+        var finished =
+            progress.Phase is DeletionProgressPhase.BatchFinished
+                ? progress.Batch
+                : progress.Batch - 1;
+
+        return Math.Clamp(finished * 100 / progress.BatchCount, 0, 100);
+    }
+
+    private static string PlainProgress(DeletionProgress? progress) =>
+        progress is null
+            ? "Starting..."
+            : progress.Phase is DeletionProgressPhase.Stopped
+                ? "Stopped before finishing. The result below says what was deleted."
+                : $"Deleting tickets: step {Math.Min(progress.Batch, progress.BatchCount)} of {progress.BatchCount}.";
+
+    private void ClearTyped()
+    {
+        _typedCount = "";
+        _typedNonClosed = "";
+    }
+
+    private static string ProgressText(DeletionProgress? progress) =>
+        progress is null
+            ? "Starting..."
+            : progress.Phase switch
+            {
+                DeletionProgressPhase.StartingBatch =>
+                    $"Request {progress.Batch} of {progress.BatchCount}: {progress.TicketsInBatch} ticket(s)...",
+                DeletionProgressPhase.WaitingForJob =>
+                    $"Request {progress.Batch} of {progress.BatchCount}: job {progress.JobStatus} " +
+                    $"({progress.JobProgress?.ToString() ?? "?"}/{progress.JobTotal?.ToString() ?? "?"})",
+                DeletionProgressPhase.BatchFinished =>
+                    $"Request {progress.Batch} of {progress.BatchCount} finished.",
+                _ => $"Stopped at request {progress.Batch} of {progress.BatchCount}."
+            };
+
+    private static string Describe(DeletionPreviewFlag? flag) =>
+        flag switch
+        {
+            DeletionPreviewFlag.NotClosed => "not closed",
+            DeletionPreviewFlag.ClosedWithin24Hours => "closed under 24 hours ago: cannot be deleted yet",
+            DeletionPreviewFlag.ClosedTimeUnknown => "closed, time unknown",
+            _ => ""
+        };
+
+    private static string Date(DateTimeOffset? value) =>
+        value is null
+            ? "unknown"
+            : value.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string Subject(string? subject)
+    {
+        if (string.IsNullOrWhiteSpace(subject))
+        {
+            return "";
+        }
+
+        var clean = new string(subject.Where(c => !char.IsControl(c)).ToArray());
+
+        return clean.Length <= 80 ? clean : clean[..79] + "...";
+    }
+
+    public void Dispose()
+    {
+        State.View.Changed -= OnChanged;
+
+        if (State.BulkDelete is { } web)
+        {
+            web.Changed -= OnChanged;
+        }
+    }
+}

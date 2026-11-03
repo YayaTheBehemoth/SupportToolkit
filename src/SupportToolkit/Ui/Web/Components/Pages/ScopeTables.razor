@@ -1,0 +1,28 @@
+@using SupportToolkit.Modules.BackupAggregator.Presentation
+
+@if (Scope is null)
+{
+    <p class="muted">This review produced no scope listing.</p>
+    return;
+}
+
+<p class="muted">Every Acronis customer tenant is in exactly one of these lists.</p>
+
+<ScopeSection Title="In scope" Tenants="Scope.InScope" />
+<ScopeSection Title="Excluded" Tenants="Scope.Excluded" />
+<ScopeSection Title="Needs scope review" Tenants="Scope.NeedsReview" />
+<ScopeSection Title="Not matched to a Business Central customer" Tenants="Scope.Unmatched" />
+
+<h3 class="tenant">Stray tenant check</h3>
+@if (!Scope.LeakCheckAvailable)
+{
+    <p class="muted">Leak check unavailable: no service items are configured. This is not the same as "no leaks".</p>
+}
+else
+{
+    <ScopeSection Title="Leak candidates" Tenants="Scope.LeakCandidates" />
+}
+
+@code {
+    [Parameter] public ScopeView? Scope { get; set; }
+}
