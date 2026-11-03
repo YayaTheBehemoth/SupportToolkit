@@ -57,10 +57,13 @@ public sealed class BusinessCentralScalarTextConverter
  * Contract basis: Power Query Table.Schema exports of the custom
  * subscription header and line API pages.
  *
- * Only fields needed for entitlement evidence are modeled. The pages
- * also expose pricing, contact and e-mail fields; these are
- * deliberately absent here and excluded from every request through
- * $select (see BusinessCentralSubscriptionFields).
+ * Only fields needed for entitlement evidence are modeled on the
+ * header and line DTOs. The pages also expose pricing, contact and
+ * e-mail fields. Contact and e-mail fields are never requested.
+ * Pricing is requested by one separate read only (the billing lines
+ * below, for the usage report), never by the entitlement read; every
+ * request names its fields through $select (see
+ * BusinessCentralSubscriptionFields).
  *
  * Power Query reports nearly every column as nullable regardless of
  * the source, so nullability here is conservative and not evidence
@@ -173,6 +176,57 @@ public sealed class BusinessCentralHeaderCustomerNameDto
 }
 
 /// <summary>
+/// What a subscription line is billed at, read from the already
+/// approved lines page through its own request. The entitlement read
+/// never asks for these columns, so a renamed or missing price column
+/// fails this read alone.
+///
+/// Column names come from the page's Power Query Table.Schema export.
+/// Amount is the line's billed amount as Business Central states it
+/// (the toolkit does not recalculate it); unit price and line discount
+/// are carried so the figure can be checked. The page has no currency
+/// column. Every value is nullable: missing is unknown, never zero.
+/// </summary>
+public sealed class BusinessCentralSubscriptionBillingLineDto
+{
+    /// <summary>Header number this line belongs to.</summary>
+    [JsonPropertyName("subscriptionNumber")]
+    public string? SubscriptionNumber { get; init; }
+
+    [JsonPropertyName("lineNumber")]
+    public int? LineNumber { get; init; }
+
+    [JsonPropertyName("type")]
+    [JsonConverter(typeof(BusinessCentralScalarTextConverter))]
+    public string? Type { get; init; }
+
+    /// <summary>Item number, for example the backup item.</summary>
+    [JsonPropertyName("number")]
+    public string? Number { get; init; }
+
+    [JsonPropertyName("description")]
+    public string? Description { get; init; }
+
+    [JsonPropertyName("unitOfMeasureCode")]
+    public string? UnitOfMeasureCode { get; init; }
+
+    [JsonPropertyName("quantity")]
+    public decimal? Quantity { get; init; }
+
+    [JsonPropertyName("unitPrice")]
+    public decimal? UnitPrice { get; init; }
+
+    [JsonPropertyName("lineDiscountPercent")]
+    public decimal? LineDiscountPercent { get; init; }
+
+    [JsonPropertyName("amount")]
+    public decimal? Amount { get; init; }
+
+    [JsonPropertyName("omitLine")]
+    public bool? OmitLine { get; init; }
+}
+
+/// <summary>
 /// Field lists sent as $select so data outside the DTOs is never
 /// requested from Business Central.
 /// </summary>
@@ -190,4 +244,13 @@ public static class BusinessCentralSubscriptionFields
         "id,subscriptionNumber,lineNumber,type,number,quantity," +
         "omitLine,headerCategory,environment,company," +
         "lastModifiedDateTime";
+
+    /// <summary>
+    /// The billing read: the line's identity, what it is, and what it
+    /// is billed at. Used only by the usage report.
+    /// </summary>
+    public const string BillingLineSelect =
+        "subscriptionNumber,lineNumber,type,number,description," +
+        "unitOfMeasureCode,quantity,unitPrice,lineDiscountPercent," +
+        "amount,omitLine";
 }

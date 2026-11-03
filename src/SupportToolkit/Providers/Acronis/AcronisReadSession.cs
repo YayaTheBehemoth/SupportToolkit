@@ -4,21 +4,21 @@ using SupportToolkit.Providers.Acronis.Tenants;
 using SupportToolkit.Providers.Acronis.Transport;
 using SupportToolkit.Providers.Acronis.Usage;
 
-namespace SupportToolkit.Cli.Commands;
+namespace SupportToolkit.Providers.Acronis;
 
 /// <summary>
-/// A read-only Acronis tenant provider for developer commands, built
-/// from the active profile's connection. Credentials are never taken
-/// from the command line.
+/// Read-only Acronis tenant and usage providers, built from the active
+/// profile's connection. Credentials are never taken from a command line.
 ///
-/// The read-only handler keeps the established boundary: no external
-/// write endpoint is available through this session.
+/// Shared by modules and developer commands. The read-only handler keeps
+/// the established boundary: no external write endpoint is available
+/// through this session.
 /// </summary>
-public sealed class AcronisDevSession : IDisposable
+public sealed class AcronisReadSession : IDisposable
 {
     private readonly HttpClient _httpClient;
 
-    private AcronisDevSession(
+    private AcronisReadSession(
         HttpClient httpClient,
         AcronisTenantProvider provider,
         AcronisUsageProvider usageProvider)
@@ -32,7 +32,7 @@ public sealed class AcronisDevSession : IDisposable
 
     public AcronisUsageProvider UsageProvider { get; }
 
-    public static async Task<AcronisDevSession> CreateAsync(
+    public static async Task<AcronisReadSession> CreateAsync(
         SupportToolkitConfigurationResolver configurationResolver,
         CancellationToken cancellationToken = default)
     {
@@ -72,7 +72,7 @@ public sealed class AcronisDevSession : IDisposable
                 options,
                 logger: diagnosticLogger);
 
-        return new AcronisDevSession(
+        return new AcronisReadSession(
             httpClient,
             new AcronisTenantProvider(
                 apiClient,

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using SupportToolkit.Core.Configuration;
+using SupportToolkit.Providers.Acronis;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 using SupportToolkit.Providers.Acronis.Usage;
 
@@ -175,7 +176,7 @@ public sealed class AcronisUsageDevCommand
         }
 
         using var session =
-            await AcronisDevSession.CreateAsync(
+            await AcronisReadSession.CreateAsync(
                 _configurationResolver,
                 cancellationToken);
 

@@ -1,7 +1,7 @@
 using SupportToolkit.Core.CustomerMapping.Matching;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 
-namespace SupportToolkit.Modules.BackupAggregator.MonitoringScope;
+namespace SupportToolkit.Core.CustomerMapping;
 
 /// <summary>
 /// Customer parties for a resolution run, with what was left out.
