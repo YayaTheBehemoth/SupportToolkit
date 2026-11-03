@@ -5,6 +5,8 @@ using SupportToolkit.Core.CustomerMapping.Matching;
 using SupportToolkit.Core.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
+using SupportToolkit.Providers.Acronis.Tenants;
+using SupportToolkit.Providers.Acronis;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 using SupportToolkit.Providers.Acronis.Usage;
 using SupportToolkit.Providers.BusinessCentral;
@@ -603,14 +605,14 @@ public sealed class UsageCompareDevCommand
         output.WriteLine("Reading Acronis tenants and usage (read-only)...");
 
         using var session =
-            await AcronisDevSession.CreateAsync(
+            await AcronisReadSession.CreateAsync(
                 _configurationResolver,
                 cancellationToken);
 
         var tenants =
             await session.Provider.GetTenantsAsync(cancellationToken);
 
-        var acronis = AcronisCustomerParties.ForResolution(tenants);
+        var acronis = AcronisCustomerParties.ForResolution(tenants.ToTenantRecords());
 
         var mapping =
             await new AutoCustomerMappingResolver()

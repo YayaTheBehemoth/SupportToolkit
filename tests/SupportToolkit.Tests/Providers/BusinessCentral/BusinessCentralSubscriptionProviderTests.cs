@@ -135,6 +135,115 @@ public class BusinessCentralSubscriptionProviderTests
             () => provider.GetSubscriptionsAsync());
     }
 
+    // ---- Billing read (usage report) ----
+
+    private const string BillingJson = """
+        {"value":[
+          {"subscriptionNumber":"000000001","lineNumber":10000,"type":"Item",
+           "number":"EXAMPLE-ITEM","description":"Example backup storage",
+           "unitOfMeasureCode":"GB","quantity":500,"unitPrice":1.25,
+           "lineDiscountPercent":10,"amount":562.5,"omitLine":false}]}
+        """;
+
+    [Fact]
+    public async Task BillingRead_UsesTheApprovedLinesPage_WithItsOwnSelect()
+    {
+        var network =
+            new StubNetwork().Enqueue(() => Json(BillingJson));
+
+        var provider =
+            BusinessCentralSubscriptionProvider.Create(
+                Options(),
+                new FakeTokenProvider(),
+                networkHandler: network);
+
+        var line =
+            Assert.Single(await provider.GetBillingLinesAsync())!;
+
+        var request = Assert.Single(network.Requests);
+
+        Assert.Equal(HttpMethod.Get, request.Method);
+        Assert.EndsWith(
+            "/companies(" + CompanyId + ")/smartSubscriptionLines",
+            request.RequestUri!.AbsolutePath);
+        Assert.Contains(
+            "$select=" + BusinessCentralSubscriptionFields.BillingLineSelect,
+            Uri.UnescapeDataString(request.RequestUri.Query));
+        Assert.Equal("Bearer", request.Headers.Authorization?.Scheme);
+
+        Assert.Equal("000000001", line.SubscriptionNumber);
+        Assert.Equal(10000, line.LineNumber);
+        Assert.Equal("EXAMPLE-ITEM", line.Number);
+        Assert.Equal("Example backup storage", line.Description);
+        Assert.Equal("GB", line.UnitOfMeasureCode);
+        Assert.Equal(500m, line.Quantity);
+        Assert.Equal(1.25m, line.UnitPrice);
+        Assert.Equal(10m, line.LineDiscountPercent);
+        Assert.Equal(562.5m, line.Amount);
+        Assert.False(line.OmitLine);
+    }
+
+    [Fact]
+    public async Task BillingRead_MissingValues_AreUnknown_NotZero()
+    {
+        var network =
+            new StubNetwork().Enqueue(
+                () => Json(
+                    "{\"value\":[{\"subscriptionNumber\":\"000000001\"," +
+                    "\"number\":\"EXAMPLE-ITEM\"}]}"));
+
+        var provider =
+            BusinessCentralSubscriptionProvider.Create(
+                Options(),
+                new FakeTokenProvider(),
+                networkHandler: network);
+
+        var line =
+            Assert.Single(await provider.GetBillingLinesAsync())!;
+
+        Assert.Null(line.Amount);
+        Assert.Null(line.UnitPrice);
+        Assert.Null(line.Quantity);
+        Assert.Null(line.Description);
+    }
+
+    [Fact]
+    public async Task BillingRead_Failure_Throws_InsteadOfReturningPartLines()
+    {
+        // For example a price column that has been renamed.
+        var network =
+            new StubNetwork().Enqueue(
+                () => Json("{}", HttpStatusCode.BadRequest));
+
+        var provider =
+            BusinessCentralSubscriptionProvider.Create(
+                Options(),
+                new FakeTokenProvider(),
+                networkHandler: network);
+
+        await Assert.ThrowsAsync<BusinessCentralApiException>(
+            () => provider.GetBillingLinesAsync());
+    }
+
+    [Theory]
+    [InlineData("price")]
+    [InlineData("amount")]
+    [InlineData("discount")]
+    [InlineData("description")]
+    public void TheEntitlementRead_NeverAsksForBillingColumns(
+        string column)
+    {
+        Assert.DoesNotContain(
+            column,
+            BusinessCentralSubscriptionFields.HeaderSelect,
+            StringComparison.OrdinalIgnoreCase);
+
+        Assert.DoesNotContain(
+            column,
+            BusinessCentralSubscriptionFields.LineSelect,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void ProviderContract_ReturnsNoModuleTypes()
     {

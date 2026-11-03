@@ -1,4 +1,5 @@
 using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Modules.BackupAggregator.Production;
 
 using System.Collections.Concurrent;
 using SupportToolkit.Modules.BackupAggregator.Fixtures;
@@ -63,7 +64,7 @@ public sealed class ScopedBackupReviewFixtureCommand
          * not fall back to an all-tenant discovery.
          */
         var reviewService =
-            new BackupInventoryReviewService(
+            AcronisBackupInventory.CreateReviewService(
                 new AcronisTenantResolver(
                     new NoTenantDiscoveryProvider()
                 ),

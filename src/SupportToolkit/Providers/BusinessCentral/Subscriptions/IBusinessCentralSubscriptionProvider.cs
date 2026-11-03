@@ -38,3 +38,15 @@ public interface IBusinessCentralCustomerNameProvider
         GetHeaderCustomerNamesAsync(
             CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// What subscription lines are billed at. A separate contract from the
+/// subscription data, so that a renamed or missing price column fails
+/// this read alone and never the entitlement read.
+/// </summary>
+public interface IBusinessCentralSubscriptionBillingProvider
+{
+    Task<IReadOnlyList<BusinessCentralSubscriptionBillingLineDto?>>
+        GetBillingLinesAsync(
+            CancellationToken cancellationToken = default);
+}

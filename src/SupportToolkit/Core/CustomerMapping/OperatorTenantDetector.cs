@@ -1,7 +1,7 @@
 using SupportToolkit.Core.CustomerMapping.Matching;
-using SupportToolkit.Providers.Acronis.Tenants.Dtos;
+using SupportToolkit.Core.Tenants;
 
-namespace SupportToolkit.Modules.BackupAggregator.MonitoringScope;
+namespace SupportToolkit.Core.CustomerMapping;
 
 /// <summary>
 /// The operator's own company appears in Acronis as a partner tenant
@@ -29,7 +29,7 @@ public static class OperatorTenantDetector
         string? Notice);
 
     public static Detection Detect(
-        IEnumerable<TenantDto> tenants)
+        IEnumerable<TenantRecord> tenants)
     {
         ArgumentNullException.ThrowIfNull(tenants);
 
@@ -93,7 +93,7 @@ public static class OperatorTenantDetector
     }
 
     private static bool IsKind(
-        TenantDto tenant,
+        TenantRecord tenant,
         string kind)
     {
         return string.Equals(

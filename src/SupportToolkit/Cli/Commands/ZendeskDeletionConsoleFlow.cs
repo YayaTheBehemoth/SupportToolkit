@@ -142,6 +142,22 @@ public sealed class ZendeskDeletionConsoleFlow
             $"{plan.Instance}.zendesk.com. Zendesk keeps deleted tickets " +
             "for 30 days.");
 
+        if (plan.LikelyArchived.Count > 0)
+        {
+            _output.WriteLine(
+                $"WARNING: {plan.LikelyArchived.Count} of these ticket(s) " +
+                "were closed long ago and are probably archived. Deleted " +
+                "archived tickets do NOT appear in Zendesk's deleted " +
+                "tickets and cannot be restored from the Zendesk interface; " +
+                "they can only be restored through the API by ticket ID, " +
+                "using the receipt:");
+
+            foreach (var ticket in plan.LikelyArchived)
+            {
+                _output.WriteLine($"  #{ticket.Id}");
+            }
+        }
+
         _output.Write(
             $"Confirmation 1 of {(plan.NonClosed.Count > 0 ? 2 : 1)}: " +
             $"type the number of tickets to delete ({plan.Tickets.Count}) " +

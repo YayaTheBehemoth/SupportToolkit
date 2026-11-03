@@ -1,3 +1,5 @@
+using SupportToolkit.Core.Tenants;
+using SupportToolkit.Core.CustomerMapping;
 using SupportToolkit.Core.CustomerMapping.Matching;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
@@ -67,13 +69,13 @@ public class AcronisCustomerPartiesTests
         );
     }
 
-    private static TenantDto Tenant(
+    private static TenantRecord Tenant(
         string id,
         string name,
         string kind,
         DateTimeOffset? deletedAt = null)
     {
-        return new TenantDto
+        return new TenantRecord
         {
             Id = id,
             Name = name,

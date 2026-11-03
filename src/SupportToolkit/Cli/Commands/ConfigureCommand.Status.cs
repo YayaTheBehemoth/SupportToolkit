@@ -1,6 +1,7 @@
 
 using System.Globalization;
 using SupportToolkit.Core.Configuration;
+using SupportToolkit.Modules.UsageReport;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Providers.Acronis.Transport;
 using SupportToolkit.Providers.Zendesk.Transport;
@@ -72,12 +73,21 @@ public sealed partial class ConfigureCommand
                 BackupAggregatorCommand,
                 "Backup Aggregator");
 
+        var usageReportMode =
+            await WriteEffectiveModeAsync(
+                resolver,
+                UsageReportModule.ModuleCommand,
+                "Usage report");
+
+        await WriteUsageReportItemsAsync(resolver);
+
         Console.WriteLine();
 
         await WriteEffectiveAcronisAsync(
             profile,
             resolver,
-            aggregatorMode == SupportToolkitMode.Production);
+            aggregatorMode == SupportToolkitMode.Production
+            || usageReportMode == SupportToolkitMode.Production);
 
         Console.WriteLine();
 
@@ -112,6 +122,28 @@ public sealed partial class ConfigureCommand
             "No provider authentication or API requests were performed.");
 
         Console.WriteLine();
+    }
+
+    private static async Task WriteUsageReportItemsAsync(
+        SupportToolkitConfigurationResolver resolver)
+    {
+        try
+        {
+            var items =
+                await resolver.GetServiceItemNumbersAsync(
+                    UsageReportModule.ModuleCommand);
+
+            Console.WriteLine(
+                "  Usage report backup items: " +
+                (items.Count == 0
+                    ? "none (needed in production mode)"
+                    : string.Join(", ", items)));
+        }
+        catch (InvalidOperationException exception)
+        {
+            Console.WriteLine("  Usage report backup items: invalid configuration");
+            Console.WriteLine($"  Reason: {exception.Message}");
+        }
     }
 
     private static async Task<SupportToolkitMode?>

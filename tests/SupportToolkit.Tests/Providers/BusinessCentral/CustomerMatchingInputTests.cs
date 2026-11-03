@@ -1,3 +1,4 @@
+using SupportToolkit.Core.Tenants;
 using SupportToolkit.Cli.Commands;
 using SupportToolkit.Core.CustomerMapping;
 using SupportToolkit.Core.CustomerMapping.Matching;
@@ -72,7 +73,7 @@ public class CustomerMatchingInputTests
                 Tenant(TenantA, "Northwind Traders", "customer"),
                 Tenant(TenantB, "Contoso", "customer"),
                 Tenant(Guid.NewGuid().ToString(), "Unit", "unit"),
-                new TenantDto
+                new TenantRecord
                 {
                     Id = Guid.NewGuid().ToString(),
                     Name = "Deleted",
@@ -250,12 +251,12 @@ public class CustomerMatchingInputTests
         };
     }
 
-    private static TenantDto Tenant(
+    private static TenantRecord Tenant(
         string id,
         string name,
         string kind)
     {
-        return new TenantDto
+        return new TenantRecord
         {
             Id = id,
             Name = name,

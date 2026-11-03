@@ -1,6 +1,7 @@
+using SupportToolkit.Core.CustomerMapping;
 using SupportToolkit.Core.MonitoringScope;
 
-using SupportToolkit.Providers.Acronis.Tenants.Dtos;
+using SupportToolkit.Core.Tenants;
 
 namespace SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 
@@ -39,7 +40,7 @@ public sealed record EntitlingSubscription(
 );
 
 public sealed record MonitoringTenantSelectionFinding(
-    TenantDto Tenant,
+    TenantRecord Tenant,
     MonitoringTenantSelectionStatus Status,
     string Reason)
 {
@@ -77,7 +78,7 @@ public enum MonitoringTenantExclusionReason
 /// A customer tenant deliberately left out before selection.
 /// </summary>
 public sealed record ExcludedMonitoringTenant(
-    TenantDto Tenant,
+    TenantRecord Tenant,
     MonitoringTenantExclusionReason Reason
 );
 
@@ -117,7 +118,7 @@ public sealed record MonitoringTenantSelectionResult(
     /// </summary>
     public IReadOnlyList<string> Notices { get; init; } = [];
 
-    public IReadOnlyList<TenantDto> InventoryCandidates =>
+    public IReadOnlyList<TenantRecord> InventoryCandidates =>
         Tenants
             .Where(
                 finding =>
@@ -157,7 +158,7 @@ public sealed record MonitoringTenantSelectionResult(
 public sealed class MonitoringTenantSelector
 {
     public MonitoringTenantSelectionResult Select(
-        IReadOnlyList<TenantDto> acronisTenants,
+        IReadOnlyList<TenantRecord> acronisTenants,
         IReadOnlyList<MonitoringEntitlementObservation> observations,
         IReadOnlyList<ResolvedMonitoringCustomerIdentity> identities,
         IReadOnlySet<string>? excludedTenantIds = null)
@@ -615,7 +616,7 @@ public sealed class MonitoringTenantSelector
     }
 
     private static MonitoringTenantSelectionFinding NotEntitled(
-        TenantDto tenant,
+        TenantRecord tenant,
         string customerNumber,
         string reason)
     {
@@ -630,7 +631,7 @@ public sealed class MonitoringTenantSelector
     }
 
     private static MonitoringTenantSelectionFinding Review(
-        TenantDto tenant,
+        TenantRecord tenant,
         string reason)
     {
         return new MonitoringTenantSelectionFinding(
@@ -641,7 +642,7 @@ public sealed class MonitoringTenantSelector
     }
 
     private static MonitoringTenantSelectionFinding Unclassified(
-        TenantDto tenant,
+        TenantRecord tenant,
         string reason)
     {
         return new MonitoringTenantSelectionFinding(

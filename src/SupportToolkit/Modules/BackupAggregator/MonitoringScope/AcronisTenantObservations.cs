@@ -1,5 +1,5 @@
 using SupportToolkit.Core.Reconciliation;
-using SupportToolkit.Providers.Acronis.Tenants.Dtos;
+using SupportToolkit.Core.Tenants;
 
 namespace SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 
@@ -11,7 +11,7 @@ namespace SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 public static class AcronisTenantObservations
 {
     public static IReadOnlyList<AcronisTenantObservation> FromCustomerTenants(
-        IEnumerable<TenantDto> tenants)
+        IEnumerable<TenantRecord> tenants)
     {
         ArgumentNullException.ThrowIfNull(tenants);
 

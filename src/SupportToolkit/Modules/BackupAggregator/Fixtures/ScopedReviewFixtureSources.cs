@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Modules.BackupAggregator.Production;
+using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Providers.Acronis.Devices;
 using SupportToolkit.Providers.Acronis.Devices.Dtos;
 using SupportToolkit.Providers.Acronis.Microsoft365;
@@ -30,6 +32,25 @@ public sealed class FixtureSmartSubscriptionEvidenceSource
 }
 
 /// <summary>
+/// The fixture-mode scoped review's inventory: synthetic tenants and
+/// inventory read through the real Acronis adapter, so fixture mode
+/// exercises the same tenant resolution and normalization as production.
+/// </summary>
+public static class ScopedReviewFixtureInventory
+{
+    public static ScopedInventoryRuntime CreateRuntime(
+        HealthyFixtureInventoryProvider inventory) =>
+        new(
+            AcronisBackupInventory.CreateReviewService(
+                new AcronisTenantResolver(
+                    new FixtureCustomerTenantProvider()),
+                inventory,
+                inventory,
+                new BackupInventoryNormalizer()),
+            null);
+}
+
+/// <summary>
 /// Synthetic Acronis customer tenants for fixture-mode scoped review.
 /// </summary>
 public sealed class FixtureCustomerTenantProvider
@@ -38,10 +59,21 @@ public sealed class FixtureCustomerTenantProvider
     public Task<IReadOnlyList<TenantDto>> GetTenantsAsync(
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(
+        // This fakes Acronis, so it hands out Acronis tenants.
+        return Task.FromResult<IReadOnlyList<TenantDto>>(
             MonitoringTenantSelectionFixtureFactory
                 .Create()
-                .Tenants);
+                .Tenants
+                .Select(
+                    tenant => new TenantDto
+                    {
+                        Id = tenant.Id,
+                        Name = tenant.Name,
+                        Kind = tenant.Kind,
+                        DeletedAt = tenant.DeletedAt,
+                        Enabled = tenant.Enabled
+                    })
+                .ToArray());
     }
 }
 

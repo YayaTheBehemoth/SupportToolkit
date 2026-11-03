@@ -1,7 +1,7 @@
 using SupportToolkit.Core.CustomerMapping.Matching;
-using SupportToolkit.Providers.Acronis.Tenants.Dtos;
+using SupportToolkit.Core.Tenants;
 
-namespace SupportToolkit.Modules.BackupAggregator.MonitoringScope;
+namespace SupportToolkit.Core.CustomerMapping;
 
 /// <summary>
 /// Customer parties for a resolution run, with what was left out.
@@ -18,7 +18,7 @@ public sealed record AcronisPartyBuild(
 /// <summary>
 /// Converts Acronis customer tenants into matching evidence.
 ///
-/// Only fields of the production-verified TenantDto contract are used.
+/// Only fields of the production-verified TenantRecord contract are used.
 /// The contact fields were profiled against production and hold no
 /// usable match key (no CVR, no per-customer e-mail, and the account
 /// number is Acronis's own numbering), and customer_id is absent.
@@ -33,7 +33,7 @@ public static class AcronisCustomerParties
     /// is left out, as detected from the tenant list itself.
     /// </summary>
     public static AcronisPartyBuild ForResolution(
-        IReadOnlyList<TenantDto> allTenants)
+        IReadOnlyList<TenantRecord> allTenants)
     {
         ArgumentNullException.ThrowIfNull(allTenants);
 
@@ -78,7 +78,7 @@ public static class AcronisCustomerParties
     }
 
     public static IReadOnlyList<CustomerParty> FromCustomerTenants(
-        IEnumerable<TenantDto> tenants)
+        IEnumerable<TenantRecord> tenants)
     {
         ArgumentNullException.ThrowIfNull(tenants);
 

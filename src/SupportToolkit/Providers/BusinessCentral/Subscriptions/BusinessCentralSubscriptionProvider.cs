@@ -14,7 +14,8 @@ namespace SupportToolkit.Providers.BusinessCentral.Subscriptions;
 /// </summary>
 public sealed class BusinessCentralSubscriptionProvider
     : IBusinessCentralSubscriptionProvider,
-      IBusinessCentralCustomerNameProvider
+      IBusinessCentralCustomerNameProvider,
+      IBusinessCentralSubscriptionBillingProvider
 {
     private const string HeadersEntitySet =
         "smartSubscriptionHeaders";
@@ -134,6 +135,25 @@ public sealed class BusinessCentralSubscriptionProvider
             "subscription header customer names",
             $"{_headersPath}?$select=" +
             BusinessCentralSubscriptionFields.HeaderCustomerNameSelect,
+            cancellationToken
+        );
+    }
+
+    /// <summary>
+    /// Reads what each subscription line is billed at from the already
+    /// approved lines page. Its own request and its own $select, so the
+    /// entitlement read never asks for prices and a missing price
+    /// column fails this call alone.
+    /// </summary>
+    public async Task<IReadOnlyList<BusinessCentralSubscriptionBillingLineDto?>>
+        GetBillingLinesAsync(
+            CancellationToken cancellationToken = default)
+    {
+        return await _paginator.FetchAllAsync<
+            BusinessCentralSubscriptionBillingLineDto?>(
+            "subscription billing lines",
+            $"{_linesPath}?$select=" +
+            BusinessCentralSubscriptionFields.BillingLineSelect,
             cancellationToken
         );
     }

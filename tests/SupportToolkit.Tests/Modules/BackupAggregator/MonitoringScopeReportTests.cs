@@ -1,3 +1,4 @@
+using SupportToolkit.Core.Tenants;
 using System.Globalization;
 using SupportToolkit.Core.CustomerMapping;
 using SupportToolkit.Core.MonitoringScope;
@@ -371,7 +372,7 @@ public class MonitoringScopeReportTests
         ];
     }
 
-    private static IReadOnlyList<TenantDto> Tenants()
+    private static IReadOnlyList<TenantRecord> Tenants()
     {
         return
         [
@@ -401,12 +402,12 @@ public class MonitoringScopeReportTests
             blocked);
     }
 
-    private static TenantDto Tenant(
+    private static TenantRecord Tenant(
         string id,
         string name,
         string kind = "customer")
     {
-        return new TenantDto
+        return new TenantRecord
         {
             Id = id,
             Name = name,

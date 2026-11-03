@@ -1,4 +1,5 @@
 using SupportToolkit.Core.Configuration;
+using SupportToolkit.Core.Tenants;
 using SupportToolkit.Core.CustomerMapping;
 using SupportToolkit.Core.CustomerMapping.Matching;
 using SupportToolkit.Core.Logging;
@@ -6,11 +7,7 @@ using SupportToolkit.Core.MonitoringScope;
 using SupportToolkit.Core.Reconciliation;
 using SupportToolkit.Modules.BackupAggregator.Fixtures;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
-using SupportToolkit.Providers.Acronis.Tenants.Dtos;
-using SupportToolkit.Providers.Acronis.Transport;
-using SupportToolkit.Providers.BusinessCentral;
-using SupportToolkit.Providers.BusinessCentral.Subscriptions;
-using SupportToolkit.Providers.BusinessCentral.Transport;
+using SupportToolkit.Modules.BackupAggregator.Production;
 
 namespace SupportToolkit.Modules.BackupAggregator.Services;
 
@@ -44,17 +41,6 @@ public sealed class BackupAggregatorScopedWorkflow
     private readonly Func<CancellationToken,
         Task<ScopedInventoryRuntime>> _inventoryRuntimeFactory;
 
-    // Where operator-facing progress from a production review goes.
-    // Supplied by the host; this workflow never writes to a console.
-    private readonly Action<string>? _progress;
-
-    // Manual runs never wait for in-progress backups; automatic runs do.
-    private readonly ReviewRunMode _runMode;
-
-    // One Business Central bundle per workflow, so the evidence and
-    // the names share a single sign-in.
-    private Task<BusinessCentralProviderBundle>? _businessCentralBundle;
-
     public BackupAggregatorScopedWorkflow(
         SupportToolkitConfigurationResolver configurationResolver,
         IMonitoringIdentitySource? identitySource = null,
@@ -76,9 +62,6 @@ public sealed class BackupAggregatorScopedWorkflow
             ?? throw new ArgumentNullException(
                 nameof(configurationResolver));
 
-        _progress = progress;
-        _runMode = runMode;
-
         _mappingRepository =
             mappingRepository;
 
@@ -91,17 +74,23 @@ public sealed class BackupAggregatorScopedWorkflow
         _identitySource =
             identitySource;
 
+        var production =
+            new ScopedReviewProductionSources(
+                configurationResolver,
+                runMode,
+                progress);
+
         _evidenceSourceFactory =
             evidenceSourceFactory
-            ?? CreateBusinessCentralEvidenceSourceAsync;
+            ?? production.CreateEvidenceSourceAsync;
 
         _nameSourceFactory =
             nameSourceFactory
-            ?? CreateBusinessCentralNameSourceAsync;
+            ?? production.CreateNameSourceAsync;
 
         _inventoryRuntimeFactory =
             inventoryRuntimeFactory
-            ?? CreateAcronisRuntimeAsync;
+            ?? production.CreateInventoryRuntimeAsync;
     }
 
     /// <summary>
@@ -189,14 +178,8 @@ public sealed class BackupAggregatorScopedWorkflow
                     new FixtureSmartSubscriptionEvidenceSource()),
                 null,
                 _ => Task.FromResult(
-                    new ScopedInventoryRuntime(
-                        new BackupInventoryReviewService(
-                            new AcronisTenantResolver(
-                                new FixtureCustomerTenantProvider()),
-                            inventory,
-                            inventory,
-                            new BackupInventoryNormalizer()),
-                        null)),
+                    ScopedReviewFixtureInventory.CreateRuntime(
+                        inventory)),
                 asOfDate,
                 cancellationToken,
                 mappingRepository: fixtureMappings);
@@ -418,7 +401,7 @@ public sealed class BackupAggregatorScopedWorkflow
     /// </summary>
     private static async Task<AutomaticResolution> ResolveIdentitiesAsync(
         MonitoringScopeResult scope,
-        IReadOnlyList<TenantDto> tenants,
+        IReadOnlyList<TenantRecord> tenants,
         Func<CancellationToken, Task<ICustomerNameSource>>? nameSourceFactory,
         ICustomerMappingRepository? storedMappings,
         IReadOnlySet<string>? excludedTenantIds,
@@ -588,68 +571,6 @@ public sealed class BackupAggregatorScopedWorkflow
         ICustomerMappingRepository Mappings,
         AutomaticMappingSummary Summary);
 
-    private Task<BusinessCentralProviderBundle>
-        GetBusinessCentralBundleAsync(
-            CancellationToken cancellationToken)
-    {
-        return _businessCentralBundle ??=
-            BusinessCentralProviderFactory.CreateAsync(
-                _configurationResolver,
-                cancellationToken);
-    }
-
-    private async Task<ISmartSubscriptionEvidenceSource>
-        CreateBusinessCentralEvidenceSourceAsync(
-            CancellationToken cancellationToken)
-    {
-        var bundle =
-            await GetBusinessCentralBundleAsync(cancellationToken);
-
-        return new BusinessCentralSmartSubscriptionEvidenceSource(
-            bundle.Provider,
-            BusinessCentralSourceContext.From(bundle.Options));
-    }
-
-    private async Task<ICustomerNameSource>
-        CreateBusinessCentralNameSourceAsync(
-            CancellationToken cancellationToken)
-    {
-        var bundle =
-            await GetBusinessCentralBundleAsync(cancellationToken);
-
-        return new BusinessCentralCustomerNameSource(
-            bundle.Provider);
-    }
-
-    private async Task<ScopedInventoryRuntime>
-        CreateAcronisRuntimeAsync(
-            CancellationToken cancellationToken)
-    {
-        var connection =
-            await _configurationResolver
-                .GetAcronisConnectionAsync(cancellationToken);
-
-        var wait =
-            await InProgressWaitSetup.LoadAsync(
-                _configurationResolver,
-                BackupAggregatorModule.ModuleCommand,
-                _runMode,
-                cancellationToken);
-
-        var session =
-            BackupAggregatorProductionSession.Create(
-                AcronisOptions.Create(
-                    connection.DatacenterUrl,
-                    connection.ClientId,
-                    connection.ClientSecret),
-                OperationalLogger.FromEnvironment(),
-                wait,
-                _progress);
-
-        return new ScopedInventoryRuntime(
-            session.ReviewService,
-            session);
-    }
 }
 
 /// <summary>

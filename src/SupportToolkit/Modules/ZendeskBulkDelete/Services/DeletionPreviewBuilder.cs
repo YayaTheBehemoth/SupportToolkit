@@ -18,6 +18,27 @@ public static class DeletionPreviewBuilder
     public static readonly TimeSpan RecentlyClosedWindow =
         TimeSpan.FromHours(24);
 
+    /// <summary>
+    /// Zendesk archives closed tickets after about this long. A deleted
+    /// archived ticket is not in the 30-day deleted-tickets view and can
+    /// only be restored through the API by ID.
+    /// </summary>
+    public static readonly TimeSpan ArchiveAge =
+        TimeSpan.FromDays(120);
+
+    /// <summary>
+    /// True for a closed ticket last updated at least <see cref="ArchiveAge"/>
+    /// ago. An approximation: the real close time is not in the search
+    /// result, and an unknown time is not claimed to be archived.
+    /// </summary>
+    public static bool IsLikelyArchived(
+        string? status,
+        DateTimeOffset? updatedAt,
+        DateTimeOffset now) =>
+        string.Equals(status?.Trim(), "closed", StringComparison.OrdinalIgnoreCase)
+        && updatedAt is not null
+        && now - updatedAt.Value >= ArchiveAge;
+
     /// <param name="organizationNames">
     /// Null when the lookup failed: every organization is then unknown.
     /// </param>
@@ -93,7 +114,9 @@ public static class DeletionPreviewBuilder
             RequesterDomain(ticket.RequesterId, userEmails),
             ticket.UpdatedAt,
             flag is null,
-            flag);
+            flag,
+            IsLikelyArchived(status, ticket.UpdatedAt, now),
+            ticket.Description);
     }
 
     private static string Organization(

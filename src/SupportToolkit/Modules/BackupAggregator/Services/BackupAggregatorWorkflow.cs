@@ -1,16 +1,11 @@
 
-using System.Globalization;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Modules.BackupAggregator.Fixtures;
-using SupportToolkit.Core.Logging;
 using SupportToolkit.Core.Ticketing.Models;
-using SupportToolkit.Core.Ticketing.Services;
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.Ticketing;
-using SupportToolkit.Providers.Acronis.Transport;
-using SupportToolkit.Providers.Zendesk.Tickets;
-using SupportToolkit.Providers.Zendesk.Transport;
+using SupportToolkit.Modules.BackupAggregator.Production;
 
 namespace SupportToolkit.Modules.BackupAggregator.Services;
 
@@ -412,24 +407,12 @@ public sealed class BackupAggregatorWorkflow
     /// Resolve and validate the currently selected Zendesk destination
     /// without calling the external API or exposing credentials to the UI.
     /// </summary>
-    public async Task<ZendeskTicketDestinationPreview>
+    public Task<ZendeskTicketDestinationPreview>
         GetTicketSubmissionTargetAsync(
-            CancellationToken cancellationToken = default)
-    {
-        var connection =
-            await _configurationResolver.GetZendeskConnectionAsync(
-                cancellationToken);
-
-        var options = ZendeskOptions.Create(
-            connection.Subdomain,
-            connection.ClientId,
-            connection.ClientSecret);
-
-        return new ZendeskTicketDestinationPreview(
-            options.BaseUri.Host,
-            connection.DestinationName,
-            connection.GroupId);
-    }
+            CancellationToken cancellationToken = default) =>
+        BackupAggregatorProduction.GetTicketDestinationAsync(
+            _configurationResolver,
+            cancellationToken);
 
     /// <summary>
     /// Interactive submission only: fail closed if the destination selected
@@ -453,125 +436,25 @@ public sealed class BackupAggregatorWorkflow
             confirmedDestination);
     }
 
-    private async Task<CreatedTicket>
+    private Task<CreatedTicket>
         SubmitTicketDraftAsync(
             TicketDraft draft,
             CancellationToken cancellationToken,
-            ZendeskTicketDestinationPreview? confirmedDestination = null)
-    {
-        /*
-         * Resolve the destination before creating the HTTP session.
-         * Missing or invalid routing configuration must fail locally.
-         */
-        var resolvedConnection =
-            await _configurationResolver
-                .GetZendeskConnectionAsync(
-                    cancellationToken
-                );
+            ZendeskTicketDestinationPreview? confirmedDestination = null) =>
+        BackupAggregatorProduction.SubmitTicketDraftAsync(
+            _configurationResolver,
+            draft,
+            confirmedDestination,
+            cancellationToken);
 
-        var zendeskOptions =
-            ZendeskOptions.Create(
-                resolvedConnection.Subdomain,
-                resolvedConnection.ClientId,
-                resolvedConnection.ClientSecret
-            );
-
-        if (confirmedDestination is not null)
-        {
-            var currentDestination = new ZendeskTicketDestinationPreview(
-                zendeskOptions.BaseUri.Host,
-                resolvedConnection.DestinationName,
-                resolvedConnection.GroupId);
-
-            if (!currentDestination.IsSameAs(confirmedDestination))
-            {
-                throw new InvalidOperationException(
-                    "The Zendesk destination changed since confirmation. " +
-                    "No ticket was submitted. Review the destination and try again.");
-            }
-        }
-
-        /*
-         * Include the actual Zendesk instance and group in the retry
-         * identity, rather than the profile or destination display name.
-         *
-         * Renaming a profile must not alter ticket identity.
-         */
-        var destinationIdentity =
-            string.Join(
-                ':',
-                "zendesk",
-                resolvedConnection.Subdomain.ToLowerInvariant(),
-                resolvedConnection.GroupId.ToString(
-                    CultureInfo.InvariantCulture
-                )
-            );
-
-        var idempotencyKey =
-            TicketIdempotencyKeyFactory.Create(
-                "backup-review",
-                draft,
-                destinationIdentity
-            );
-
-        var logger =
-            OperationalLogger.FromEnvironment();
-
-        using var session =
-            TicketingProductionSession.Create(
-                zendeskOptions,
-                resolvedConnection.GroupId,
-                new ZendeskTicketIdentity(
-                    resolvedConnection.SubmitterId,
-                    resolvedConnection.RequesterId
-                ),
-                logger
-            );
-
-        return await session.TicketProvider
-            .CreateTicketAsync(
-                draft,
-                idempotencyKey,
-                cancellationToken
-            );
-    }
-
-    private async Task<BackupAggregatorProductionSession>
+    private Task<BackupAggregatorProductionSession>
         CreateProductionSessionAsync(
-            CancellationToken cancellationToken)
-    {
-        var resolvedConnection =
-            await _configurationResolver
-                .GetAcronisConnectionAsync(
-                    cancellationToken
-                );
-
-        var acronisOptions =
-            AcronisOptions.Create(
-                resolvedConnection.DatacenterUrl,
-                resolvedConnection.ClientId,
-                resolvedConnection.ClientSecret
-            );
-
-        var wait =
-            await InProgressWaitSetup.LoadAsync(
-                _configurationResolver,
-                BackupAggregatorModule.ModuleCommand,
-                _runMode,
-                cancellationToken
-            );
-
-        var logger =
-            OperationalLogger.FromEnvironment();
-
-        return BackupAggregatorProductionSession
-            .Create(
-                acronisOptions,
-                logger,
-                wait,
-                _progress
-            );
-    }
+            CancellationToken cancellationToken) =>
+        BackupAggregatorProduction.CreateSessionAsync(
+            _configurationResolver,
+            _runMode,
+            _progress,
+            cancellationToken);
 
     private static AggregatedBackupReport ReviewFixtureTenant(
         string tenantName)

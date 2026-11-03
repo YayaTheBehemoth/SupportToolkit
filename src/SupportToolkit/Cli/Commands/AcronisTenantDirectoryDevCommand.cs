@@ -2,6 +2,7 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using SupportToolkit.Core.Configuration;
+using SupportToolkit.Providers.Acronis;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 
 namespace SupportToolkit.Cli.Commands;
@@ -42,7 +43,7 @@ public sealed class AcronisTenantDirectoryDevCommand
         ArgumentNullException.ThrowIfNull(output);
 
         using var session =
-            await AcronisDevSession.CreateAsync(
+            await AcronisReadSession.CreateAsync(
                 _configurationResolver,
                 cancellationToken);
 

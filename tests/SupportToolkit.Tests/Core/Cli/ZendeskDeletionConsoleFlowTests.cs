@@ -106,6 +106,48 @@ public class ZendeskDeletionConsoleFlowTests : IDisposable
     }
 
     [Fact]
+    public async Task LikelyArchivedTickets_AreWarnedAbout_BeforeTheFirstConfirmation()
+    {
+        var (exit, output, api) =
+            await Run(
+                Preview(
+                [
+                    Ticket(1, closedAgo: TimeSpan.FromDays(200)),
+                    Ticket(2, closedAgo: TimeSpan.FromDays(10))
+                ]),
+                Options(ZendeskBulkDeleteMode.Delete),
+                "2\n");
+
+        var warning = output.IndexOf("probably archived", StringComparison.Ordinal);
+        var confirmation = output.IndexOf("Confirmation 1 of", StringComparison.Ordinal);
+
+        Assert.True(warning >= 0, "The warning is missing.");
+        Assert.True(warning < confirmation, "The warning must come before the first confirmation.");
+
+        // The warning names only the archived ticket, and says how to restore it.
+        var text = output[warning..confirmation];
+
+        Assert.Contains("#1", text);
+        Assert.DoesNotContain("#2", text);
+        Assert.Contains("using the receipt", text);
+
+        // It informs; it does not stop a confirmed deletion.
+        Assert.Equal(0, exit);
+        Assert.Equal([1L, 2L], api.DeletedBatches.Single());
+    }
+
+    [Fact]
+    public async Task WhenNothingIsLikelyArchived_NoArchiveWarningIsShown()
+    {
+        var (_, output, _) =
+            await Run(
+                Preview(Closed(3)),
+                Options(ZendeskBulkDeleteMode.Delete),
+                "3\n");
+
+        Assert.DoesNotContain("probably archived", output);
+    }
+    [Fact]
     public async Task NonClosedTickets_AreListedExplicitly_AndNeedASecondConfirmation()
     {
         var preview = Preview([Ticket(1), Ticket(2), Ticket(3, "open")]);
