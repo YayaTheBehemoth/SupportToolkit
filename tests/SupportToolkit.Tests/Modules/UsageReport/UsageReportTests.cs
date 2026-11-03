@@ -294,7 +294,7 @@ public class UsageReportTests
     }
 
     [Fact]
-    public void ATenantWithoutAnyStorage_IsCounted_NotListed()
+    public void ATenantWithoutAnyStorage_IsASpecialCase()
     {
         var report =
             Build(
@@ -303,12 +303,15 @@ public class UsageReportTests
                 storage: Storage((TenantA, Figures(0m, 0m, 0m))),
                 links: []);
 
-        Assert.Empty(report.Rows);
-        Assert.Contains(report.Notices, notice => notice.Contains("no storage"));
+        var row = Assert.Single(report.SpecialCases);
+
+        Assert.Contains(row.Remarks, remark => remark.Contains("no storage"));
+        Assert.Empty(report.TenantsWithoutSubscription);
+        Assert.True(report.IsComplete);
     }
 
     [Fact]
-    public void ATenantWithoutSubscription_AndWithoutUsage_IsCounted_NotListed()
+    public void ATenantWithoutSubscription_AndWithoutUsage_IsASpecialCase()
     {
         var report =
             Build(
@@ -318,8 +321,10 @@ public class UsageReportTests
                 links: [],
                 extraTenants: [TenantA]);
 
-        Assert.Empty(report.Rows);
-        Assert.Contains(report.Notices, notice => notice.Contains("no usage reported"));
+        var row = Assert.Single(report.SpecialCases);
+
+        Assert.Contains(row.Remarks, remark => remark.Contains("no usage reported yet"));
+        Assert.True(report.IsComplete);
     }
 
     [Fact]
@@ -372,6 +377,7 @@ public class UsageReportTests
         Assert.Equal("Bakkegaard Example Tandlaeger", Assert.Single(report.AwaitingUsage).Name);
         Assert.Equal("Hvidbjerg Example Consulting", Assert.Single(report.TenantsWithoutSubscription).Name);
         Assert.Equal(SupportToolkitMode.Fixture, report.Mode);
+        Assert.Equal("Tranum Example Holding", Assert.Single(report.SpecialCases).Name);
         Assert.False(report.IsComplete);
     }
 

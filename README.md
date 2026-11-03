@@ -414,7 +414,7 @@ Every month, finance compares each customer's Acronis storage with what Business
 - **Business Central**: the subscription lines for the backup items, with item, description, unit, quantity, unit price, discount and amount. The amount is Business Central's own figure; the toolkit calculates no prices. These columns are read by a separate request with its own field list, so the entitlement read never asks for prices and a renamed price column fails only this read.
 - Customers are matched to Acronis tenants by name, automatically, as in the monitored review. Nothing is stored.
 
-**Units.** Usage is compared in decimal GB (1 GB = 1,000,000,000 bytes), the unit the backup quantity is billed in. The Acronis portal labels its figures GB but counts 1,073,741,824 bytes per GB, so for the same data it shows about 7% less. The detailed view and each row's details show both.
+**Units.** Usage is compared in decimal GB (1 GB = 1,000,000,000 bytes), the unit the backup quantity is billed in. The Acronis portal labels its figures GB but counts 1,073,741,824 bytes per GB, so for the same data it shows about 7% less. Each row's details show the figures as the portal shows them; the detailed view adds the compared decimal GB and the bytes.
 
 **What the report computes.** Only a unit conversion, adding up (a metric's lines, a customer's tenants, a customer's backup lines) and one subtraction: billed GB minus the Acronis total. Nothing is judged and there are no thresholds. A customer whose Acronis total is not backup + Microsoft 365 gets a note; no figure is changed.
 
@@ -424,10 +424,11 @@ Every month, finance compares each customer's Acronis storage with what Business
 - **Set up, no usage reported yet:** an active backup line and a matched tenant, but Acronis has reported nothing. Listed apart, to raise with whoever set it up; not compared.
 - **Not active:** every backup line is on a subscription that is not active, or omitted. Left out of the report; the detailed view lists them, with any Acronis storage.
 - **Storage without a backup subscription:** customer tenants with storage that no customer with a backup line was matched to.
+- **Special cases:** tenants that fit none of the above but are worth knowing about, such as a tenant with no matched subscription and no usage reported, or one with no storage at all. The detailed view lists them; the simple view gives the count.
 
 Missing or unusable data is unknown with a reason, never zero.
 
-**Caveat.** Acronis describes these usage figures as refreshed every few hours and not meant for billing, and the report says so every time. Check a few customers against the portal and Business Central before relying on it.
+**Caveat.** Acronis describes these usage figures as refreshed every few hours and not meant for billing; the report's notes (in the detailed view, and in the console summary) say so. Check a few customers against the portal and Business Central before relying on it.
 
 **Configuration**, per profile. The item number below is fictional:
 

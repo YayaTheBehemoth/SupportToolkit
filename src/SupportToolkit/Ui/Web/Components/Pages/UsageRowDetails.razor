@@ -1,6 +1,7 @@
 @* What one report row is built from: the Business Central lines as BC states
-   them, and the Acronis figures in both units. Nothing here is calculated
-   beyond the unit conversion. *@
+   them, and the Acronis figures. Nothing here is calculated beyond the unit
+   conversion. The simple view shows the figures as the Acronis portal does;
+   the detailed view adds the compared decimal GB and the bytes. *@
 
 <div class="row-details">
     <h4>Business Central backup lines</h4>
@@ -46,17 +47,25 @@
 
     <p class="muted">
         Tenant: @(Row.TenantNames.Count == 0 ? "none matched" : string.Join(", ", Row.TenantNames)).
-        The portal shows binary GB (1,073,741,824 bytes), about 7% lower than the decimal GB used for the comparison.
+        @if (Detailed)
+        {
+            <text>The portal shows binary GB (1,073,741,824 bytes), about 7% lower than the decimal GB used for the comparison.</text>
+        }
     </p>
 
     <table>
         <thead>
-        <tr><th>Figure</th><th class="num">GB (compared)</th><th class="num">GB as the portal shows</th><th class="num">Bytes</th></tr>
+        <tr>
+            <th>Figure</th>
+            @if (Detailed) { <th class="num">GB (compared)</th> }
+            <th class="num">GB as the portal shows</th>
+            @if (Detailed) { <th class="num">Bytes</th> }
+        </tr>
         </thead>
         <tbody>
-        <Figure Label="Total storage" Value="Row.Total" />
-        <Figure Label="Backup storage" Value="Row.Backup" />
-        <Figure Label="Microsoft 365 and Google Workspace" Value="Row.Microsoft365" />
+        <Figure Label="Total storage" Value="Row.Total" Detailed="Detailed" />
+        <Figure Label="Backup storage" Value="Row.Backup" Detailed="Detailed" />
+        <Figure Label="Microsoft 365 and Google Workspace" Value="Row.Microsoft365" Detailed="Detailed" />
         </tbody>
     </table>
 </div>
@@ -66,6 +75,8 @@
         System.Globalization.CultureInfo.InvariantCulture;
 
     [Parameter, EditorRequired] public UsageReportRow Row { get; set; } = default!;
+
+    [Parameter] public bool Detailed { get; set; }
 
     private static string Number(decimal? value) =>
         value is null ? "unknown" : value.Value.ToString("#,##0.##", Invariant);

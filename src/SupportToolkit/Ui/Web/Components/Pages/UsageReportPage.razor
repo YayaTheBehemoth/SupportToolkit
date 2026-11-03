@@ -89,6 +89,7 @@
     var awaiting = report.AwaitingUsage.ToArray();
     var unbilled = report.TenantsWithoutSubscription.ToArray();
     var notActive = report.NotActive.ToArray();
+    var specialCases = report.SpecialCases.ToArray();
 
     <div class="banner @(report.IsComplete ? "ok" : "warn")">
         <strong>
@@ -129,6 +130,7 @@
                 <dt>No usage reported yet</dt><dd>@awaiting.Length</dd>
                 <dt>Storage without a subscription</dt><dd>@unbilled.Length</dd>
                 <dt>Not active (left out)</dt><dd>@notActive.Length</dd>
+                <dt>Special cases</dt><dd>@specialCases.Length</dd>
                 @if (report.PendingMatches > 0)
                 {
                     <dt>Matches waiting for review</dt><dd>@report.PendingMatches</dd>
@@ -137,18 +139,26 @@
         </section>
     </div>
 
-    <ul class="notes">
-        @foreach (var notice in report.Notices)
+    <div class="section-head">
+        <h2>Customers</h2>
+        @if (_expanded.Count > 0)
         {
-            <li>@notice</li>
+            <button type="button" class="secondary" @onclick="CloseAll">Close all</button>
         }
-    </ul>
-
-    <h2>Customers</h2>
+    </div>
     <p class="muted">
-        GB here is 1,000,000,000 bytes, as Business Central bills.
         Difference is billed minus Acronis: negative means less is billed than Acronis reports.
     </p>
+
+    @if (detailed)
+    {
+        <ul class="notes">
+            @foreach (var notice in report.Notices)
+            {
+                <li>@notice</li>
+            }
+        </ul>
+    }
 
     @if (customers.Length == 0)
     {
@@ -218,7 +228,7 @@
                     <tr class="ticket-text">
                         <td></td>
                         <td colspan="@(detailed ? 10 : 8)">
-                            <UsageRowDetails Row="row" />
+                            <UsageRowDetails Row="row" Detailed="detailed" />
                         </td>
                     </tr>
                 }
@@ -306,6 +316,33 @@
             </p>
         }
     }
+
+    @if (specialCases.Length > 0)
+    {
+        @if (detailed)
+        {
+            <h2>Special cases</h2>
+            <p class="muted">Tenants that fit none of the lists above but are worth knowing about.</p>
+            <table>
+                <thead><tr><th>Acronis tenant</th><th>Why it is here</th></tr></thead>
+                <tbody>
+                @foreach (var row in specialCases)
+                {
+                    <tr>
+                        <td>@row.Name</td>
+                        <td>@string.Join("; ", row.Remarks)</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+        else
+        {
+            <p class="muted">
+                @specialCases.Length special case(s), such as a tenant with no usage reported, are listed in the Detailed view.
+            </p>
+        }
+    }
 }
 
 @code {
@@ -334,6 +371,8 @@
         _expanded.Clear();
         State.UsageReport!.Start();
     }
+
+    private void CloseAll() => _expanded.Clear();
 
     private void Fold(string key)
     {

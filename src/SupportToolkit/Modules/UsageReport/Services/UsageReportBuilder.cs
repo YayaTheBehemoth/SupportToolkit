@@ -175,40 +175,23 @@ public static class UsageReportBuilder
         }
 
         // Customer tenants not linked to any customer that has a backup
-        // line: usage that may not be billed. Tenants with no storage, or
-        // nothing reported, are counted, not listed.
+        // line: usage that may not be billed. A tenant with no storage, or
+        // nothing reported, is a special case, listed apart.
         var linkedTenants =
             tenantsByCustomer
                 .Where(pair => perCustomer.ContainsKey(pair.Key))
                 .SelectMany(pair => pair.Value)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var tenantsWithoutStorage = 0;
-        var tenantsWithoutUsage = 0;
-
         foreach (var (tenantId, name) in tenantNames
                      .Where(pair => !linkedTenants.Contains(pair.Key)))
         {
-            var row =
+            rows.Add(
                 TenantRow(
                     tenantId,
                     name,
                     pendingTenants.Contains(tenantId),
-                    storage);
-
-            if (row.Total.Bytes == 0m)
-            {
-                tenantsWithoutStorage++;
-                continue;
-            }
-
-            if (row.Total.NotReported)
-            {
-                tenantsWithoutUsage++;
-                continue;
-            }
-
-            rows.Add(row);
+                    storage));
         }
 
         var ordered =
@@ -225,7 +208,7 @@ public static class UsageReportBuilder
             inputs.Matching.PendingReview.Count,
             unattributed,
             inputs.Storage.PeriodStart,
-            Notices(inputs, unattributed, tenantsWithoutStorage, tenantsWithoutUsage),
+            Notices(inputs, unattributed),
             ReportProblems(inputs));
     }
 
@@ -371,9 +354,28 @@ public static class UsageReportBuilder
 
         var (total, backup, microsoft365) = Measure([tenantId], storage);
 
-        if (!total.IsKnown)
+        var kind = UsageRowKind.TenantWithoutSubscription;
+
+        if (total.NotReported)
         {
-            problems.Add("total usage unknown: " + total.Problem);
+            kind = UsageRowKind.SpecialCase;
+            remarks.Add(
+                "no matched subscription, and no usage reported yet (" +
+                total.Problem + ")");
+        }
+        else if (total.Bytes == 0m)
+        {
+            kind = UsageRowKind.SpecialCase;
+            remarks.Add("no matched subscription, and no storage");
+        }
+        else
+        {
+            if (!total.IsKnown)
+            {
+                problems.Add("total usage unknown: " + total.Problem);
+            }
+
+            AddComponentRemarks(remarks, total, backup, microsoft365);
         }
 
         if (matchPending)
@@ -381,10 +383,8 @@ public static class UsageReportBuilder
             remarks.Add("a match to a customer needs review");
         }
 
-        AddComponentRemarks(remarks, total, backup, microsoft365);
-
         return new UsageReportRow(
-            UsageRowKind.TenantWithoutSubscription,
+            kind,
             null,
             null,
             [tenantId],
@@ -455,9 +455,7 @@ public static class UsageReportBuilder
 
     private static IReadOnlyList<string> Notices(
         UsageReportInputs inputs,
-        int unattributed,
-        int tenantsWithoutStorage,
-        int tenantsWithoutUsage)
+        int unattributed)
     {
         var notices = new List<string>
         {
@@ -476,20 +474,6 @@ public static class UsageReportBuilder
                 $"{unattributed} backup line(s) belong to a subscription that " +
                 "is missing or not tied to one customer, so they are not " +
                 "counted for anyone.");
-        }
-
-        if (tenantsWithoutStorage > 0)
-        {
-            notices.Add(
-                $"{tenantsWithoutStorage} other customer tenant(s) have no " +
-                "storage and are not listed.");
-        }
-
-        if (tenantsWithoutUsage > 0)
-        {
-            notices.Add(
-                $"{tenantsWithoutUsage} other customer tenant(s) have no " +
-                "usage reported yet and are not listed.");
         }
 
         notices.AddRange(inputs.Storage.Notices);

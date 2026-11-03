@@ -284,7 +284,10 @@ public class UsageReportPageTests : IClassFixture<UsageReportHostFixture>
         Assert.Contains("Set up, no usage reported yet", html);
         Assert.Contains("Bakkegaard Example Tandlaeger", html);
         Assert.Contains("Storage without a backup subscription", html);
-        Assert.Contains("not meant for billing", html);
+        // Simple view: the notes and special cases are in the Detailed view.
+        Assert.DoesNotContain("not meant for billing", html);
+        Assert.Contains("special case(s)", html);
+        Assert.DoesNotContain("Tranum Example Holding", html);
 
         // Simple view: not-active customers are counted, not listed.
         Assert.Contains("The Detailed view lists them", html);

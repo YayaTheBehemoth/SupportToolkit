@@ -100,7 +100,14 @@ public enum UsageRowKind
     /// An Acronis customer tenant with storage but no matched customer
     /// that has a backup subscription line: usage that may not be billed.
     /// </summary>
-    TenantWithoutSubscription
+    TenantWithoutSubscription,
+
+    /// <summary>
+    /// A tenant that fits nowhere else and is worth knowing about, such as
+    /// one with no matched subscription and no usage reported, or no
+    /// storage at all. Listed apart; the row's remark says which case.
+    /// </summary>
+    SpecialCase
 }
 
 /// <summary>
@@ -173,6 +180,9 @@ public sealed record UsageReport(
 
     public IEnumerable<UsageReportRow> TenantsWithoutSubscription =>
         Rows.Where(row => row.Kind == UsageRowKind.TenantWithoutSubscription);
+
+    public IEnumerable<UsageReportRow> SpecialCases =>
+        Rows.Where(row => row.Kind == UsageRowKind.SpecialCase);
 
     public int CustomersCompared =>
         Customers.Count(row => row.IsCompared);

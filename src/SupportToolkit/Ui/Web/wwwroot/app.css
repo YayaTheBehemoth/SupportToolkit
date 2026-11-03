@@ -213,3 +213,5 @@ td.diff { font-weight: 600; }
 ul.notes { margin: 4px 0 16px; padding-left: 20px; color: var(--muted); font-size: 13px; }
 .row-details h4 { margin: 8px 0 6px; font-size: 13px; }
 .row-details table { margin-bottom: 8px; }
+.section-head { display: flex; align-items: center; gap: 14px; }
+.section-head h2 { margin-right: auto; }

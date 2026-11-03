@@ -36,6 +36,7 @@ public static class ConsoleUsageReportReporter
         output.WriteLine($"Set up, no usage reported yet:          {report.AwaitingUsage.Count()}");
         output.WriteLine($"Not active (left out of the report):    {report.NotActive.Count()}");
         output.WriteLine($"Tenants with storage, no subscription:  {report.TenantsWithoutSubscription.Count()}");
+        output.WriteLine($"Special cases (listed apart):           {report.SpecialCases.Count()}");
         output.WriteLine($"Customer matches waiting for review:    {report.PendingMatches}");
 
         foreach (var problem in report.Problems)
@@ -132,6 +133,21 @@ public static class ConsoleUsageReportReporter
             {
                 output.WriteLine(
                     $"{Fit(row.Name),-NameWidth}  Acronis {Number(row.Total.Gb)} GB");
+            }
+        }
+
+        var specialCases = report.SpecialCases.ToArray();
+
+        if (specialCases.Length > 0)
+        {
+            output.WriteLine();
+            output.WriteLine("SPECIAL CASES");
+            output.WriteLine();
+
+            foreach (var row in specialCases)
+            {
+                output.WriteLine(
+                    $"{Fit(row.Name),-NameWidth}  {string.Join("; ", row.Remarks)}");
             }
         }
 
