@@ -195,7 +195,12 @@ If customer discovery unexpectedly returns zero customer tenants, the all-tenant
 
 Ticket creation is blocked when the underlying review is incomplete or its resource accounting is inconsistent.
 
-**Waiting for in-progress resources.** A resource that Acronis reports as running is shown as In progress, and a ticket drafted mid-backup would differ from one drafted afterwards. In production, the review therefore waits for running resources and re-reviews only the tenants that still have some. It prints how many resources are still running and how long it has waited. A tenant whose re-review fails is a failed tenant review like any other. When the maximum wait ends, the remaining resources stay In progress, are counted as pending in the report, console and ticket, and are never shown as healthy. Whether a ticket can still be created in that case is unchanged: it can. With nothing running there is no wait and no extra call. The settings are per profile and module:
+**Manual and automatic runs.** A resource that Acronis reports as running is shown as In progress, and a ticket drafted mid-backup would differ from one drafted afterwards. How the review treats that depends on how it was started:
+
+- **Manual** (every run today: the console, the interactive shell and `serve`): one pass, no waiting. Running resources are still reported honestly. A running backup that already has a successful backup is counted as healthy, but the console, the web page and the ticket all say how many resources were still in progress at review time and that their result is not final. A review with nothing else to report is titled "backups still in progress", never "no attention required".
+- **Automatic** (for a future unattended run; nothing starts one yet): waits for running resources and re-reviews only the tenants that still have some. It prints how many are still running and how long it has waited. A tenant whose re-review fails is a failed tenant review like any other. When the maximum wait ends, the remaining resources stay In progress, are counted as pending in the report, console and ticket, and are never shown as healthy. With nothing running there is no wait and no extra call.
+
+The host chooses the mode when it builds the workflow (`ReviewRunMode`); there is no command-line switch. The wait settings below apply to automatic runs only and are per profile and module:
 
 ```json
 "review": {
@@ -206,7 +211,7 @@ Ticket creation is blocked when the underlying review is incomplete or its resou
 }
 ```
 
-Both values are optional and default to 1800 and 30. `0` for the maximum wait disables waiting. The single-tenant `inventory-review <tenant>` does not wait. `configure status` shows the effective values.
+Both values are optional and default to 1800 and 30. `0` for the maximum wait disables waiting even for automatic runs. The single-tenant `inventory-review <tenant>` never waits. `configure status` shows the effective values.
 
 ### Commands
 

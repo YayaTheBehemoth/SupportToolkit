@@ -48,6 +48,9 @@ public sealed class BackupAggregatorScopedWorkflow
     // Supplied by the host; this workflow never writes to a console.
     private readonly Action<string>? _progress;
 
+    // Manual runs never wait for in-progress backups; automatic runs do.
+    private readonly ReviewRunMode _runMode;
+
     // One Business Central bundle per workflow, so the evidence and
     // the names share a single sign-in.
     private Task<BusinessCentralProviderBundle>? _businessCentralBundle;
@@ -65,7 +68,8 @@ public sealed class BackupAggregatorScopedWorkflow
         Func<CancellationToken,
             Task<ICustomerNameSource>>?
             nameSourceFactory = null,
-        Action<string>? progress = null)
+        Action<string>? progress = null,
+        ReviewRunMode runMode = ReviewRunMode.Manual)
     {
         _configurationResolver =
             configurationResolver
@@ -73,6 +77,7 @@ public sealed class BackupAggregatorScopedWorkflow
                 nameof(configurationResolver));
 
         _progress = progress;
+        _runMode = runMode;
 
         _mappingRepository =
             mappingRepository;
@@ -628,6 +633,7 @@ public sealed class BackupAggregatorScopedWorkflow
             await InProgressWaitSetup.LoadAsync(
                 _configurationResolver,
                 BackupAggregatorModule.ModuleCommand,
+                _runMode,
                 cancellationToken);
 
         var session =

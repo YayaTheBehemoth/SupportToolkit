@@ -74,8 +74,27 @@ public sealed class AggregatedBackupReport
                 tenant.InProgressCount
         );
 
+    public int InProgressTenantCount =>
+        Tenants.Count(
+            tenant =>
+                tenant.InProgressCount > 0
+        );
+
     /// <summary>
     /// Set when the review waited for in-progress resources.
     /// </summary>
     public InProgressWaitSummary? InProgressWait { get; init; }
+
+    /// <summary>
+    /// Resources whose result is not final. After a wait this is what
+    /// the wait left pending; without one, whatever was running when
+    /// the review took its snapshot.
+    /// </summary>
+    public int InProgressPending =>
+        InProgressWait?.PendingResources
+        ?? InProgressCount;
+
+    public int InProgressPendingTenants =>
+        InProgressWait?.PendingTenants
+        ?? InProgressTenantCount;
 }

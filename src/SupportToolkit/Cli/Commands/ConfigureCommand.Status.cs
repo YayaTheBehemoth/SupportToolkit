@@ -552,7 +552,11 @@ public sealed partial class ConfigureCommand
     private static async Task WriteEffectiveReviewWaitAsync(
         SupportToolkitConfigurationResolver resolver)
     {
-        Console.WriteLine("Review wait for in-progress backups");
+        Console.WriteLine(
+            "Review wait for in-progress backups (automatic runs only)");
+        Console.WriteLine(
+            "  Manual runs never wait; they report running backups as " +
+            "not final.");
 
         try
         {

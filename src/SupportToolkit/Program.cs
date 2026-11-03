@@ -51,12 +51,14 @@ var zendeskBulkDeleteCommand =
 var backupAggregatorWorkflow =
     new BackupAggregatorWorkflow(
         configurationResolver,
-        ConsoleProgress.Write);
+        ConsoleProgress.Write,
+        ReviewRunMode.Manual);
 
 var backupAggregatorScopedWorkflow =
     new BackupAggregatorScopedWorkflow(
         configurationResolver,
-        progress: ConsoleProgress.Write);
+        progress: ConsoleProgress.Write,
+        runMode: ReviewRunMode.Manual);
 
 ISupportToolkitModule[] modules =
 [
@@ -116,12 +118,14 @@ try
         var webWorkflow =
             new BackupAggregatorWorkflow(
                 configurationResolver,
-                webProgress.Write);
+                webProgress.Write,
+                ReviewRunMode.Manual);
 
         var webScopedWorkflow =
             new BackupAggregatorScopedWorkflow(
                 configurationResolver,
-                progress: webProgress.Write);
+                progress: webProgress.Write,
+                runMode: ReviewRunMode.Manual);
 
         return await WebHostRunner.RunAsync(
             serveOptions!,

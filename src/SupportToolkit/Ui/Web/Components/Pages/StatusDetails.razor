@@ -23,6 +23,11 @@
                     </span>
                 </header>
 
+                <p class="muted">
+                    Applies to automatic runs only. Manual runs never wait; they report
+                    running backups as not final.
+                </p>
+
                 @if (!Status.Runtime.ReviewWait.IsValid)
                 {
                     <p class="problem">@Status.Runtime.ReviewWait.Problem</p>

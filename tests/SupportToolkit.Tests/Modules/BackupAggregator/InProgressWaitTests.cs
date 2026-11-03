@@ -1,6 +1,7 @@
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Modules.BackupAggregator.Models;
+using SupportToolkit.Modules.BackupAggregator.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Modules.BackupAggregator.Ticketing;
 using SupportToolkit.Providers.Acronis.Devices;
@@ -18,6 +19,7 @@ namespace SupportToolkit.Tests.Modules.BackupAggregator;
 /// resource as healthy. No test sleeps: the clock is a fake whose
 /// delays complete at once and advance its time.
 /// </summary>
+[Collection("ConsoleOutput")]
 public class InProgressWaitTests
 {
     private const string TenantA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
@@ -265,6 +267,209 @@ public class InProgressWaitTests
         Assert.Contains("still in progress", draft.Subject);
     }
 
+    [Fact]
+    public async Task ManualRun_NeverWaits_EvenWhenTheProfileAsksForIt()
+    {
+        var configuration = ProfileWithWait(maxSeconds: 600);
+
+        var options =
+            await InProgressWaitSetup.LoadAsync(
+                CreateResolver(configuration),
+                "backup-aggregator",
+                ReviewRunMode.Manual,
+                CancellationToken.None);
+
+        Assert.False(options.Enabled);
+        Assert.Equal(InProgressWaitOptions.Disabled, options);
+    }
+
+    [Fact]
+    public async Task ManualRun_DoesNotReadTheWaitSettings()
+    {
+        // An invalid wait setting only matters to a run that would use it.
+        var configuration = ProfileWithWait(maxSeconds: -5);
+
+        var options =
+            await InProgressWaitSetup.LoadAsync(
+                CreateResolver(configuration),
+                "backup-aggregator",
+                ReviewRunMode.Manual,
+                CancellationToken.None);
+
+        Assert.False(options.Enabled);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => InProgressWaitSetup.LoadAsync(
+                CreateResolver(configuration),
+                "backup-aggregator",
+                ReviewRunMode.Automatic,
+                CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task AutomaticRun_UsesTheProfileSettings_OrTheDefaults()
+    {
+        var configured =
+            await InProgressWaitSetup.LoadAsync(
+                CreateResolver(ProfileWithWait(maxSeconds: 600)),
+                "backup-aggregator",
+                ReviewRunMode.Automatic,
+                CancellationToken.None);
+
+        Assert.True(configured.Enabled);
+        Assert.Equal(TimeSpan.FromSeconds(600), configured.MaxWait);
+
+        var defaults =
+            await InProgressWaitSetup.LoadAsync(
+                CreateResolver(ProfileWithWait(maxSeconds: null)),
+                "backup-aggregator",
+                ReviewRunMode.Automatic,
+                CancellationToken.None);
+
+        Assert.True(defaults.Enabled);
+
+        Assert.Equal(
+            TimeSpan.FromSeconds(
+                InProgressWaitSettings.DefaultMaxWaitSeconds),
+            defaults.MaxWait);
+
+        var disabled =
+            await InProgressWaitSetup.LoadAsync(
+                CreateResolver(ProfileWithWait(maxSeconds: 0)),
+                "backup-aggregator",
+                ReviewRunMode.Automatic,
+                CancellationToken.None);
+
+        Assert.False(disabled.Enabled);
+    }
+
+    [Fact]
+    public async Task ManualSnapshot_WithARunningHealthyDevice_IsNeverASilentlyCleanTicket()
+    {
+        var devices =
+            new ScriptedDevices(
+                (TenantA, _ => Running(withPriorSuccess: true)),
+                (TenantB, _ => Finished()));
+
+        var clock = new FakeClock();
+
+        var report =
+            await CreateService(
+                    devices,
+                    InProgressWaitOptions.Disabled,
+                    clock)
+                .ReviewAllTenantsAsync();
+
+        // No wait happened, so there is no wait summary to lean on.
+        Assert.Null(report.InProgressWait);
+        Assert.Empty(clock.Delays);
+        Assert.Equal(1, devices.CallsFor(TenantA));
+
+        Assert.Equal(0, report.FindingsCount);
+        Assert.Equal(1, report.InProgressPending);
+        Assert.Equal(1, report.InProgressPendingTenants);
+
+        var draft = new BackupReviewTicketDraftFactory().Create(report);
+
+        Assert.DoesNotContain("no attention required", draft.Subject);
+        Assert.Contains("still in progress", draft.Subject);
+        Assert.Contains("Still in progress at review time", draft.Body);
+        Assert.Contains("not final", draft.Body);
+        Assert.DoesNotContain("after waiting", draft.Body);
+    }
+
+    [Fact]
+    public async Task ManualSnapshot_WithARunningDeviceAndNoPriorSuccess_StaysAFinding()
+    {
+        var devices =
+            new ScriptedDevices(
+                (TenantA, _ => Running()),
+                (TenantB, _ => Finished()));
+
+        var report =
+            await CreateService(
+                    devices,
+                    InProgressWaitOptions.Disabled,
+                    new FakeClock())
+                .ReviewAllTenantsAsync();
+
+        var finding =
+            Assert.Single(
+                report.Tenants.Single(t => t.TenantName == "Tenant A")
+                    .Findings);
+
+        Assert.True(finding.IsInProgress);
+        Assert.Equal(1, report.InProgressPending);
+
+        var draft = new BackupReviewTicketDraftFactory().Create(report);
+
+        Assert.Contains("Status: In progress", draft.Body);
+        Assert.Contains("Still in progress at review time", draft.Body);
+    }
+
+    [Fact]
+    public async Task ManualSnapshot_WithNothingRunning_SaysNothingAboutProgress()
+    {
+        var devices =
+            new ScriptedDevices(
+                (TenantA, _ => Finished()),
+                (TenantB, _ => Finished()));
+
+        var report =
+            await CreateService(
+                    devices,
+                    InProgressWaitOptions.Disabled,
+                    new FakeClock())
+                .ReviewAllTenantsAsync();
+
+        Assert.Equal(0, report.InProgressPending);
+
+        var draft = new BackupReviewTicketDraftFactory().Create(report);
+
+        Assert.DoesNotContain("Still in progress", draft.Body);
+        Assert.DoesNotContain("still in progress", draft.Subject);
+    }
+
+    [Fact]
+    public async Task ManualSnapshot_ConsoleFooterWarnsAndDoesNotClaimAWait()
+    {
+        var devices =
+            new ScriptedDevices(
+                (TenantA, _ => Running(withPriorSuccess: true)),
+                (TenantB, _ => Finished()));
+
+        var report =
+            await CreateService(
+                    devices,
+                    InProgressWaitOptions.Disabled,
+                    new FakeClock())
+                .ReviewAllTenantsAsync();
+
+        var originalOut = Console.Out;
+
+        try
+        {
+            using var writer = new StringWriter();
+
+            Console.SetOut(writer);
+
+            new ConsoleBackupAggregatorReporter().Write(report);
+
+            var output = writer.ToString();
+
+            Assert.Contains(
+                "1 resource(s) in 1 tenant(s) were still in progress " +
+                "at review time",
+                output);
+
+            Assert.DoesNotContain("when waiting stopped", output);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
+    }
+
     [Theory]
     [InlineData(null, null, 1800, 30)]
     [InlineData(600, null, 600, 30)]
@@ -389,6 +594,31 @@ public class InProgressWaitTests
             inProgressWait: options,
             timeProvider: clock,
             progress: progress);
+    }
+
+    private static SupportToolkitConfiguration ProfileWithWait(
+        int? maxSeconds)
+    {
+        var configuration =
+            new SupportToolkitConfiguration
+            {
+                ActiveProfile = "work",
+                Profiles =
+                {
+                    ["work"] = new SupportToolkitProfile()
+                }
+            };
+
+        if (maxSeconds is not null)
+        {
+            configuration.Profiles["work"].Review["backup-aggregator"] =
+                new ModuleReviewConfiguration
+                {
+                    InProgressMaxWaitSeconds = maxSeconds
+                };
+        }
+
+        return configuration;
     }
 
     private static SupportToolkitConfigurationResolver CreateResolver(
