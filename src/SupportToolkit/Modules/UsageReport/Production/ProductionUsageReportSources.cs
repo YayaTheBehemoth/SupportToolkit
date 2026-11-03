@@ -3,6 +3,7 @@ using SupportToolkit.Core.CustomerMapping;
 using SupportToolkit.Core.MonitoringScope;
 using SupportToolkit.Modules.UsageReport.Models;
 using SupportToolkit.Modules.UsageReport.Services;
+using SupportToolkit.Providers.Acronis.Tenants;
 using SupportToolkit.Providers.Acronis;
 using SupportToolkit.Providers.BusinessCentral;
 using SupportToolkit.Providers.BusinessCentral.Subscriptions;
@@ -101,7 +102,7 @@ public sealed class ProductionUsageReportSources : IUsageReportSources
         var tenants = await _acronis.Provider.GetTenantsAsync(cancellationToken);
 
         // Customer tenants only; the operator's own and deleted ones out.
-        var parties = AcronisCustomerParties.ForResolution(tenants);
+        var parties = AcronisCustomerParties.ForResolution(tenants.ToTenantRecords());
 
         return new UsageTenants(parties.Parties, parties.Notice);
     }

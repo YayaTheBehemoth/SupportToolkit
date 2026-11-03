@@ -6,6 +6,7 @@ using SupportToolkit.Core.CustomerMapping.Matching;
 using SupportToolkit.Core.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
+using SupportToolkit.Providers.Acronis.Tenants;
 using SupportToolkit.Providers.Acronis;
 using SupportToolkit.Providers.BusinessCentral;
 using SupportToolkit.Providers.BusinessCentral.Subscriptions;
@@ -101,7 +102,7 @@ public sealed class CustomerMatchingDevCommand
                 cancellationToken);
 
         var acronis =
-            AcronisCustomerParties.ForResolution(tenants);
+            AcronisCustomerParties.ForResolution(tenants.ToTenantRecords());
 
         var result =
             await new AutoCustomerMappingResolver()

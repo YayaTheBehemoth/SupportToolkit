@@ -1,3 +1,5 @@
+using SupportToolkit.Modules.BackupAggregator.Services;
+using SupportToolkit.Core.Tenants;
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Providers.Acronis.Devices;
 using SupportToolkit.Providers.Acronis.Devices.Dtos;
@@ -5,7 +7,7 @@ using SupportToolkit.Providers.Acronis.Microsoft365;
 using SupportToolkit.Providers.Acronis.Microsoft365.Dtos;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 
-namespace SupportToolkit.Modules.BackupAggregator.Services;
+namespace SupportToolkit.Modules.BackupAggregator.Production;
 
 /// <summary>
 /// Loads and normalizes one tenant's inventories sequentially.
@@ -29,7 +31,7 @@ internal sealed class TenantInventoryReviewService
 
     public async Task<TenantReviewResult>
         ReviewResolvedTenantAsync(
-            TenantDto tenant,
+            TenantRecord tenant,
             CancellationToken cancellationToken)
     {
         IReadOnlyList<AcronisMicrosoft365ResourceDto>
@@ -96,23 +98,4 @@ internal sealed class TenantInventoryReviewService
         );
     }
 
-}
-
-internal sealed record TenantReviewResult(
-    TenantBackupReport Report,
-    int Microsoft365ResourceCount,
-    int DeviceResourceCount
-);
-
-internal sealed class TenantReviewStageException : Exception
-{
-    public string Stage { get; }
-
-    public TenantReviewStageException(
-        string stage,
-        Exception innerException)
-        : base($"{stage} failed.", innerException)
-    {
-        Stage = stage;
-    }
 }

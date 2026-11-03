@@ -1,7 +1,8 @@
+using SupportToolkit.Core.Tenants;
 using SupportToolkit.Providers.Acronis.Tenants;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 
-namespace SupportToolkit.Modules.BackupAggregator.Services;
+namespace SupportToolkit.Modules.BackupAggregator.Production;
 
 public sealed class AcronisTenantResolver
 {
@@ -13,7 +14,7 @@ public sealed class AcronisTenantResolver
         _tenantProvider = tenantProvider;
     }
 
-    public async Task<TenantDto> ResolveExactAsync(
+    public async Task<TenantRecord> ResolveExactAsync(
         string tenantName,
         CancellationToken cancellationToken = default)
     {
@@ -56,7 +57,7 @@ public sealed class AcronisTenantResolver
             tenant
         );
 
-        return tenant;
+        return tenant.ToTenantRecord();
     }
 
     /// <summary>
@@ -64,13 +65,13 @@ public sealed class AcronisTenantResolver
     /// where the hierarchy matters, such as recognizing the operator's
     /// own company, which also exists as a partner tenant.
     /// </summary>
-    public async Task<IReadOnlyList<TenantDto>>
+    public async Task<IReadOnlyList<TenantRecord>>
         GetAllTenantsAsync(
             CancellationToken cancellationToken = default)
     {
-        return await _tenantProvider.GetTenantsAsync(
+        return (await _tenantProvider.GetTenantsAsync(
             cancellationToken
-        );
+        )).ToTenantRecords();
     }
 
     /// <summary>
@@ -79,7 +80,7 @@ public sealed class AcronisTenantResolver
     ///
     /// No assumptions are currently made about other tenant kinds.
     /// </summary>
-    public async Task<IReadOnlyList<TenantDto>>
+    public async Task<IReadOnlyList<TenantRecord>>
         GetCustomerTenantsAsync(
             CancellationToken cancellationToken = default)
     {
@@ -117,7 +118,7 @@ public sealed class AcronisTenantResolver
             );
         }
 
-        return customers.AsReadOnly();
+        return customers.ToTenantRecords();
     }
 
     private static void ValidateTenantId(

@@ -1,4 +1,5 @@
 using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Modules.BackupAggregator.Production;
 
 using System.Collections.Concurrent;
 using System.Net;
@@ -93,7 +94,7 @@ public class ScopedBackupInventoryReviewTests
             new MonitoringTenantSelectionResult(
                 [
                     new MonitoringTenantSelectionFinding(
-                        tenant,
+                        tenant.ToTenantRecord(),
                         MonitoringTenantSelectionStatus.CandidateForInventory,
                         "Synthetic verified monitoring evidence."
                     )
@@ -132,7 +133,7 @@ public class ScopedBackupInventoryReviewTests
             new MonitoringTenantSelectionResult(
                 [
                     new MonitoringTenantSelectionFinding(
-                        tenant,
+                        tenant.ToTenantRecord(),
                         MonitoringTenantSelectionStatus.CandidateForInventory,
                         "Synthetic active monitoring evidence."
                     )
@@ -190,7 +191,7 @@ public class ScopedBackupInventoryReviewTests
             new MonitoringTenantSelectionResult(
                 [
                     new MonitoringTenantSelectionFinding(
-                        tenant,
+                        tenant.ToTenantRecord(),
                         MonitoringTenantSelectionStatus.Unclassified,
                         "No verified monitoring entitlement."
                     )
@@ -240,7 +241,7 @@ public class ScopedBackupInventoryReviewTests
             new MonitoringTenantSelectionResult(
                 [
                     new MonitoringTenantSelectionFinding(
-                        tenant,
+                        tenant.ToTenantRecord(),
                         MonitoringTenantSelectionStatus.CandidateForInventory,
                         "Synthetic active monitoring evidence."
                     )
@@ -295,12 +296,12 @@ public class ScopedBackupInventoryReviewTests
             new MonitoringTenantSelectionResult(
                 [
                     new MonitoringTenantSelectionFinding(
-                        tenant,
+                        tenant.ToTenantRecord(),
                         MonitoringTenantSelectionStatus.CandidateForInventory,
                         "First."
                     ),
                     new MonitoringTenantSelectionFinding(
-                        duplicate,
+                        duplicate.ToTenantRecord(),
                         MonitoringTenantSelectionStatus.CandidateForInventory,
                         "Second."
                     )
@@ -343,6 +344,16 @@ public class ScopedBackupInventoryReviewTests
             CreateService(
                 new RecordingTenantProvider(
                     fixture.Tenants
+                        .Select(
+                            tenant => new TenantDto
+                            {
+                                Id = tenant.Id,
+                                Name = tenant.Name,
+                                Kind = tenant.Kind,
+                                DeletedAt = tenant.DeletedAt,
+                                Enabled = tenant.Enabled
+                            })
+                        .ToArray()
                 ),
                 microsoft365,
                 devices
@@ -405,7 +416,7 @@ public class ScopedBackupInventoryReviewTests
         IAcronisMicrosoft365InventoryProvider microsoft365,
         IAcronisDeviceInventoryProvider devices)
     {
-        return new BackupInventoryReviewService(
+        return AcronisBackupInventory.CreateReviewService(
             new AcronisTenantResolver(
                 tenantProvider
             ),

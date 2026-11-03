@@ -63,6 +63,35 @@ public class AutoCustomerMappingResolverTests
     }
 
     [Fact]
+    public async Task TenantWritingANordicLetterPlain_IsAccepted()
+    {
+        var result =
+            await Resolve(
+                [new("t1", "Soby Byg")],
+                [new("BC-1", "Søby Byg ApS")]);
+
+        var accepted = Assert.Single(result.Accepted);
+
+        Assert.Equal("BC-1", accepted.BcCustomerNo);
+        Assert.Equal(CustomerMatchMethod.LooseName, accepted.MatchMethod);
+    }
+
+    [Fact]
+    public async Task PlainNordicLetterMatchingTwoCustomers_IsLeftToAPerson()
+    {
+        var result =
+            await Resolve(
+                [new("t1", "Soby Byg")],
+                [
+                    new("BC-1", "Søby Byg"),
+                    new("BC-2", "Söby Byg")
+                ]);
+
+        Assert.Empty(result.Accepted);
+        Assert.Contains("t1", result.UnmatchedAcronisIds);
+    }
+
+    [Fact]
     public async Task WeakOverlap_IsNeverAccepted()
     {
         var result =

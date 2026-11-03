@@ -8,6 +8,7 @@ using SupportToolkit.Providers.Acronis.Microsoft365;
 using SupportToolkit.Providers.Acronis.Microsoft365.Dtos;
 using SupportToolkit.Providers.Acronis.Tenants;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
+using SupportToolkit.Modules.BackupAggregator.Production;
 
 namespace SupportToolkit.Tests.Modules.BackupAggregator;
 
@@ -134,7 +135,7 @@ public class BackupAggregatorEmptyDiscoverySafetyTests
     private static BackupInventoryReviewService CreateService(
         IReadOnlyList<TenantDto> tenants)
     {
-        return new BackupInventoryReviewService(
+        return AcronisBackupInventory.CreateReviewService(
             new AcronisTenantResolver(
                 new StubTenantProvider(tenants)),
             new EmptyMicrosoft365Provider(),

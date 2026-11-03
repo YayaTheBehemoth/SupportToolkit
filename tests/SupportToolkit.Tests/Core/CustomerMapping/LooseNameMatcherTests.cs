@@ -25,6 +25,30 @@ public class LooseNameMatcherTests
     }
 
     [Theory]
+    [InlineData("Søby Byg", "Soby Byg")]
+    [InlineData("Søby Byg", "Soeby Byg")]
+    [InlineData("Åby Tømrer", "Aby Tomrer")]
+    [InlineData("Åby Tømrer", "Aaby Toemrer")]
+    [InlineData("Lund Kök", "Lund Kok")]
+    [InlineData("Soby Byg", "Søby Byg ApS")]
+    public void NordicLetters_MatchWhetherSpelledOutOrWrittenPlain(
+        string left,
+        string right)
+    {
+        Assert.Equal(
+            LooseNameTier.Exact,
+            LooseNameMatcher.Compare(left, right));
+    }
+
+    [Fact]
+    public void PlainNordicLetters_StillNeedTheSameName()
+    {
+        Assert.Equal(
+            LooseNameTier.None,
+            LooseNameMatcher.Compare("Søby Byg", "Sorby Byg"));
+    }
+
+    [Theory]
     [InlineData("FGT Tables", "Holding company (FGT Tables)")]
     [InlineData("Holding company (FGT Tables)", "FGT Tables")]
     public void GenericWrapperWords_AreIgnoredSoTheCoreNameIsExact(

@@ -1,3 +1,4 @@
+using SupportToolkit.Core.Tenants;
 using System.Net;
 using SupportToolkit.Core.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
@@ -147,7 +148,7 @@ public class MonitoringScopeServiceTests
         var result =
             new MonitoringTenantSelector()
                 .Select(
-                    [new TenantDto
+                    [new TenantRecord
                     {
                         Id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                         Name = "Other",

@@ -37,7 +37,8 @@ public enum LooseNameTier
 /// set where a person confirms every link.
 ///
 /// Names are casefolded, accents and Danish letters folded (æ to ae,
-/// ø to oe, å to aa), legal forms and generic words dropped, and
+/// ø to oe, å to aa, and compared a second time with ø as o and å as
+/// a), legal forms and generic words dropped, and
 /// punctuation treated as a separator. Apostrophes and invisible
 /// characters are deleted, not treated as separators, so a stray one
 /// inside a word does not split it. Parenthesized text is kept as
@@ -96,7 +97,7 @@ public static class LooseNameMatcher
     /// </summary>
     public static IReadOnlyList<string> Tokens(
         string? name) =>
-        Split(name, keepShortWords: false);
+        Split(name, keepShortWords: false, NordicLetters.SpelledOut);
 
     /// <summary>
     /// The whole name reduced to letters and digits: spacing,
@@ -106,11 +107,29 @@ public static class LooseNameMatcher
     /// </summary>
     public static string Compact(
         string? name) =>
-        string.Concat(Split(name, keepShortWords: true));
+        Compact(name, NordicLetters.SpelledOut);
+
+    private static string Compact(
+        string? name,
+        NordicLetters nordic) =>
+        string.Concat(Split(name, keepShortWords: true, nordic));
+
+    /// <summary>
+    /// How a Danish, Norwegian, Swedish or German letter is written
+    /// without it: spelled out ("ø" as "oe", "å" as "aa") or as the
+    /// plain letter ("ø" as "o", "å" as "a"). Both are common, so
+    /// names are compared both ways.
+    /// </summary>
+    private enum NordicLetters
+    {
+        SpelledOut,
+        Plain
+    }
 
     private static List<string> Split(
         string? name,
-        bool keepShortWords)
+        bool keepShortWords,
+        NordicLetters nordic)
     {
         var words = new List<string>();
 
@@ -120,7 +139,7 @@ public static class LooseNameMatcher
         }
 
         var folded =
-            Fold(name.Trim().ToLowerInvariant());
+            Fold(name.Trim().ToLowerInvariant(), nordic);
 
         folded =
             LegalForms.Replace(folded, " ");
@@ -143,12 +162,39 @@ public static class LooseNameMatcher
         return words;
     }
 
+    /// <summary>
+    /// The stronger of the two comparisons: with Danish letters spelled
+    /// out, and with them as plain letters, so "Søndergaard" matches
+    /// both "Soendergaard" and "Sondergaard". Both names are always
+    /// folded the same way.
+    /// </summary>
     public static LooseNameTier Compare(
         string? left,
         string? right)
     {
-        var a = Tokens(left);
-        var b = Tokens(right);
+        var spelledOut =
+            Compare(left, right, NordicLetters.SpelledOut);
+
+        if (spelledOut == LooseNameTier.Exact)
+        {
+            return spelledOut;
+        }
+
+        var plain =
+            Compare(left, right, NordicLetters.Plain);
+
+        return plain > spelledOut
+            ? plain
+            : spelledOut;
+    }
+
+    private static LooseNameTier Compare(
+        string? left,
+        string? right,
+        NordicLetters nordic)
+    {
+        var a = Split(left, keepShortWords: false, nordic);
+        var b = Split(right, keepShortWords: false, nordic);
 
         if (a.Count == 0 || b.Count == 0)
         {
@@ -158,8 +204,8 @@ public static class LooseNameMatcher
         var setA = a.ToHashSet(StringComparer.Ordinal);
         var setB = b.ToHashSet(StringComparer.Ordinal);
 
-        var compactA = Compact(left);
-        var compactB = Compact(right);
+        var compactA = Compact(left, nordic);
+        var compactB = Compact(right, nordic);
 
         if (setA.SetEquals(setB)
             || (compactA.Length >= MinDistinctiveLength
@@ -184,8 +230,8 @@ public static class LooseNameMatcher
         if (smaller.All(
                 word => larger.Any(
                     other => SameWord(word, other)))
-            || ContainsAsWordRun(left, right)
-            || ContainsAsWordRun(right, left))
+            || ContainsAsWordRun(left, right, nordic)
+            || ContainsAsWordRun(right, left, nordic))
         {
             return LooseNameTier.Containment;
         }
@@ -268,16 +314,17 @@ public static class LooseNameMatcher
     /// </summary>
     private static bool ContainsAsWordRun(
         string? inner,
-        string? outer)
+        string? outer,
+        NordicLetters nordic)
     {
-        var target = Compact(inner);
+        var target = Compact(inner, nordic);
 
         if (target.Length < MinRunLength)
         {
             return false;
         }
 
-        var words = Split(outer, keepShortWords: true);
+        var words = Split(outer, keepShortWords: true, nordic);
 
         for (var start = 0; start < words.Count; start++)
         {
@@ -384,19 +431,23 @@ public static class LooseNameMatcher
     }
 
     private static string Fold(
-        string lowered)
+        string lowered,
+        NordicLetters nordic)
     {
         // An accented letter can be one character or a letter plus a
         // separate accent mark; the two look identical. Compose first,
         // so "å" is "å" whichever way it was stored and folds to "aa".
+        // "æ" has no plain letter and is "ae" either way.
+        var plain = nordic == NordicLetters.Plain;
+
         var replaced =
             lowered
                 .Normalize(NormalizationForm.FormC)
                 .Replace("æ", "ae", StringComparison.Ordinal)
-                .Replace("ø", "oe", StringComparison.Ordinal)
-                .Replace("å", "aa", StringComparison.Ordinal)
-                .Replace("ä", "ae", StringComparison.Ordinal)
-                .Replace("ö", "oe", StringComparison.Ordinal)
+                .Replace("ø", plain ? "o" : "oe", StringComparison.Ordinal)
+                .Replace("å", plain ? "a" : "aa", StringComparison.Ordinal)
+                .Replace("ä", plain ? "a" : "ae", StringComparison.Ordinal)
+                .Replace("ö", plain ? "o" : "oe", StringComparison.Ordinal)
                 .Replace("ß", "ss", StringComparison.Ordinal);
 
         var builder = new StringBuilder(replaced.Length);

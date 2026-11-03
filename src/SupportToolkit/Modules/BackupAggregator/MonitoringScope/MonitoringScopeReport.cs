@@ -1,7 +1,7 @@
 using SupportToolkit.Core.CustomerMapping;
 using SupportToolkit.Core.MonitoringScope;
 using SupportToolkit.Core.Reconciliation;
-using SupportToolkit.Providers.Acronis.Tenants.Dtos;
+using SupportToolkit.Core.Tenants;
 
 namespace SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 
@@ -193,7 +193,7 @@ public static class MonitoringScopeReportBuilder
         MonitoringTenantSelectionResult selection,
         ReconciliationReport? reconciliation,
         bool monitoredEvidenceSupplied,
-        IReadOnlyList<TenantDto> tenants,
+        IReadOnlyList<TenantRecord> tenants,
         IReadOnlyCollection<string>? itemHolderCustomerNumbers = null)
     {
         ArgumentNullException.ThrowIfNull(entitlingItems);

@@ -110,27 +110,37 @@ public class LayeringTests
         new(@"\bSupportToolkit\.Providers\b", RegexOptions.CultureInvariant);
 
     /// <summary>
-    /// Modules whose rules must not know which systems the data came from.
-    /// Only their Production folder (the adapter to the real systems) may
-    /// reference a provider.
+    /// Modules whose rules must not know which systems the data came from,
+    /// with the folders that may still reference a provider: the Production
+    /// adapter to the real systems, and for the Backup Aggregator its
+    /// Fixtures, which fake Acronis so fixture mode runs the real adapter.
     /// </summary>
-    private static readonly string[] ProviderAgnosticModules =
-        ["Modules/UsageReport/"];
+    private static readonly (string Module, string[] AllowedFolders)[] ProviderAgnosticModules =
+    [
+        ("Modules/UsageReport/", ["/Production/"]),
+        ("Modules/BackupAggregator/", ["/Production/", "/Fixtures/"])
+    ];
 
-    [Fact]
-    public void ProviderAgnosticModules_ReferenceProviders_OnlyInTheirProductionAdapter()
+    [Theory]
+    [InlineData("Modules/UsageReport/")]
+    [InlineData("Modules/BackupAggregator/")]
+    public void ProviderAgnosticModules_ReferenceProviders_OnlyInTheirProductionAdapter(
+        string module)
     {
+        var allowedFolders =
+            ProviderAgnosticModules.Single(entry => entry.Module == module).AllowedFolders;
+
         var files =
             SourceFiles(["Modules"])
-                .Where(file => ProviderAgnosticModules.Any(
-                    module => file.RelativePath.StartsWith(module, StringComparison.Ordinal)))
+                .Where(file => file.RelativePath.StartsWith(module, StringComparison.Ordinal))
                 .ToArray();
 
         Assert.NotEmpty(files);
 
         var offenders =
             files
-                .Where(file => !file.RelativePath.Contains("/Production/", StringComparison.Ordinal))
+                .Where(file => !allowedFolders.Any(
+                    folder => file.RelativePath.Contains(folder, StringComparison.Ordinal)))
                 .Where(file => ProvidersReference.IsMatch(file.Code))
                 .Select(file => file.RelativePath)
                 .ToArray();

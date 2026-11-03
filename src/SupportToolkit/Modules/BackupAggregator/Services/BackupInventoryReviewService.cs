@@ -2,23 +2,19 @@
 using System.Diagnostics;
 using System.Net;
 using SupportToolkit.Core.Logging;
+using SupportToolkit.Core.Tenants;
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
-using SupportToolkit.Providers.Acronis.Devices;
-using SupportToolkit.Providers.Acronis.Devices.Dtos;
-using SupportToolkit.Providers.Acronis.Microsoft365;
-using SupportToolkit.Providers.Acronis.Microsoft365.Dtos;
-using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 
 namespace SupportToolkit.Modules.BackupAggregator.Services;
 
 public sealed class BackupInventoryReviewService
 {
-    private const int DefaultMaxConcurrentTenants = 3;
+    public const int DefaultMaxConcurrentTenants = 3;
 
-    private readonly AcronisTenantResolver _tenantResolver;
-
-    private readonly TenantInventoryReviewService _tenantReviewer;
+    // Where tenants and their normalized inventory come from. The review
+    // below does not know which backup system that is.
+    private readonly IBackupInventorySource _source;
 
     private readonly OperationalLogger? _logger;
 
@@ -31,10 +27,7 @@ public sealed class BackupInventoryReviewService
     private readonly Action<string>? _progress;
 
     public BackupInventoryReviewService(
-        AcronisTenantResolver tenantResolver,
-        IAcronisMicrosoft365InventoryProvider microsoft365Inventory,
-        IAcronisDeviceInventoryProvider deviceInventory,
-        BackupInventoryNormalizer normalizer,
+        IBackupInventorySource source,
         OperationalLogger? logger = null,
         int maxConcurrentTenants = DefaultMaxConcurrentTenants,
         InProgressWaitOptions? inProgressWait = null,
@@ -49,12 +42,8 @@ public sealed class BackupInventoryReviewService
             );
         }
 
-        _tenantResolver = tenantResolver;
-        _tenantReviewer = new TenantInventoryReviewService(
-            microsoft365Inventory,
-            deviceInventory,
-            normalizer
-        );
+        _source =
+            source ?? throw new ArgumentNullException(nameof(source));
         _logger = logger;
         _maxConcurrentTenants = maxConcurrentTenants;
         _inProgressWait =
@@ -75,7 +64,7 @@ public sealed class BackupInventoryReviewService
         );
 
         var tenant =
-            await _tenantResolver.ResolveExactAsync(
+            await _source.ResolveExactAsync(
                 tenantName,
                 cancellationToken
             );
@@ -85,7 +74,7 @@ public sealed class BackupInventoryReviewService
         );
 
         var result =
-            await _tenantReviewer.ReviewResolvedTenantAsync(
+            await _source.ReviewTenantAsync(
                 tenant,
                 cancellationToken
             );
@@ -123,10 +112,10 @@ public sealed class BackupInventoryReviewService
     /// Customer tenants available for selection. Does not review
     /// anything.
     /// </summary>
-    public Task<IReadOnlyList<TenantDto>> GetCustomerTenantsAsync(
+    public Task<IReadOnlyList<TenantRecord>> GetCustomerTenantsAsync(
         CancellationToken cancellationToken = default)
     {
-        return _tenantResolver.GetCustomerTenantsAsync(
+        return _source.GetCustomerTenantsAsync(
             cancellationToken
         );
     }
@@ -135,10 +124,10 @@ public sealed class BackupInventoryReviewService
     /// Every tenant of any kind, for callers that need the hierarchy.
     /// Does not review anything.
     /// </summary>
-    public Task<IReadOnlyList<TenantDto>> GetAllTenantsAsync(
+    public Task<IReadOnlyList<TenantRecord>> GetAllTenantsAsync(
         CancellationToken cancellationToken = default)
     {
-        return _tenantResolver.GetAllTenantsAsync(
+        return _source.GetAllTenantsAsync(
             cancellationToken
         );
     }
@@ -156,7 +145,7 @@ public sealed class BackupInventoryReviewService
         );
 
         var tenants =
-            await _tenantResolver.GetCustomerTenantsAsync(
+            await _source.GetCustomerTenantsAsync(
                 cancellationToken
             );
 
@@ -230,7 +219,7 @@ public sealed class BackupInventoryReviewService
     /// tenants may run concurrently.
     /// </summary>
     private async Task<AggregatedBackupReport> ReviewTenantsAsync(
-        IReadOnlyList<TenantDto> tenants,
+        IReadOnlyList<TenantRecord> tenants,
         CancellationToken cancellationToken)
     {
         var stopwatch =
@@ -329,7 +318,7 @@ public sealed class BackupInventoryReviewService
     /// concurrency, storing each outcome at its original index.
     /// </summary>
     private async Task RunTenantReviewsAsync(
-        IReadOnlyList<TenantDto> tenants,
+        IReadOnlyList<TenantRecord> tenants,
         IReadOnlyList<int> indices,
         TenantReviewOutcome?[] outcomes,
         CancellationToken cancellationToken)
@@ -385,7 +374,7 @@ public sealed class BackupInventoryReviewService
     /// disabled, no delay happens and no further call is made.
     /// </summary>
     private async Task<InProgressWaitSummary?> WaitForInProgressAsync(
-        IReadOnlyList<TenantDto> tenants,
+        IReadOnlyList<TenantRecord> tenants,
         TenantReviewOutcome?[] outcomes,
         CancellationToken cancellationToken)
     {
@@ -512,7 +501,7 @@ public sealed class BackupInventoryReviewService
     }
 
     private static void ValidateCandidates(
-        IReadOnlyList<TenantDto> candidates)
+        IReadOnlyList<TenantRecord> candidates)
     {
         var ids =
             new HashSet<string>(
@@ -555,7 +544,7 @@ public sealed class BackupInventoryReviewService
 
     private async Task<TenantReviewOutcome>
         ReviewTenantSafelyAsync(
-            TenantDto tenant,
+            TenantRecord tenant,
             int tenantNumber,
             int tenantCount,
             CancellationToken cancellationToken)
@@ -563,7 +552,7 @@ public sealed class BackupInventoryReviewService
         try
         {
             var result =
-                await _tenantReviewer.ReviewResolvedTenantAsync(
+                await _source.ReviewTenantAsync(
                     tenant,
                     cancellationToken);
 
