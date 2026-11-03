@@ -1,0 +1,72 @@
+@* What one report row is built from: the Business Central lines as BC states
+   them, and the Acronis figures in both units. Nothing here is calculated
+   beyond the unit conversion. *@
+
+<div class="row-details">
+    <h4>Business Central backup lines</h4>
+
+    @if (Row.Lines.Count == 0)
+    {
+        <p class="muted">None.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+            <tr>
+                <th>Subscription</th><th>Item</th><th>Description</th><th>Unit</th>
+                <th class="num">Quantity</th><th class="num">Unit price</th>
+                <th class="num">Discount %</th><th class="num">Amount</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var line in Row.Lines)
+            {
+                <tr>
+                    <td>@line.SubscriptionNumber</td>
+                    <td>@line.ItemNumber</td>
+                    <td>@(line.Description ?? "-")</td>
+                    <td>@(line.UnitOfMeasure ?? "-")</td>
+                    <td class="num">@Number(line.Quantity)</td>
+                    <td class="num">@Number(line.UnitPrice)</td>
+                    <td class="num">@Number(line.LineDiscountPercent)</td>
+                    <td class="num">@Number(line.Amount)</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+
+        @if (Row.ExcludedLines > 0)
+        {
+            <p class="muted">@Row.ExcludedLines of these are not counted: not active, or omitted.</p>
+        }
+    }
+
+    <h4>Acronis</h4>
+
+    <p class="muted">
+        Tenant: @(Row.TenantNames.Count == 0 ? "none matched" : string.Join(", ", Row.TenantNames)).
+        The portal shows binary GB (1,073,741,824 bytes), about 7% lower than the decimal GB used for the comparison.
+    </p>
+
+    <table>
+        <thead>
+        <tr><th>Figure</th><th class="num">GB (compared)</th><th class="num">GB as the portal shows</th><th class="num">Bytes</th></tr>
+        </thead>
+        <tbody>
+        <Figure Label="Total storage" Value="Row.Total" />
+        <Figure Label="Backup storage" Value="Row.Backup" />
+        <Figure Label="Microsoft 365 and Google Workspace" Value="Row.Microsoft365" />
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private static readonly System.Globalization.CultureInfo Invariant =
+        System.Globalization.CultureInfo.InvariantCulture;
+
+    [Parameter, EditorRequired] public UsageReportRow Row { get; set; } = default!;
+
+    private static string Number(decimal? value) =>
+        value is null ? "unknown" : value.Value.ToString("#,##0.##", Invariant);
+}

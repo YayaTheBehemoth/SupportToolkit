@@ -14,7 +14,8 @@ SupportToolkit currently includes:
 - **Monitoring scope** — Business Central subscription entitlement decides which Acronis tenants are reviewed.
 - **Configuration management** — Reusable provider connections, runtime profiles, and secure credential storage.
 - **Interactive CLI** — Menu-driven workflows alongside commands suitable for scripting.
-- **Web UI** — A local browser interface for the Backup Aggregator and Zendesk bulk delete, started with one double-click or `SupportToolkit serve`.
+- **Usage report** — Acronis storage per customer against what Business Central bills for backup, for the monthly reconciliation.
+- **Web UI** — A local browser interface for the Backup Aggregator, Zendesk bulk delete and the usage report, started with one double-click or `SupportToolkit serve`.
 
 The application supports fixture-based development and production integrations through the same underlying workflows.
 
@@ -80,7 +81,8 @@ Direct CLI commands are also available for scripting and development.
 | `backup-aggregator scoped-review` | Review only tenants entitled to monitoring in Business Central, plus the operator's own tenant. | Read-only Acronis and Business Central calls; interactive Business Central sign-in. |
 | `backup-aggregator ticket preview --scoped` / `ticket submit --scoped` | Ticket from a complete scoped review. | `submit` **writes to Zendesk.** |
 | `dev acronis-tenants --production [--names]` | Tenant discovery diagnostics. | Read-only Acronis calls. |
-| `dev usage-compare --production [--metric <name>] [--names]` | Read-only comparison of Business Central backup quantities with Acronis `storage_total`, per customer. | Read-only Business Central and Acronis calls. |
+| `usage-report [--names]` | Acronis storage per customer against Business Central billing for the backup items. See [Usage report](#usage-report). | Read-only Business Central and Acronis calls in production mode; interactive Business Central sign-in. |
+| `dev usage-compare --production [--metric <name>] [--names]` | Read-only comparison of Business Central backup quantities with Acronis `storage_total`, per customer. The developer forerunner of `usage-report`. | Read-only Business Central and Acronis calls. |
 | `dev acronis-usage --production [--metric <name>]... [--tenant <text>] [--names [--out <path>]]` | Per-tenant Acronis usage probe for joining to other data. | Read-only Acronis calls. |
 | `dev bc-subscriptions [--production]` | Business Central subscription evidence diagnostics. | Read-only; `--production` signs in interactively. |
 | `dev zendesk-bulk-delete --production [--organization <name>] [--sender <name>] [--requester <email>] [--domain <domain>] [--text <text>] [--dry-run \| --delete [--include <ids>] [--exclude <ids>] [--receipt-dir <path>]]` | Zendesk bulk delete: sign in, search, preview; with `--dry-run` shows the requests, with `--delete` deletes the selection after two typed confirmations and writes a receipt. | Read-only by default. **`--delete` deletes Zendesk tickets** (recoverable for 30 days); browser sign-in, interactive only. |
@@ -395,6 +397,50 @@ SupportToolkit does not automatically retry ticket creation POST requests.
 If a request times out, fails, or returns an invalid response, ticket creation may still have succeeded.
 
 **Check the selected Zendesk destination for an existing ticket before retrying an unconfirmed submission.**
+
+---
+
+## Usage report
+
+```cmd
+SupportToolkit usage-report [--names]
+```
+
+Every month, finance compares each customer's Acronis storage with what Business Central bills for backup. The usage report does that comparison: one row per customer with an active backup subscription, the billed quantity and amount next to Acronis's storage, and the difference. It is also a page in the [Web UI](#web-ui) (**Generate report**). It only reads, and nothing is saved: the report is kept in memory until the next run or until the program exits.
+
+**What is read.**
+
+- **Acronis**, per customer tenant: the three figures in the portal's storage view. Total storage is `storage_total`, Backup storage is `total_storage`, and Microsoft 365 and Google Workspace backup is `c2c_storage`. Acronis splits a metric into lines by edition and storage location; they are added up.
+- **Business Central**: the subscription lines for the backup items, with item, description, unit, quantity, unit price, discount and amount. The amount is Business Central's own figure; the toolkit calculates no prices. These columns are read by a separate request with its own field list, so the entitlement read never asks for prices and a renamed price column fails only this read.
+- Customers are matched to Acronis tenants by name, automatically, as in the monitored review. Nothing is stored.
+
+**Units.** Usage is compared in decimal GB (1 GB = 1,000,000,000 bytes), the unit the backup quantity is billed in. The Acronis portal labels its figures GB but counts 1,073,741,824 bytes per GB, so for the same data it shows about 7% less. The detailed view and each row's details show both.
+
+**What the report computes.** Only a unit conversion, adding up (a metric's lines, a customer's tenants, a customer's backup lines) and one subtraction: billed GB minus the Acronis total. Nothing is judged and there are no thresholds. A customer whose Acronis total is not backup + Microsoft 365 gets a note; no figure is changed.
+
+**Rows and lists.**
+
+- **The report:** customers with at least one active, not omitted backup line. A row is *unknown* when a quantity or amount is missing, no tenant is matched (or the match needs review), or Acronis returned something unusable, such as a missing value or a unit other than bytes.
+- **Set up, no usage reported yet:** an active backup line and a matched tenant, but Acronis has reported nothing. Listed apart, to raise with whoever set it up; not compared.
+- **Not active:** every backup line is on a subscription that is not active, or omitted. Left out of the report; the detailed view lists them, with any Acronis storage.
+- **Storage without a backup subscription:** customer tenants with storage that no customer with a backup line was matched to.
+
+Missing or unusable data is unknown with a reason, never zero.
+
+**Caveat.** Acronis describes these usage figures as refreshed every few hours and not meant for billing, and the report says so every time. Check a few customers against the portal and Business Central before relying on it.
+
+**Configuration**, per profile. The item number below is fictional:
+
+```json
+"modules": { "usage-report": "production" },
+"monitoringScope": { "usage-report": { "serviceItemNumbers": [ "EXAMPLE-BACKUP-ITEM" ] } }
+```
+
+Production mode needs the profile's Acronis and Business Central connections and at least one backup item; `configure status` shows the mode and items. Fixture mode needs nothing and contacts nothing.
+
+The console prints counts by default. `--names` adds the per-customer rows, which contain customer names and amounts. Exit codes: `0` complete, `2` generated but incomplete, `1` not available or invalid arguments.
+
+**Design.** The module is provider-agnostic: its rules see only its own types. Everything specific to Acronis and Business Central (metric names, unit checks, field mapping) lives in `Modules/UsageReport/Production`, and `LayeringTests` fails if anything else in the module references a provider.
 
 ---
 
@@ -846,6 +892,7 @@ The release zip also has `Start SupportToolkit.cmd`: double-click it to start th
 
 - **Profile.** Choose which profile everything uses. The configuration wizard stays in the console (`SupportToolkit configure`).
 - **Backup Aggregator.** Run or refresh the monitored review, with progress and Cancel. Read the completeness banner and the Attention, Unclassified and Incomplete tabs (the detailed view adds Scope and Reconciliation). **Prepare ticket** then shows the exact ticket and its Zendesk destination to confirm before anything is created. What can be prepared or submitted, and that a prepared ticket is used once, is decided by the same `BackupReviewSession` the console uses.
+- **Usage report.** **Generate report** compares Acronis storage with Business Central billing per customer, with progress and Cancel. Each row folds out to show its billing lines and the Acronis figures in both units; the detailed view adds the portal's figures and the customers whose subscription is not active. See [Usage report](#usage-report).
 - **Zendesk bulk delete.** Sign in, search, choose tickets, check the plan and type the confirmations, with progress and a result. The rules are the command's: closed tickets are chosen for you and others need a second confirmation, an incomplete search is never deleted from, and nothing is sent that was not in the confirmed plan. Deletion runs in the background, so reloading or closing the tab does not stop it; **Exit** stops it cleanly and writes the receipt.
 
 A **Simple / Detailed** switch in the top bar (Simple by default) hides technical detail such as ticket ID lists, request counts, job progress and the scope tabs. It never hides a warning, the Zendesk instance, a count, a typed confirmation, a failed or unknown outcome, or the receipt.
@@ -903,6 +950,13 @@ src/
     │   │   ├── Services/
     │   │   └── Ticketing/
     │   │
+    │   ├── UsageReport/
+    │   │   ├── Fixtures/
+    │   │   ├── Models/
+    │   │   ├── Production/   (the only part that knows Acronis and Business Central)
+    │   │   ├── Reporting/
+    │   │   └── Services/
+    │   │
     │   └── ZendeskBulkDelete/
     │       ├── Models/
     │       ├── Reporting/
@@ -949,7 +1003,7 @@ Workflows and providers return models and take callbacks. They do not write to a
 - **Progress** is a callback the host supplies to the workflow constructor. The console host passes `ConsoleProgress.Write`; a different host passes its own.
 - **Whether a ticket can be created** is decided in one place, `BackupAggregatorWorkflow.PrepareScopedTicketDraft` and `PrepareScopedTicketSubmissionAsync`. They return a typed result (ready, or not ready with a kind and reasons) instead of throwing for expected conditions. A submission plan bundles the exact draft, the Zendesk destination and the review's numbers, and is what the operator confirms.
 - **The review an operator is working with** is held by `BackupReviewSession`, not by the console menu. It owns the rules: nothing can be prepared before a review, a plan is valid only for the review it was prepared from, and a plan is submitted once. The console menu, and any other interface, are thin adapters over it.
-- **A test enforces the layering** (`LayeringTests`): nothing in `Core`, `Providers` or `Modules` may use the console, reference the `Ui` or `Cli` layers, or reference a web or desktop UI framework. Console reporters (`Reporting/Console*.cs`) and a module's CLI command class (`Modules/<Name>/<Name>Module.cs`) are the adapters. Fix a failure by moving the console code up, not by extending the test's allowlist.
+- **A test enforces the layering** (`LayeringTests`): nothing in `Core`, `Providers` or `Modules` may use the console, reference the `Ui` or `Cli` layers, or reference a web or desktop UI framework. Console reporters (`Reporting/Console*.cs`) and a module's CLI command class (`Modules/<Name>/<Name>Module.cs`) are the adapters. Fix a failure by moving the console code up, not by extending the test's allowlist. A provider-agnostic module (currently the usage report) may reference `Providers` only in its `Production` folder, which maps provider data to the module's own types.
 
 ---
 
@@ -1122,10 +1176,11 @@ BackupAggregator and Zendesk ticket submission are implemented on `main`, with a
 - Business Central reads (subscriptions and customer names) and the automatic matching were exercised with read-only commands against a live environment; the scoped review has had limited end-to-end validation.
 - Zendesk ticket routing and idempotent replay were validated in a personal trial account. Authorized end-to-end validation in an organizational Zendesk environment has not been completed.
 - The Zendesk bulk delete, including real deletion through the web UI, was exercised only in a personal sandbox account with a set of test tickets. It has not been used against an organizational Zendesk.
+- The usage report has had one read-only production run, checked by eye against the Acronis portal for one customer. It has not been reconciled against finance's own monthly figures.
 
 Provider behavior is only considered production-validated where real external responses have been observed and checked.
 
-Deployment model, scheduling, persistence and an operator-friendly interface are intentionally undecided. Different modules have different operational needs, and the console has usability limits for non-developers. A local web UI now exists for the Backup Aggregator and Zendesk bulk delete; it runs on the same rules as the console. These will be revisited when a validated workflow needs them rather than designed up front.
+Deployment model, scheduling, persistence and an operator-friendly interface are intentionally undecided. Different modules have different operational needs, and the console has usability limits for non-developers. A local web UI now exists for the Backup Aggregator, Zendesk bulk delete and the usage report; it runs on the same rules as the console. These will be revisited when a validated workflow needs them rather than designed up front.
 
 The current focus is correctness, maintainability, explicit operator control, and practical usefulness in MSP support workflows.
 

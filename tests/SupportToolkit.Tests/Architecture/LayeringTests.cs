@@ -106,6 +106,42 @@ public class LayeringTests
             string.Join("\n  ", offenders));
     }
 
+    private static readonly Regex ProvidersReference =
+        new(@"\bSupportToolkit\.Providers\b", RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Modules whose rules must not know which systems the data came from.
+    /// Only their Production folder (the adapter to the real systems) may
+    /// reference a provider.
+    /// </summary>
+    private static readonly string[] ProviderAgnosticModules =
+        ["Modules/UsageReport/"];
+
+    [Fact]
+    public void ProviderAgnosticModules_ReferenceProviders_OnlyInTheirProductionAdapter()
+    {
+        var files =
+            SourceFiles(["Modules"])
+                .Where(file => ProviderAgnosticModules.Any(
+                    module => file.RelativePath.StartsWith(module, StringComparison.Ordinal)))
+                .ToArray();
+
+        Assert.NotEmpty(files);
+
+        var offenders =
+            files
+                .Where(file => !file.RelativePath.Contains("/Production/", StringComparison.Ordinal))
+                .Where(file => ProvidersReference.IsMatch(file.Code))
+                .Select(file => file.RelativePath)
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            "These files depend on a provider. Map provider data to the " +
+            "module's own types in its Production adapter instead:\n  " +
+            string.Join("\n  ", offenders));
+    }
+
     [Fact]
     public void NoWebOrDesktopUiFramework_IsReferencedBelowTheUi()
     {

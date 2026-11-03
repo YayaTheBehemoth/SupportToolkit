@@ -6,6 +6,8 @@ using SupportToolkit.Core.Modules;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.Services;
+using SupportToolkit.Modules.UsageReport;
+using SupportToolkit.Modules.UsageReport.Services;
 using SupportToolkit.Modules.ZendeskBulkDelete.Services;
 using SupportToolkit.Ui;
 using SupportToolkit.Ui.Web;
@@ -64,7 +66,13 @@ ISupportToolkitModule[] modules =
 [
     new BackupAggregatorModule(
         backupAggregatorWorkflow,
-        backupAggregatorScopedWorkflow)
+        backupAggregatorScopedWorkflow),
+
+    new UsageReportModule(
+        new UsageReportSession(
+            new UsageReportWorkflow(
+                configurationResolver,
+                ConsoleProgress.Write)))
 ];
 
 var interactiveShell =
@@ -113,7 +121,10 @@ try
         }
 
         // The web host shows progress on the page, not in the console.
+        // Each page has its own feed, so one run's messages never show
+        // on another page.
         var webProgress = new ProgressFeed();
+        var usageProgress = new ProgressFeed();
 
         var webWorkflow =
             new BackupAggregatorWorkflow(
@@ -175,7 +186,13 @@ try
                         return new BulkDeleteConnection(
                             BulkDeleteReviewSession.From(session),
                             session);
-                    })));
+                    }),
+                new UsageReportWebSession(
+                    new UsageReportSession(
+                        new UsageReportWorkflow(
+                            configurationResolver,
+                            usageProgress.Write)),
+                    usageProgress)));
     }
 
     /*

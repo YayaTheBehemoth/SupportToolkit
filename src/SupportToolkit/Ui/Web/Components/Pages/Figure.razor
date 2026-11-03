@@ -1,0 +1,23 @@
+@* One Acronis figure in both units, or why it is unknown. *@
+
+<tr>
+    <td>@Label</td>
+    @if (Value.IsKnown)
+    {
+        <td class="num">@Value.Gb!.Value.ToString("#,##0.00", Invariant)</td>
+        <td class="num">@Value.PortalGb!.Value.ToString("#,##0.00", Invariant)</td>
+        <td class="num">@Value.Bytes!.Value.ToString("#,##0", Invariant)</td>
+    }
+    else
+    {
+        <td colspan="3" class="problem">unknown: @Value.Problem</td>
+    }
+</tr>
+
+@code {
+    private static readonly System.Globalization.CultureInfo Invariant =
+        System.Globalization.CultureInfo.InvariantCulture;
+
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter, EditorRequired] public UsageMeasurement Value { get; set; } = default!;
+}

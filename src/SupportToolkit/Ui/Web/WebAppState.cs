@@ -15,13 +15,15 @@ public sealed class WebAppState
     public WebAppState(
         ConfigurationStatusService status,
         AggregatorWebSession? aggregator = null,
-        BulkDeleteWebSession? bulkDelete = null)
+        BulkDeleteWebSession? bulkDelete = null,
+        UsageReportWebSession? usageReport = null)
     {
         Status =
             status ?? throw new ArgumentNullException(nameof(status));
 
         Aggregator = aggregator;
         BulkDelete = bulkDelete;
+        UsageReport = usageReport;
     }
 
     public ViewSettings View { get; } = new();
@@ -37,4 +39,9 @@ public sealed class WebAppState
     /// The Zendesk bulk delete, or null in a host that has none.
     /// </summary>
     public BulkDeleteWebSession? BulkDelete { get; }
+
+    /// <summary>
+    /// The usage report, or null in a host that has none.
+    /// </summary>
+    public UsageReportWebSession? UsageReport { get; }
 }

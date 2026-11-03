@@ -1,0 +1,368 @@
+@page "/usage"
+@implements IDisposable
+@inject WebAppState State
+
+<h1>Usage report</h1>
+
+<p class="muted">
+    Acronis storage per customer next to what Business Central bills for the backup items.
+    Nothing is saved: the report is kept until you generate a new one or exit.
+</p>
+
+@if (State.UsageReport is not { } web)
+{
+    <div class="banner warn">The usage report is not available in this host.</div>
+    return;
+}
+
+@if (_availability is null)
+{
+    <p class="muted">Loading...</p>
+    return;
+}
+
+@{
+    var production = _availability.Mode == SupportToolkitMode.Production;
+    var detailed = State.View.IsDetailed;
+}
+
+<div class="banner @(production ? "prod" : "ok")">
+    <strong>@(production ? "PRODUCTION: real customer names and billing amounts" : "FIXTURE: synthetic data only")</strong>
+    <span>
+        @(production
+            ? "This reads live Business Central and Acronis data, read-only. Check who can see your screen."
+            : "No external system is contacted.")
+    </span>
+</div>
+
+@if (!_availability.IsAvailable)
+{
+    <div class="banner warn">
+        <strong>The usage report is not available.</strong>
+        <span>@_availability.Reason</span>
+    </div>
+    return;
+}
+
+<div class="actions">
+    <button type="button" disabled="@web.IsRunning" @onclick="Generate">
+        @(web.Report.CurrentReport is null ? "Generate report" : "Generate again")
+    </button>
+
+    @if (web.IsRunning)
+    {
+        <button type="button" class="secondary" @onclick="web.Cancel">Cancel</button>
+    }
+</div>
+
+@if (web.IsRunning || (detailed && web.Progress.Snapshot().Count > 0))
+{
+    <section class="card">
+        <header>
+            <h3>Progress</h3>
+            <span class="badge @(web.IsRunning ? "neutral" : "ok")">@(web.IsRunning ? "running" : "done")</span>
+        </header>
+        <pre class="log">@string.Join("\n", web.Progress.Snapshot().TakeLast(detailed ? 15 : 1))</pre>
+        @if (web.IsRunning && production)
+        {
+            <p class="muted">Business Central may ask you to sign in, in a browser window.</p>
+        }
+    </section>
+}
+
+@switch (web.State)
+{
+    case ReviewRunState.Failed:
+        <div class="banner bad">
+            <strong>The report could not be generated. Nothing is shown from an earlier run.</strong>
+            <span>@web.Error</span>
+        </div>
+        break;
+    case ReviewRunState.Cancelled:
+        <div class="banner warn"><strong>Cancelled. No report is shown.</strong></div>
+        break;
+}
+
+@if (web.Report.CurrentReport is { } report && !web.IsRunning)
+{
+    var customers = report.Customers.ToArray();
+    var awaiting = report.AwaitingUsage.ToArray();
+    var unbilled = report.TenantsWithoutSubscription.ToArray();
+    var notActive = report.NotActive.ToArray();
+
+    <div class="banner @(report.IsComplete ? "ok" : "warn")">
+        <strong>
+            @(report.IsComplete
+                ? "Complete: every customer in the report was compared."
+                : "Incomplete: not every customer could be compared. Nothing unknown is shown as zero.")
+        </strong>
+        @if (awaiting.Length > 0)
+        {
+            <span>@awaiting.Length customer(s) are set up but have no Acronis usage yet; they are listed apart, not compared.</span>
+        }
+        <span class="muted">
+            Generated @report.GeneratedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm", Invariant)
+            @if (report.UsagePeriodStart is not null)
+            {
+                <text>· Acronis usage from @report.UsagePeriodStart</text>
+            }
+        </span>
+    </div>
+
+    @foreach (var problem in report.Problems)
+    {
+        <div class="banner bad">@problem</div>
+    }
+
+    <div class="grid">
+        <section class="card">
+            <header><h3>Customers</h3></header>
+            <dl>
+                <dt>Compared</dt><dd>@report.CustomersCompared of @customers.Length</dd>
+                <dt>Billed differs from Acronis</dt><dd>@report.CustomersWithDifference</dd>
+                <dt>Unknown</dt><dd>@report.CustomersUnknown</dd>
+            </dl>
+        </section>
+        <section class="card">
+            <header><h3>Listed apart</h3></header>
+            <dl>
+                <dt>No usage reported yet</dt><dd>@awaiting.Length</dd>
+                <dt>Storage without a subscription</dt><dd>@unbilled.Length</dd>
+                <dt>Not active (left out)</dt><dd>@notActive.Length</dd>
+                @if (report.PendingMatches > 0)
+                {
+                    <dt>Matches waiting for review</dt><dd>@report.PendingMatches</dd>
+                }
+            </dl>
+        </section>
+    </div>
+
+    <ul class="notes">
+        @foreach (var notice in report.Notices)
+        {
+            <li>@notice</li>
+        }
+    </ul>
+
+    <h2>Customers</h2>
+    <p class="muted">
+        GB here is 1,000,000,000 bytes, as Business Central bills.
+        Difference is billed minus Acronis: negative means less is billed than Acronis reports.
+    </p>
+
+    @if (customers.Length == 0)
+    {
+        <p class="muted">No customer with an active backup subscription.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+            <tr>
+                <th></th>
+                <th>Customer</th>
+                @if (detailed) { <th>No.</th> }
+                <th class="num">Billed GB</th>
+                <th class="num">Amount</th>
+                <th class="num">Acronis GB</th>
+                @if (detailed) { <th class="num">Portal GB</th> }
+                <th class="num">Backup</th>
+                <th class="num">M365</th>
+                <th class="num">Difference</th>
+                <th>Status</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var row in customers)
+            {
+                var key = Key(row);
+                var open = _expanded.Contains(key);
+
+                <tr class="@(row.IsKnown ? "" : "exception")">
+                    <td>
+                        <button type="button" class="secondary fold" aria-expanded="@open"
+                                title="@(open ? "Hide the details" : "Show the details")"
+                                @onclick="() => Fold(key)">@(open ? "▾" : "▸")</button>
+                    </td>
+                    <td>@row.Name</td>
+                    @if (detailed) { <td>@row.CustomerNumber</td> }
+                    <td class="num">@Gb(row.BilledQuantity)</td>
+                    <td class="num">@Money(row.BilledAmount)</td>
+                    <td class="num">@Gb(row.Total.Gb)</td>
+                    @if (detailed) { <td class="num">@Gb(row.Total.PortalGb)</td> }
+                    <td class="num">@Gb(row.Backup.Gb)</td>
+                    <td class="num">@Gb(row.Microsoft365.Gb)</td>
+                    <td class="num @(row.DifferenceGb is { } d && d != 0m ? "diff" : "")">@Signed(row.DifferenceGb)</td>
+                    <td>
+                        @if (row.IsCompared)
+                        {
+                            <span class="badge ok">compared</span>
+                        }
+                        else
+                        {
+                            <span class="badge bad">unknown</span>
+                        }
+                        @foreach (var problem in row.Problems)
+                        {
+                            <div class="row-note problem">@problem</div>
+                        }
+                        @foreach (var remark in row.Remarks)
+                        {
+                            <div class="row-note">check: @remark</div>
+                        }
+                    </td>
+                </tr>
+
+                @if (open)
+                {
+                    <tr class="ticket-text">
+                        <td></td>
+                        <td colspan="@(detailed ? 10 : 8)">
+                            <UsageRowDetails Row="row" />
+                        </td>
+                    </tr>
+                }
+            }
+            </tbody>
+        </table>
+    }
+
+    @if (awaiting.Length > 0)
+    {
+        <h2>Set up, no usage reported yet</h2>
+        <p class="muted">
+            These customers have an active backup subscription and a matched Acronis tenant, but Acronis
+            has not reported any usage for them. Raise them with whoever set them up.
+        </p>
+        <table>
+            <thead><tr><th>Customer</th>@if (detailed) { <th>No.</th> }<th class="num">Billed GB</th><th class="num">Amount</th><th>Acronis tenant</th></tr></thead>
+            <tbody>
+            @foreach (var row in awaiting)
+            {
+                <tr>
+                    <td>@row.Name</td>
+                    @if (detailed) { <td>@row.CustomerNumber</td> }
+                    <td class="num">@Gb(row.BilledQuantity)</td>
+                    <td class="num">@Money(row.BilledAmount)</td>
+                    <td>@string.Join(", ", row.TenantNames)</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+
+    @if (unbilled.Length > 0)
+    {
+        <h2>Storage without a backup subscription</h2>
+        <p class="muted">Acronis customer tenants with storage that no customer with a backup subscription was matched to.</p>
+        <table>
+            <thead><tr><th>Acronis tenant</th><th class="num">Acronis GB</th>@if (detailed) { <th class="num">Portal GB</th> }<th class="num">Backup</th><th class="num">M365</th><th>Note</th></tr></thead>
+            <tbody>
+            @foreach (var row in unbilled)
+            {
+                <tr>
+                    <td>@row.Name</td>
+                    <td class="num">@Gb(row.Total.Gb)</td>
+                    @if (detailed) { <td class="num">@Gb(row.Total.PortalGb)</td> }
+                    <td class="num">@Gb(row.Backup.Gb)</td>
+                    <td class="num">@Gb(row.Microsoft365.Gb)</td>
+                    <td>
+                        @foreach (var note in row.Problems.Concat(row.Remarks))
+                        {
+                            <div class="row-note">@note</div>
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+
+    @if (notActive.Length > 0)
+    {
+        @if (detailed)
+        {
+            <h2>Not active (left out of the report)</h2>
+            <p class="muted">Every backup line of these customers is on a subscription that is not active, or omitted.</p>
+            <table>
+                <thead><tr><th>Customer</th><th>No.</th><th class="num">Acronis GB</th><th>Acronis tenant</th></tr></thead>
+                <tbody>
+                @foreach (var row in notActive)
+                {
+                    <tr>
+                        <td>@row.Name</td>
+                        <td>@row.CustomerNumber</td>
+                        <td class="num">@Gb(row.Total.Gb)</td>
+                        <td>@(row.TenantNames.Count == 0 ? "none matched" : string.Join(", ", row.TenantNames))</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+        else
+        {
+            <p class="muted">
+                @notActive.Length customer(s) whose subscription is not active are left out. The Detailed view lists them.
+            </p>
+        }
+    }
+}
+
+@code {
+    private static readonly System.Globalization.CultureInfo Invariant =
+        System.Globalization.CultureInfo.InvariantCulture;
+
+    private UsageReportAvailability? _availability;
+    private readonly HashSet<string> _expanded = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        State.View.Changed += OnChanged;
+
+        if (State.UsageReport is { } web)
+        {
+            web.Changed += OnChanged;
+            web.Progress.Changed += OnChanged;
+            _availability = await web.Report.GetAvailabilityAsync();
+        }
+    }
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private void Generate()
+    {
+        _expanded.Clear();
+        State.UsageReport!.Start();
+    }
+
+    private void Fold(string key)
+    {
+        if (!_expanded.Remove(key))
+        {
+            _expanded.Add(key);
+        }
+    }
+
+    private static string Key(UsageReportRow row) =>
+        row.CustomerNumber ?? string.Join(";", row.TenantIds);
+
+    private static string Gb(decimal? value) =>
+        value is null ? "unknown" : value.Value.ToString("#,##0.00", Invariant);
+
+    private static string Money(decimal? value) =>
+        value is null ? "unknown" : value.Value.ToString("#,##0.00", Invariant);
+
+    private static string Signed(decimal? value) =>
+        value is null ? "unknown" : value.Value.ToString("+#,##0.00;-#,##0.00;0.00", Invariant);
+
+    public void Dispose()
+    {
+        State.View.Changed -= OnChanged;
+
+        if (State.UsageReport is { } web)
+        {
+            web.Changed -= OnChanged;
+            web.Progress.Changed -= OnChanged;
+        }
+    }
+}

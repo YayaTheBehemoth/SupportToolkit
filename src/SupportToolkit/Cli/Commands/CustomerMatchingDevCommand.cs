@@ -6,6 +6,7 @@ using SupportToolkit.Core.CustomerMapping.Matching;
 using SupportToolkit.Core.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
+using SupportToolkit.Providers.Acronis;
 using SupportToolkit.Providers.BusinessCentral;
 using SupportToolkit.Providers.BusinessCentral.Subscriptions;
 
@@ -91,7 +92,7 @@ public sealed class CustomerMatchingDevCommand
         output.WriteLine("Reading Acronis tenants (read-only)...");
 
         using var session =
-            await AcronisDevSession.CreateAsync(
+            await AcronisReadSession.CreateAsync(
                 _configurationResolver,
                 cancellationToken);
 

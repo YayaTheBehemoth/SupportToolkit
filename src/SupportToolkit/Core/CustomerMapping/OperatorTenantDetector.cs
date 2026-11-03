@@ -1,7 +1,7 @@
 using SupportToolkit.Core.CustomerMapping.Matching;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 
-namespace SupportToolkit.Modules.BackupAggregator.MonitoringScope;
+namespace SupportToolkit.Core.CustomerMapping;
 
 /// <summary>
 /// The operator's own company appears in Acronis as a partner tenant

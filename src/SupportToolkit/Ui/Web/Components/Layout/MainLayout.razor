@@ -28,6 +28,7 @@
             <NavLink href="" Match="NavLinkMatch.All">Profile</NavLink>
             <NavLink href="aggregator">Backup Aggregator</NavLink>
             <NavLink href="zendesk">Zendesk bulk delete</NavLink>
+            <NavLink href="usage">Usage report</NavLink>
         </nav>
         <span class="spacer"></span>
         <div class="seg" role="group" aria-label="How much detail to show">
@@ -47,6 +48,10 @@
                 @if (State.Aggregator is { IsRunning: true })
                 {
                     <text>A review is still running and will be stopped.</text>
+                }
+                @if (State.UsageReport is { IsRunning: true })
+                {
+                    <text>A usage report is still being generated and will be stopped.</text>
                 }
                 @if (State.BulkDelete is { IsDeleting: true })
                 {
@@ -87,6 +92,7 @@
     private async Task ExitAsync()
     {
         State.Aggregator?.Cancel();
+        State.UsageReport?.Cancel();
 
         // A running deletion is stopped cleanly and its receipt written.
         if (State.BulkDelete is { } bulkDelete)
