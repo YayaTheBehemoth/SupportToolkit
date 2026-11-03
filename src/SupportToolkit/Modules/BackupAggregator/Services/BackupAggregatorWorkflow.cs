@@ -31,15 +31,22 @@ public sealed class BackupAggregatorWorkflow
 
     private readonly Action<string>? _progress;
 
+    private readonly ReviewRunMode _runMode;
+
     /// <param name="progress">
     /// Where operator-facing progress messages from a production review
     /// go (for example while waiting for in-progress backups). Supplied
     /// by the host; the workflow itself never writes to a console. Null
     /// discards them.
     /// </param>
+    /// <param name="runMode">
+    /// Chosen by the host. Manual (the default) never waits for
+    /// in-progress backups; Automatic waits as the profile says.
+    /// </param>
     public BackupAggregatorWorkflow(
         SupportToolkitConfigurationResolver configurationResolver,
-        Action<string>? progress = null)
+        Action<string>? progress = null,
+        ReviewRunMode runMode = ReviewRunMode.Manual)
     {
         _configurationResolver =
             configurationResolver
@@ -48,6 +55,7 @@ public sealed class BackupAggregatorWorkflow
             );
 
         _progress = progress;
+        _runMode = runMode;
     }
 
     public Task<SupportToolkitMode> GetModeAsync(
@@ -549,6 +557,7 @@ public sealed class BackupAggregatorWorkflow
             await InProgressWaitSetup.LoadAsync(
                 _configurationResolver,
                 BackupAggregatorModule.ModuleCommand,
+                _runMode,
                 cancellationToken
             );
 

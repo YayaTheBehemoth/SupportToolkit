@@ -118,7 +118,7 @@ public sealed record BackupReviewView(
             report.HealthyRowsSuppressed,
             report.FindingsCount,
             report.UnknownRowsCount,
-            report.InProgressWait?.PendingResources ?? 0,
+            report.InProgressPending,
             trust,
             detailsTrusted
                 ? Group(

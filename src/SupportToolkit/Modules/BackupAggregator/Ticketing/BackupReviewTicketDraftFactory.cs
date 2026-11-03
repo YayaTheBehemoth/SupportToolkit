@@ -99,7 +99,7 @@ public sealed class BackupReviewTicketDraftFactory
     {
         if (report.FindingsCount == 0
             && report.UnknownRowsCount == 0
-            && report.InProgressWait is { PendingResources: > 0 })
+            && report.InProgressPending > 0)
         {
             return
                 "Backup review - backups still in progress";
@@ -236,13 +236,18 @@ public sealed class BackupReviewTicketDraftFactory
             $"Unclassified: {report.UnknownRowsCount}"
         );
 
-        if (report.InProgressWait is { PendingResources: > 0 } wait)
+        if (report.InProgressPending > 0)
         {
+            var when =
+                report.InProgressWait is null
+                    ? "at review time"
+                    : "after waiting";
+
             builder.AppendLine(
-                $"Still in progress after waiting: " +
-                $"{wait.PendingResources} resource(s) in " +
-                $"{wait.PendingTenants} tenant(s). Their result is " +
-                "not final."
+                $"Still in progress {when}: " +
+                $"{report.InProgressPending} resource(s) in " +
+                $"{report.InProgressPendingTenants} tenant(s). Their " +
+                "result is not final."
             );
         }
 
