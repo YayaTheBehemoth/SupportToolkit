@@ -1,9 +1,9 @@
 using SupportToolkit.Providers.Acronis.Tenants;
-using SupportToolkit.Core.Tenants;
+using SupportToolkit.Domain.Tenants;
 using SupportToolkit.Cli.Commands;
-using SupportToolkit.Core.CustomerMapping;
-using SupportToolkit.Core.CustomerMapping.Matching;
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.CustomerMapping;
+using SupportToolkit.Domain.CustomerMapping.Matching;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 using SupportToolkit.Providers.BusinessCentral.Subscriptions;

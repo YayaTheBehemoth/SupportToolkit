@@ -1,6 +1,6 @@
 using SupportToolkit.Core.Configuration;
-using SupportToolkit.Core.CustomerMapping;
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.CustomerMapping;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Core.Ticketing.Models;
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;

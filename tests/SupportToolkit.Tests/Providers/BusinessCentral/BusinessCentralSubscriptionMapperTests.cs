@@ -1,5 +1,5 @@
 using SupportToolkit.Providers.BusinessCentral.Subscriptions;
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.Fixtures;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Providers.BusinessCentral.Subscriptions.Dtos;

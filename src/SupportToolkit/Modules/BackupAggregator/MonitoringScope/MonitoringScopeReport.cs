@@ -1,7 +1,7 @@
-using SupportToolkit.Core.CustomerMapping;
-using SupportToolkit.Core.MonitoringScope;
-using SupportToolkit.Core.Reconciliation;
-using SupportToolkit.Core.Tenants;
+using SupportToolkit.Domain.CustomerMapping;
+using SupportToolkit.Domain.MonitoringScope;
+using SupportToolkit.Domain.Reconciliation;
+using SupportToolkit.Domain.Tenants;
 
 namespace SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 

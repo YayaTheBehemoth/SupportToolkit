@@ -1,6 +1,6 @@
 using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using static SupportToolkit.Tests.Ui.Web.StatusTestSupport;
 

@@ -2,7 +2,7 @@
 using System.Diagnostics;
 using System.Net;
 using SupportToolkit.Core.Logging;
-using SupportToolkit.Core.Tenants;
+using SupportToolkit.Domain.Tenants;
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 

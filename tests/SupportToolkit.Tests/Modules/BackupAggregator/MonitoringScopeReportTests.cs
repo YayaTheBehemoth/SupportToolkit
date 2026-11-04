@@ -1,9 +1,9 @@
 using SupportToolkit.Providers.Acronis.Tenants;
-using SupportToolkit.Core.Tenants;
+using SupportToolkit.Domain.Tenants;
 using System.Globalization;
-using SupportToolkit.Core.CustomerMapping;
-using SupportToolkit.Core.MonitoringScope;
-using SupportToolkit.Core.Reconciliation;
+using SupportToolkit.Domain.CustomerMapping;
+using SupportToolkit.Domain.MonitoringScope;
+using SupportToolkit.Domain.Reconciliation;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.Reporting;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;

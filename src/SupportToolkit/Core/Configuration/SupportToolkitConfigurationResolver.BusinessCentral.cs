@@ -1,4 +1,3 @@
-using SupportToolkit.Core.MonitoringScope;
 
 namespace SupportToolkit.Core.Configuration;
 

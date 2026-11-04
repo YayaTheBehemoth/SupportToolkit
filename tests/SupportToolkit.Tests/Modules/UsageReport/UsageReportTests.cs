@@ -1,8 +1,8 @@
 using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
-using SupportToolkit.Core.CustomerMapping;
-using SupportToolkit.Core.CustomerMapping.Matching;
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.CustomerMapping;
+using SupportToolkit.Domain.CustomerMapping.Matching;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Modules.UsageReport.Fixtures;
 using SupportToolkit.Modules.UsageReport.Models;
 using SupportToolkit.Modules.UsageReport.Reporting;

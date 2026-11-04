@@ -1,6 +1,6 @@
 using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.Fixtures;

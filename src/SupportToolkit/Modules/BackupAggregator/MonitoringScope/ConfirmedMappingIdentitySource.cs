@@ -1,4 +1,4 @@
-using SupportToolkit.Core.CustomerMapping;
+using SupportToolkit.Domain.CustomerMapping;
 
 namespace SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 

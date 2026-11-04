@@ -1,5 +1,5 @@
-using SupportToolkit.Core.Reconciliation;
-using SupportToolkit.Core.Tenants;
+using SupportToolkit.Domain.Reconciliation;
+using SupportToolkit.Domain.Tenants;
 
 namespace SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 

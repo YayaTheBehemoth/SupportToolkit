@@ -1,5 +1,5 @@
 using System.Globalization;
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Providers.BusinessCentral.Subscriptions.Dtos;
 using SupportToolkit.Providers.BusinessCentral.Transport;
 

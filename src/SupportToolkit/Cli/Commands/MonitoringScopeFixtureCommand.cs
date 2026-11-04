@@ -1,4 +1,4 @@
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.MonitoringScope;
 
 using System.Globalization;
 using SupportToolkit.Modules.BackupAggregator.Fixtures;

@@ -1,10 +1,10 @@
 using SupportToolkit.Core.Configuration;
-using SupportToolkit.Core.Tenants;
-using SupportToolkit.Core.CustomerMapping;
-using SupportToolkit.Core.CustomerMapping.Matching;
+using SupportToolkit.Domain.Tenants;
+using SupportToolkit.Domain.CustomerMapping;
+using SupportToolkit.Domain.CustomerMapping.Matching;
 using SupportToolkit.Core.Logging;
-using SupportToolkit.Core.MonitoringScope;
-using SupportToolkit.Core.Reconciliation;
+using SupportToolkit.Domain.MonitoringScope;
+using SupportToolkit.Domain.Reconciliation;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 
 namespace SupportToolkit.Modules.BackupAggregator.Services;

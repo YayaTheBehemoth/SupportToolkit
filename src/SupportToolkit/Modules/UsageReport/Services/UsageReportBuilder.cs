@@ -1,7 +1,7 @@
 using System.Globalization;
 using SupportToolkit.Core.Configuration;
-using SupportToolkit.Core.CustomerMapping;
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.CustomerMapping;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Modules.UsageReport.Models;
 
 namespace SupportToolkit.Modules.UsageReport.Services;

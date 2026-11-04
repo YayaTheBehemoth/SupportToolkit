@@ -1,5 +1,5 @@
-using SupportToolkit.Core.CustomerMapping.Matching;
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.CustomerMapping.Matching;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Providers.BusinessCentral.Subscriptions.Dtos;
 
 namespace SupportToolkit.Providers.BusinessCentral.Subscriptions;

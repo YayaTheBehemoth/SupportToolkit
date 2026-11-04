@@ -1,5 +1,5 @@
-using SupportToolkit.Core.CustomerMapping;
-using SupportToolkit.Core.CustomerMapping.Matching;
+using SupportToolkit.Domain.CustomerMapping;
+using SupportToolkit.Domain.CustomerMapping.Matching;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 
 namespace SupportToolkit.Modules.BackupAggregator.Fixtures;

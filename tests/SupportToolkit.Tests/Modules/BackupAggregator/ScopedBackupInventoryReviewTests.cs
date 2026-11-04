@@ -1,4 +1,4 @@
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.Production;
 
 using System.Collections.Concurrent;

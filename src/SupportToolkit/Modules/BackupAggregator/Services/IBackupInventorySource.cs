@@ -1,4 +1,4 @@
-using SupportToolkit.Core.Tenants;
+using SupportToolkit.Domain.Tenants;
 using SupportToolkit.Modules.BackupAggregator.Models;
 
 namespace SupportToolkit.Modules.BackupAggregator.Services;

@@ -1,7 +1,7 @@
 using System.Globalization;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Logging;
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Core.Ticketing.Models;
 using SupportToolkit.Core.Ticketing.Services;
 using SupportToolkit.Modules.BackupAggregator.Services;

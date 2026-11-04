@@ -1,6 +1,6 @@
 using SupportToolkit.Providers.Acronis.Tenants;
-using SupportToolkit.Core.Tenants;
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.Tenants;
+using SupportToolkit.Domain.MonitoringScope;
 
 using SupportToolkit.Modules.BackupAggregator.Fixtures;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;

@@ -18,7 +18,7 @@ namespace SupportToolkit.Tests.Architecture;
 public class LayeringTests
 {
     private static readonly string[] LowerLayers =
-        ["Core", "Providers", "Modules", "Composition"];
+        ["Core", "Domain", "Providers", "Modules", "Composition"];
 
     /// <summary>
     /// Files below the UI that may use the console, and why. Console
@@ -95,14 +95,14 @@ public class LayeringTests
     public void CoreAndProviders_DoNotReferenceModules()
     {
         var offenders =
-            SourceFiles(["Core", "Providers"])
+            SourceFiles(["Core", "Domain", "Providers"])
                 .Where(file => ModulesReference.IsMatch(file.Code))
                 .Select(file => file.RelativePath)
                 .ToArray();
 
         Assert.True(
             offenders.Length == 0,
-            "Core and Providers sit below Modules:\n  " +
+            "Core, Domain and Providers sit below Modules:\n  " +
             string.Join("\n  ", offenders));
     }
 
@@ -130,6 +130,53 @@ public class LayeringTests
         Assert.True(
             offenders.Length == 0,
             "Core sits below Providers:\n  " +
+            string.Join("\n  ", offenders));
+    }
+
+    private static readonly Regex AboveDomainReference =
+        new(
+            @"\bSupportToolkit\.(Providers|Modules|Composition|Cli|Ui)\b",
+            RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Domain/ holds the commercial rules shared by modules: customer
+    /// matching, monitoring scope and entitlement, reconciliation, and the
+    /// toolkit's tenant type. It may use Core, and nothing above it: no
+    /// provider, no module, no host or interface.
+    /// </summary>
+    [Fact]
+    public void Domain_DependsOnlyOnCore()
+    {
+        var files = SourceFiles(["Domain"]).ToArray();
+
+        Assert.NotEmpty(files);
+
+        var offenders =
+            files
+                .Where(file => AboveDomainReference.IsMatch(file.Code))
+                .Select(file => file.RelativePath)
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            "Domain may use Core only:\n  " +
+            string.Join("\n  ", offenders));
+    }
+
+    [Fact]
+    public void Core_DoesNotReferenceTheDomain()
+    {
+        var offenders =
+            SourceFiles(["Core"])
+                .Where(file => file.Code.Contains(
+                    "SupportToolkit.Domain",
+                    StringComparison.Ordinal))
+                .Select(file => file.RelativePath)
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            "Core is infrastructure below the domain:\n  " +
             string.Join("\n  ", offenders));
     }
 
@@ -329,8 +376,9 @@ public class LayeringTests
     public void ProviderConventions_StayInTheProviderMapping()
     {
         var files =
-            SourceFiles(["Core", "Modules"])
+            SourceFiles(["Core", "Domain", "Modules"])
                 .Where(file => file.RelativePath.StartsWith("Core/", StringComparison.Ordinal)
+                               || file.RelativePath.StartsWith("Domain/", StringComparison.Ordinal)
                                || ProviderAgnosticModules.Any(
                                    entry => file.RelativePath.StartsWith(entry.Module, StringComparison.Ordinal)
                                             && !entry.AllowedFolders.Any(

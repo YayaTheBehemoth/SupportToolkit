@@ -1,4 +1,4 @@
-using SupportToolkit.Core.CustomerMapping.Matching;
+using SupportToolkit.Domain.CustomerMapping.Matching;
 
 namespace SupportToolkit.Modules.UsageReport.Models;
 

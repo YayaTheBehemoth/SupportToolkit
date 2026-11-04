@@ -1,6 +1,6 @@
 using SupportToolkit.Core.Configuration;
-using SupportToolkit.Core.CustomerMapping;
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.CustomerMapping;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Modules.UsageReport.Models;
 using SupportToolkit.Modules.UsageReport.Services;
 using SupportToolkit.Providers.Acronis.Tenants;
