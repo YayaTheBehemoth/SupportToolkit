@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using SupportToolkit.Core.Configuration;
+using SupportToolkit.Core.Units;
 using SupportToolkit.Providers.Acronis;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 using SupportToolkit.Providers.Acronis.Usage;
@@ -364,8 +365,8 @@ public sealed class AcronisUsageDevCommand
                     $"{row.Type ?? "<none>",-8} " +
                     $"{Number(row.Value),18} " +
                     $"{row.Unit ?? Unknown,-9} " +
-                    $"{(isBytes ? Format(row.Value!.Value / 1_000_000_000m) : "-"),12} " +
-                    $"{(isBytes ? Format(row.Value!.Value / 1_073_741_824m) : "-"),12} " +
+                    $"{(isBytes ? Format(row.Value!.Value / StorageUnits.BytesPerGb) : "-"),12} " +
+                    $"{(isBytes ? Format(row.Value!.Value / StorageUnits.BytesPerGib) : "-"),12} " +
                     $"{Number(row.AbsoluteValue),18}" +
                     (row.Status == "ok" ? string.Empty : $"  [{row.Status}]"));
             }
