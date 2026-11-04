@@ -60,9 +60,9 @@ public sealed class CustomerMatchingDevCommand
                 cancellationToken);
 
         var bundle =
-            await BusinessCentralProviderFactory.CreateAsync(
-                _configurationResolver,
-                cancellationToken);
+            BusinessCentralProviderFactory.Create(
+                await _configurationResolver.GetBusinessCentralConnectionAsync(
+                    cancellationToken));
 
         output.WriteLine("Reading Business Central (read-only)...");
 
@@ -93,9 +93,9 @@ public sealed class CustomerMatchingDevCommand
         output.WriteLine("Reading Acronis tenants (read-only)...");
 
         using var session =
-            await AcronisReadSession.CreateAsync(
-                _configurationResolver,
-                cancellationToken);
+            AcronisReadSession.Create(
+                await _configurationResolver.GetAcronisConnectionAsync(
+                    cancellationToken));
 
         var tenants =
             await session.Provider.GetTenantsAsync(

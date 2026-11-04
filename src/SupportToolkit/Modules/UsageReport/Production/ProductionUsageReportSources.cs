@@ -43,14 +43,14 @@ public sealed class ProductionUsageReportSources : IUsageReportSources
         // Local configuration first: a missing connection fails before
         // any sign-in or request.
         var businessCentral =
-            await BusinessCentralProviderFactory.CreateAsync(
-                resolver,
-                cancellationToken);
+            BusinessCentralProviderFactory.Create(
+                await resolver.GetBusinessCentralConnectionAsync(
+                    cancellationToken));
 
         var acronis =
-            await AcronisReadSession.CreateAsync(
-                resolver,
-                cancellationToken);
+            AcronisReadSession.Create(
+                await resolver.GetAcronisConnectionAsync(
+                    cancellationToken));
 
         return new ProductionUsageReportSources(businessCentral, acronis);
     }

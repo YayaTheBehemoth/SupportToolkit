@@ -12,23 +12,18 @@ public sealed record BusinessCentralProviderBundle(
 );
 
 /// <summary>
-/// The one place the production Business Central provider is built
-/// from the active profile.
+/// The one place the production Business Central provider is built,
+/// from a resolved connection.
 ///
 /// Building a provider never signs in. Sign-in happens on the first
 /// request, after the request has passed read-only validation.
 /// </summary>
 public static class BusinessCentralProviderFactory
 {
-    public static async Task<BusinessCentralProviderBundle> CreateAsync(
-        SupportToolkitConfigurationResolver resolver,
-        CancellationToken cancellationToken = default)
+    public static BusinessCentralProviderBundle Create(
+        ResolvedBusinessCentralConnection connection)
     {
-        ArgumentNullException.ThrowIfNull(resolver);
-
-        var connection =
-            await resolver.GetBusinessCentralConnectionAsync(
-                cancellationToken);
+        ArgumentNullException.ThrowIfNull(connection);
 
         var options =
             BusinessCentralOptions.Create(

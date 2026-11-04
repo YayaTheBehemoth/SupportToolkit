@@ -7,8 +7,8 @@ using SupportToolkit.Providers.Acronis.Usage;
 namespace SupportToolkit.Providers.Acronis;
 
 /// <summary>
-/// Read-only Acronis tenant and usage providers, built from the active
-/// profile's connection. Credentials are never taken from a command line.
+/// Read-only Acronis tenant and usage providers, built from a resolved
+/// connection. Credentials are never taken from a command line.
 ///
 /// Shared by modules and developer commands. The read-only handler keeps
 /// the established boundary: no external write endpoint is available
@@ -32,15 +32,14 @@ public sealed class AcronisReadSession : IDisposable
 
     public AcronisUsageProvider UsageProvider { get; }
 
-    public static async Task<AcronisReadSession> CreateAsync(
-        SupportToolkitConfigurationResolver configurationResolver,
-        CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Builds the session for a resolved connection. Nothing is sent
+    /// until the first request.
+    /// </summary>
+    public static AcronisReadSession Create(
+        ResolvedAcronisConnection connection)
     {
-        ArgumentNullException.ThrowIfNull(configurationResolver);
-
-        var connection =
-            await configurationResolver.GetAcronisConnectionAsync(
-                cancellationToken);
+        ArgumentNullException.ThrowIfNull(connection);
 
         var options =
             AcronisOptions.Create(

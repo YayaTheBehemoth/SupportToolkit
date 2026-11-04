@@ -177,9 +177,9 @@ public sealed class AcronisUsageDevCommand
         }
 
         using var session =
-            await AcronisReadSession.CreateAsync(
-                _configurationResolver,
-                cancellationToken);
+            AcronisReadSession.Create(
+                await _configurationResolver.GetAcronisConnectionAsync(
+                    cancellationToken));
 
         var tenants =
             await session.Provider.GetTenantsAsync(cancellationToken);

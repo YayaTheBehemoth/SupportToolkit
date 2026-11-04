@@ -244,8 +244,14 @@ public sealed class ScopedReviewProductionSources
             CancellationToken cancellationToken)
     {
         return _businessCentralBundle ??=
-            BusinessCentralProviderFactory.CreateAsync(
-                _configurationResolver,
+            CreateBusinessCentralBundleAsync(
                 cancellationToken);
     }
+
+    private async Task<BusinessCentralProviderBundle>
+        CreateBusinessCentralBundleAsync(
+            CancellationToken cancellationToken) =>
+        BusinessCentralProviderFactory.Create(
+            await _configurationResolver.GetBusinessCentralConnectionAsync(
+                cancellationToken));
 }

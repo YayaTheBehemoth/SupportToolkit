@@ -35,9 +35,9 @@ public sealed class BusinessCentralSubscriptionDevCommand
         ArgumentNullException.ThrowIfNull(output);
 
         var bundle =
-            await BusinessCentralProviderFactory.CreateAsync(
-                _configurationResolver,
-                cancellationToken);
+            BusinessCentralProviderFactory.Create(
+                await _configurationResolver.GetBusinessCentralConnectionAsync(
+                    cancellationToken));
 
         // Optional: diagnostics still run without an item number.
         string? itemNumber = null;
