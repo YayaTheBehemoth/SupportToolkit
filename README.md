@@ -76,8 +76,6 @@ Direct CLI commands are also available for scripting and development.
 | `serve [--port <n>] [--no-browser]` | Open the local web UI. See [Web UI](#web-ui). | Listens on 127.0.0.1 only. What the pages do depends on the active profile's mode. |
 | `configure [status \| profile <name> \| profile delete <name> \| use <name> \| import [file]]` | Manage profiles, connections and credentials. `import` moves a settings file into place (see [Configuration storage](#configuration-storage)). | Local configuration and Windows Credential Manager only. |
 | `backup-aggregator inventory-review <tenant> \| --all` | Consolidated Acronis inventory review. | Read-only in production mode. |
-| `backup-aggregator ticket preview` | Generate and display a Zendesk ticket draft. | None. |
-| `backup-aggregator ticket submit` | Create a Zendesk ticket from a completed review. | **Writes to Zendesk.** |
 | `backup-aggregator scoped-review` | Review only tenants entitled to monitoring in Business Central, plus the operator's own tenant. | Read-only Acronis and Business Central calls; interactive Business Central sign-in. |
 | `backup-aggregator ticket preview --scoped` / `ticket submit --scoped` | Ticket from a complete scoped review. | `submit` **writes to Zendesk.** |
 | `dev acronis-tenants --production [--names]` | Tenant discovery diagnostics. | Read-only Acronis calls. |
@@ -344,7 +342,7 @@ Ticketing is not an independent operational module. It is an integration capabil
 
 BackupAggregator can:
 
-- Generate a ticket draft from a completed backup review.
+- Generate a ticket draft from a complete monitored (scoped) review.
 - Preview the subject and internal ticket content.
 - Submit the ticket to a configured Zendesk destination.
 - Display the resulting ticket ID and browser link.
@@ -355,7 +353,7 @@ Tickets include review findings and unclassified resources while suppressing hea
 ### Preview a ticket
 
 ```cmd
-dotnet run --project src\SupportToolkit -- backup-aggregator ticket preview
+dotnet run --project src\SupportToolkit -- backup-aggregator ticket preview --scoped
 ```
 
 A preview does not create a Zendesk ticket.
@@ -363,7 +361,7 @@ A preview does not create a Zendesk ticket.
 ### Submit a ticket
 
 ```cmd
-dotnet run --project src\SupportToolkit -- backup-aggregator ticket submit
+dotnet run --project src\SupportToolkit -- backup-aggregator ticket submit --scoped
 ```
 
 **This command performs a real external write.**
@@ -874,7 +872,7 @@ The main menu provides:
 - Configuration wizard
 - Debug logging toggle
 
-The BackupAggregator menu offers the monitored review (the tenants Business Central entitles, plus the operator's own), ticket preview, and destination-aware ticket submission from that review. It needs a Business Central connection in the active profile, or fixture mode. The all-tenant review and its ticket are not in the menu; they remain available as `inventory-review` and `ticket preview` / `ticket submit` on the command line for development.
+The BackupAggregator menu offers the monitored review (the tenants Business Central entitles, plus the operator's own), ticket preview, and destination-aware ticket submission from that review. It needs a Business Central connection in the active profile, or fixture mode. The all-tenant review is not in the menu; it remains available as `inventory-review` on the command line as a read-only diagnostic, without a ticket. Tickets come only from a complete monitored review, through the same gate in the console, the web page and `ticket preview/submit --scoped`.
 
 Interactive and raw CLI operations share the same application workflows.
 

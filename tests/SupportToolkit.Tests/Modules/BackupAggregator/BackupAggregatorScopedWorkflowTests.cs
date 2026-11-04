@@ -225,6 +225,81 @@ public class BackupAggregatorScopedWorkflowTests
     }
 
     [Fact]
+    public async Task Module_ScopedTicketSubmit_WithoutADestination_FailsAsConfiguration_NotAsAnIncompleteReview()
+    {
+        // Fixture mode, complete review, no Zendesk connection: the gate
+        // is passed, so the missing destination is the error, reported
+        // as an exception (ERROR, exit 1), never as an incomplete review.
+        var resolver = Resolver(new SupportToolkitConfiguration());
+
+        var module =
+            new BackupAggregatorModule(
+                new BackupAggregatorWorkflow(resolver),
+                new BackupAggregatorScopedWorkflow(resolver));
+
+        var original = Console.Out;
+        var originalError = Console.Error;
+
+        try
+        {
+            using var writer = new StringWriter();
+            using var error = new StringWriter();
+            Console.SetOut(writer);
+            Console.SetError(error);
+
+            var failure =
+                await Assert.ThrowsAsync<InvalidOperationException>(
+                    () => module.RunAsync(["ticket", "submit", "--scoped"]));
+
+            // The same error the destination lookup itself raises.
+            var lookup =
+                await Assert.ThrowsAsync<InvalidOperationException>(
+                    () => new BackupAggregatorWorkflow(resolver)
+                        .GetTicketSubmissionTargetAsync());
+
+            Assert.Equal(lookup.Message, failure.Message);
+            Assert.DoesNotContain("not complete", error.ToString());
+            Assert.DoesNotContain("SUPPORTTOOLKIT // BACKUP REVIEW", writer.ToString());
+        }
+        finally
+        {
+            Console.SetOut(original);
+            Console.SetError(originalError);
+        }
+    }
+
+    [Theory]
+    [InlineData("preview")]
+    [InlineData("submit")]
+    public async Task Module_AllTenantTicketCommands_AreRetired(string action)
+    {
+        var resolver = Resolver(new SupportToolkitConfiguration());
+
+        var module =
+            new BackupAggregatorModule(
+                new BackupAggregatorWorkflow(resolver),
+                new BackupAggregatorScopedWorkflow(resolver));
+
+        var original = Console.Out;
+
+        try
+        {
+            using var writer = new StringWriter();
+            Console.SetOut(writer);
+
+            var exit = await module.RunAsync(["ticket", action]);
+
+            Assert.Equal(1, exit);
+            Assert.Contains("Backup Aggregator", writer.ToString());
+            Assert.DoesNotContain("SUPPORTTOOLKIT // BACKUP REVIEW", writer.ToString());
+        }
+        finally
+        {
+            Console.SetOut(original);
+        }
+    }
+
+    [Fact]
     public async Task Module_WithoutScopedWorkflow_RejectsScopedTicketCommands()
     {
         var resolver = Resolver(new SupportToolkitConfiguration());

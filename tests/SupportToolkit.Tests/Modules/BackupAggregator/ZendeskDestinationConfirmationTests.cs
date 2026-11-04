@@ -1,7 +1,9 @@
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Modules.BackupAggregator.Fixtures;
+using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.Services;
+using SupportToolkit.Modules.BackupAggregator.Ticketing;
 
 namespace SupportToolkit.Tests.Modules.BackupAggregator;
 
@@ -27,9 +29,13 @@ public class ZendeskDestinationConfirmationTests
         var staleDestination = new ZendeskTicketDestinationPreview(
             "different.zendesk.com", "dev", 12345);
 
+        var stalePlan = new TicketSubmissionPlan(
+            new BackupReviewTicketDraftFactory().Create(report),
+            staleDestination,
+            new ReviewSummary(report.TenantCount, report.TenantsAttempted, report.FindingsCount, 0, true));
+
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => workflow.SubmitTicketToConfirmedDestinationAsync(
-                report, staleDestination));
+            () => workflow.SubmitPlannedTicketAsync(stalePlan));
 
         Assert.Contains("changed since confirmation", failure.Message);
         Assert.Contains("No ticket was submitted", failure.Message);

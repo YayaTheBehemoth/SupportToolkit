@@ -133,25 +133,6 @@ public sealed class BackupAggregatorWorkflow
     }
 
     /// <summary>
-    /// Builds a ticket draft from an already completed full backup review.
-    ///
-    /// This overload is used by interactive workflows so preview and
-    /// submission operate on the exact review the operator has inspected.
-    /// </summary>
-    public TicketDraft CreateTicketDraft(
-        AggregatedBackupReport report)
-    {
-        ArgumentNullException.ThrowIfNull(
-            report
-        );
-
-        return new BackupReviewTicketDraftFactory()
-            .Create(
-                report
-            );
-    }
-
-    /// <summary>
     /// Builds a ticket draft from a completed scoped review.
     ///
     /// A ticket asserts that every monitored tenant was reviewed, so a
@@ -297,113 +278,6 @@ public sealed class BackupAggregatorWorkflow
     }
 
     /// <summary>
-    /// Submits a ticket for a completed scoped review. Same gate and
-    /// destination rules as the full review.
-    /// </summary>
-    public async Task<CreatedTicket>
-        SubmitScopedTicketAsync(
-            ScopedBackupInventoryReviewResult result,
-            CancellationToken cancellationToken = default)
-    {
-        return await SubmitTicketDraftAsync(
-            CreateScopedTicketDraft(
-                result
-            ),
-            cancellationToken
-        );
-    }
-
-    /// <summary>
-    /// Interactive submission of a scoped review: fails closed if the
-    /// destination selected for the confirmation prompt has changed.
-    /// </summary>
-    public async Task<CreatedTicket>
-        SubmitScopedTicketToConfirmedDestinationAsync(
-            ScopedBackupInventoryReviewResult result,
-            ZendeskTicketDestinationPreview confirmedDestination,
-            CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(
-            confirmedDestination
-        );
-
-        return await SubmitTicketDraftAsync(
-            CreateScopedTicketDraft(
-                result
-            ),
-            cancellationToken,
-            confirmedDestination
-        );
-    }
-
-    /// <summary>
-    /// Performs a fresh full review and creates a ticket draft.
-    ///
-    /// This keeps raw CLI usage stateless while interactive callers may use
-    /// CreateTicketDraft(report) to work from an existing reviewed snapshot.
-    /// </summary>
-    public async Task<TicketDraft>
-        CreateTicketDraftAsync(
-            CancellationToken cancellationToken = default)
-    {
-        var report =
-            await ReviewAllTenantsAsync(
-                cancellationToken
-            );
-
-        return CreateTicketDraft(
-            report
-        );
-    }
-
-    /// <summary>
-    /// Submits a ticket representing an already completed full review.
-    ///
-    /// Ticket submission requires a configured Zendesk connection and destination.
-    /// Fixture reports may be submitted through an explicit ticket-submit action.
-    /// </summary>
-    public async Task<CreatedTicket>
-        SubmitTicketAsync(
-            AggregatedBackupReport report,
-            CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(
-            report
-        );
-
-        var draft =
-            CreateTicketDraft(
-                report
-            );
-
-        return await SubmitTicketDraftAsync(
-            draft,
-            cancellationToken
-        );
-    }
-
-    /// <summary>
-    /// Performs a fresh full review and submits the resulting ticket.
-    ///
-    /// This overload exists for stateless raw CLI usage.
-    /// Interactive callers should normally submit an already reviewed report.
-    /// </summary>
-    public async Task<CreatedTicket>
-        SubmitTicketAsync(
-            CancellationToken cancellationToken = default)
-    {
-        var report =
-            await ReviewAllTenantsAsync(
-                cancellationToken
-            );
-
-        return await SubmitTicketAsync(
-            report,
-            cancellationToken
-        );
-    }
-
-    /// <summary>
     /// Resolve and validate the currently selected Zendesk destination
     /// without calling the external API or exposing credentials to the UI.
     /// </summary>
@@ -413,28 +287,6 @@ public sealed class BackupAggregatorWorkflow
         BackupAggregatorProduction.GetTicketDestinationAsync(
             _configurationResolver,
             cancellationToken);
-
-    /// <summary>
-    /// Interactive submission only: fail closed if the destination selected
-    /// for the confirmation prompt has changed before the HTTP POST.
-    /// Raw CLI submission keeps using the existing SubmitTicketAsync overload.
-    /// </summary>
-    public async Task<CreatedTicket>
-        SubmitTicketToConfirmedDestinationAsync(
-            AggregatedBackupReport report,
-            ZendeskTicketDestinationPreview confirmedDestination,
-            CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(report);
-        ArgumentNullException.ThrowIfNull(confirmedDestination);
-
-        var draft = CreateTicketDraft(report);
-
-        return await SubmitTicketDraftAsync(
-            draft,
-            cancellationToken,
-            confirmedDestination);
-    }
 
     private Task<CreatedTicket>
         SubmitTicketDraftAsync(

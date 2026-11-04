@@ -561,7 +561,8 @@ public class BackupAggregatorAutomaticScopeTests
             workflow.CreateScopedTicketDraft(run.Result);
 
         var full =
-            workflow.CreateTicketDraft(run.Result.Inventory);
+            new SupportToolkit.Modules.BackupAggregator.Ticketing.BackupReviewTicketDraftFactory()
+                .Create(run.Result.Inventory);
 
         Assert.Contains("SCOPE", scoped.Body);
         Assert.DoesNotContain("SCOPE", full.Body);
