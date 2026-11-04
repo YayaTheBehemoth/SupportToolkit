@@ -1,3 +1,4 @@
+using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.CustomerMapping;
 using SupportToolkit.Core.CustomerMapping.Matching;
@@ -361,7 +362,7 @@ public class UsageReportTests
     [Fact]
     public async Task FixtureMode_ShowsEveryKindOfRow_AndIsIncomplete()
     {
-        var workflow = new UsageReportWorkflow(Resolver(SupportToolkitMode.Fixture));
+        var workflow = UsageReportComposition.Workflow(Resolver(SupportToolkitMode.Fixture));
 
         var report = await workflow.GenerateAsync();
 
@@ -385,7 +386,7 @@ public class UsageReportTests
     public async Task FixtureMode_IsAlwaysAvailable()
     {
         var availability =
-            await new UsageReportWorkflow(Resolver(SupportToolkitMode.Fixture))
+            await UsageReportComposition.Workflow(Resolver(SupportToolkitMode.Fixture))
                 .GetAvailabilityAsync();
 
         Assert.True(availability.IsAvailable);
@@ -397,7 +398,7 @@ public class UsageReportTests
         var read = false;
 
         var workflow =
-            new UsageReportWorkflow(
+            UsageReportComposition.Workflow(
                 Resolver(SupportToolkitMode.Production, items: []),
                 productionSources: _ =>
                 {
@@ -419,7 +420,7 @@ public class UsageReportTests
     {
         // The real systems are replaced by synthetic ones; nothing is contacted.
         var workflow =
-            new UsageReportWorkflow(
+            UsageReportComposition.Workflow(
                 Resolver(SupportToolkitMode.Production, items: [FixtureUsageReportSources.BackupItem]),
                 productionSources: _ =>
                     Task.FromResult<IUsageReportSources>(new FixtureUsageReportSources()));
@@ -435,7 +436,7 @@ public class UsageReportTests
 
         // Another item configured: none of these lines are backup lines.
         var other =
-            await new UsageReportWorkflow(
+            await UsageReportComposition.Workflow(
                     Resolver(SupportToolkitMode.Production, items: ["NOT-A-FIXTURE-ITEM"]),
                     productionSources: _ =>
                         Task.FromResult<IUsageReportSources>(new FixtureUsageReportSources()))
@@ -449,7 +450,7 @@ public class UsageReportTests
     {
         var session =
             new UsageReportSession(
-                new UsageReportWorkflow(
+                UsageReportComposition.Workflow(
                     Resolver(SupportToolkitMode.Production, items: [Item]),
                     productionSources: _ => throw new InvalidOperationException("down")));
 
@@ -462,7 +463,7 @@ public class UsageReportTests
     public async Task TheSession_HoldsTheLastReport()
     {
         var session =
-            new UsageReportSession(new UsageReportWorkflow(Resolver(SupportToolkitMode.Fixture)));
+            new UsageReportSession(UsageReportComposition.Workflow(Resolver(SupportToolkitMode.Fixture)));
 
         var report = await session.GenerateAsync();
 
@@ -477,7 +478,7 @@ public class UsageReportTests
     public async Task TheConsole_HidesNamesAndAmounts_UnlessAskedFor()
     {
         var report =
-            await new UsageReportWorkflow(Resolver(SupportToolkitMode.Fixture)).GenerateAsync();
+            await UsageReportComposition.Workflow(Resolver(SupportToolkitMode.Fixture)).GenerateAsync();
 
         var hidden = new StringWriter();
         ConsoleUsageReportReporter.Write(hidden, report, showNames: false);

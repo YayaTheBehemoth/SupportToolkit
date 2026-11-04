@@ -1,4 +1,5 @@
 
+using SupportToolkit.Composition;
 using SupportToolkit.Cli.Commands;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.ErrorHandling;
@@ -54,7 +55,7 @@ ISupportToolkitModule[] modules =
 
     new UsageReportModule(
         new UsageReportSession(
-            new UsageReportWorkflow(
+            UsageReportComposition.Workflow(
                 configurationResolver,
                 ConsoleProgress.Write)))
 ];
@@ -173,7 +174,7 @@ try
                     }),
                 new UsageReportWebSession(
                     new UsageReportSession(
-                        new UsageReportWorkflow(
+                        UsageReportComposition.Workflow(
                             configurationResolver,
                             usageProgress.Write)),
                     usageProgress)));

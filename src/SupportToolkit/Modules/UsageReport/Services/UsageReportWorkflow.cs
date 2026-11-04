@@ -1,9 +1,7 @@
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.CustomerMapping;
 using SupportToolkit.Core.MonitoringScope;
-using SupportToolkit.Modules.UsageReport.Fixtures;
 using SupportToolkit.Modules.UsageReport.Models;
-using SupportToolkit.Modules.UsageReport.Production;
 
 namespace SupportToolkit.Modules.UsageReport.Services;
 
@@ -21,99 +19,44 @@ public sealed record UsageReportAvailability(
 /// Business Central bills for the backup items. It contains no console or
 /// user-interface code, and stores nothing.
 ///
-/// Fixture mode runs on synthetic data and contacts nothing. Production
-/// reads Business Central (interactive sign-in) and Acronis, read-only,
-/// through the active profile's connections. Local configuration is
-/// checked before any sign-in or request.
+/// Where the data comes from is the setup's business: the host chooses
+/// synthetic data or the real systems (read-only) for each run.
 /// </summary>
 public sealed class UsageReportWorkflow
 {
-    private readonly SupportToolkitConfigurationResolver _resolver;
+    private readonly IUsageReportSetup _setup;
     private readonly Action<string>? _progress;
-    private readonly Func<CancellationToken, Task<IUsageReportSources>> _productionSources;
     private readonly TimeProvider _timeProvider;
 
     public UsageReportWorkflow(
-        SupportToolkitConfigurationResolver resolver,
+        IUsageReportSetup setup,
         Action<string>? progress = null,
-        Func<CancellationToken, Task<IUsageReportSources>>? productionSources = null,
         TimeProvider? timeProvider = null)
     {
-        _resolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
+        _setup = setup ?? throw new ArgumentNullException(nameof(setup));
         _progress = progress;
-
-        _productionSources =
-            productionSources
-            ?? (token => ProductionUsageReportSources.CreateAsync(_resolver, token));
-
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public Task<SupportToolkitMode> GetModeAsync(
         CancellationToken cancellationToken = default) =>
-        _resolver.GetModuleModeAsync(UsageReportModule.ModuleCommand, cancellationToken);
+        _setup.GetModeAsync(cancellationToken);
 
     /// <summary>
     /// Local checks only. Any configuration problem makes the report
     /// unavailable, with the reason.
     /// </summary>
-    public async Task<UsageReportAvailability> GetAvailabilityAsync(
-        CancellationToken cancellationToken = default)
-    {
-        var mode = await GetModeAsync(cancellationToken);
-
-        if (mode == SupportToolkitMode.Fixture)
-        {
-            return new UsageReportAvailability(mode, true, null);
-        }
-
-        try
-        {
-            if ((await BackupItemsAsync(cancellationToken)).Count == 0)
-            {
-                return new UsageReportAvailability(
-                    mode,
-                    false,
-                    NoItemsReason);
-            }
-
-            await _resolver.GetAcronisConnectionAsync(cancellationToken);
-            await _resolver.GetBusinessCentralConnectionAsync(cancellationToken);
-
-            return new UsageReportAvailability(mode, true, null);
-        }
-        catch (InvalidOperationException exception)
-        {
-            return new UsageReportAvailability(mode, false, exception.Message);
-        }
-    }
+    public Task<UsageReportAvailability> GetAvailabilityAsync(
+        CancellationToken cancellationToken = default) =>
+        _setup.GetAvailabilityAsync(cancellationToken);
 
     public async Task<Models.UsageReport> GenerateAsync(
         CancellationToken cancellationToken = default)
     {
-        var mode = await GetModeAsync(cancellationToken);
+        var run = await _setup.OpenAsync(cancellationToken);
+        var items = run.BackupItems;
 
-        IReadOnlyList<string> items;
-        IUsageReportSources sources;
-
-        if (mode == SupportToolkitMode.Fixture)
-        {
-            items = FixtureUsageReportSources.BackupItems;
-            sources = new FixtureUsageReportSources();
-        }
-        else
-        {
-            items = await BackupItemsAsync(cancellationToken);
-
-            if (items.Count == 0)
-            {
-                throw new InvalidOperationException(NoItemsReason);
-            }
-
-            sources = await _productionSources(cancellationToken);
-        }
-
-        using (sources)
+        using (var sources = run.Sources)
         {
             _progress?.Invoke("Reading subscriptions...");
 
@@ -154,19 +97,9 @@ public sealed class UsageReportWorkflow
                     matching,
                     storage),
                 _timeProvider.GetUtcNow(),
-                mode);
+                run.Mode);
         }
     }
-
-    private const string NoItemsReason =
-        "No backup items are configured for the usage report " +
-        "(monitoringScope.usage-report.serviceItemNumbers in the active profile).";
-
-    private Task<IReadOnlyList<string>> BackupItemsAsync(
-        CancellationToken cancellationToken) =>
-        _resolver.GetServiceItemNumbersAsync(
-            UsageReportModule.ModuleCommand,
-            cancellationToken);
 
     /// <summary>
     /// Customers with a line for a backup item, whatever its status, so a
