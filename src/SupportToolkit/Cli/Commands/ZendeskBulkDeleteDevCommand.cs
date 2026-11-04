@@ -1,3 +1,4 @@
+using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Modules.ZendeskBulkDelete.Models;
@@ -243,7 +244,7 @@ public sealed class ZendeskBulkDeleteDevCommand
         var logger = OperationalLogger.FromEnvironment();
 
         using var session =
-            await ZendeskBulkDeleteSession.CreateAsync(
+            await ZendeskBulkDeleteComposition.OpenSessionAsync(
                 _configurationResolver,
                 logger.DebugEnabled ? logger : null,
                 options.Mode == ZendeskBulkDeleteMode.Delete,

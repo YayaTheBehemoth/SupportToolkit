@@ -9,7 +9,6 @@ using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Modules.UsageReport;
 using SupportToolkit.Modules.UsageReport.Services;
-using SupportToolkit.Modules.ZendeskBulkDelete.Production;
 using SupportToolkit.Modules.ZendeskBulkDelete.Services;
 using SupportToolkit.Ui;
 using SupportToolkit.Ui.Web;
@@ -137,42 +136,15 @@ try
                         webScopedWorkflow),
                     webProgress),
                 new BulkDeleteWebSession(
-                    async token =>
-                    {
-                        try
-                        {
-                            var connection =
-                                await configurationResolver
-                                    .GetZendeskDeletionConnectionAsync(token);
-
-                            return new BulkDeleteAvailability(
-                                true,
-                                connection.Subdomain,
-                                null);
-                        }
-                        catch (InvalidOperationException exception)
-                        {
-                            return new BulkDeleteAvailability(
-                                false,
-                                null,
-                                exception.Message);
-                        }
-                    },
-                    async token =>
-                    {
-                        // Deletion is enabled here, and only here: this is
-                        // the connection that can delete, used after the
-                        // operator's typed confirmations.
-                        var session =
-                            await ZendeskBulkDeleteSession.CreateAsync(
-                                configurationResolver,
-                                enableDeletion: true,
-                                cancellationToken: token);
-
-                        return new BulkDeleteConnection(
-                            session.CreateReviewSession(),
-                            session);
-                    }),
+                    token => ZendeskBulkDeleteComposition.GetAvailabilityAsync(
+                        configurationResolver,
+                        token),
+                    // Deletion is enabled here, and only here: this is the
+                    // connection that can delete, used after the
+                    // operator's typed confirmations.
+                    token => ZendeskBulkDeleteComposition.ConnectWithDeletionAsync(
+                        configurationResolver,
+                        token)),
                 new UsageReportWebSession(
                     new UsageReportSession(
                         UsageReportComposition.Workflow(

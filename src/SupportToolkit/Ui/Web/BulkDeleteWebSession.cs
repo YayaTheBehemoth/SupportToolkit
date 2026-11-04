@@ -4,19 +4,6 @@ using SupportToolkit.Modules.ZendeskBulkDelete.Services;
 
 namespace SupportToolkit.Ui.Web;
 
-/// <summary>Whether the active profile can be used for bulk deletion.</summary>
-public sealed record BulkDeleteAvailability(
-    bool IsAvailable,
-    string? Subdomain,
-    string? Reason);
-
-/// <summary>
-/// A bulk-delete session and whatever must be disposed with it.
-/// </summary>
-public sealed record BulkDeleteConnection(
-    BulkDeleteReviewSession Session,
-    IDisposable? Lifetime);
-
 /// <summary>
 /// Runs the Zendesk bulk delete for the web UI. Sign-in, search and
 /// deletion are tasks owned by this object, not by a browser tab, so

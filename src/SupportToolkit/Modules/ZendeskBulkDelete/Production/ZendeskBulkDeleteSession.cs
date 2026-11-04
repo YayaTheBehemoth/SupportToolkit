@@ -65,18 +65,17 @@ public sealed class ZendeskBulkDeleteSession : IDisposable
             timeProvider,
             Workflow.DescribeQuery);
 
-    public static async Task<ZendeskBulkDeleteSession> CreateAsync(
-        SupportToolkitConfigurationResolver configurationResolver,
+    /// <summary>
+    /// Builds the session for a resolved deletion connection. Nothing is
+    /// sent and nobody is signed in until the workflow asks.
+    /// </summary>
+    public static ZendeskBulkDeleteSession Create(
+        ResolvedZendeskDeletionConnection connection,
         OperationalLogger? logger = null,
         bool enableDeletion = false,
-        string? receiptDirectory = null,
-        CancellationToken cancellationToken = default)
+        string? receiptDirectory = null)
     {
-        ArgumentNullException.ThrowIfNull(configurationResolver);
-
-        var connection =
-            await configurationResolver
-                .GetZendeskDeletionConnectionAsync(cancellationToken);
+        ArgumentNullException.ThrowIfNull(connection);
 
         var options =
             ZendeskDeletionOptions.Create(
