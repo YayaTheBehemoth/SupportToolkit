@@ -38,10 +38,6 @@ var usageProbeCommand =
     new AcronisUsageDevCommand(
         configurationResolver);
 
-var usageCompareCommand =
-    new UsageCompareDevCommand(
-        configurationResolver);
-
 var businessCentralDiagnosticsCommand =
     new BusinessCentralSubscriptionDevCommand(
         configurationResolver);
@@ -299,35 +295,6 @@ try
         return await usageProbeCommand.RunAsync(
             Console.Out,
             usageOptions!);
-    }
-
-    /*
-     * Host-level developer utility: read-only comparison of Business
-     * Central backup quantities with Acronis usage. --production
-     * explicitly authorizes the read-only reads.
-     */
-    if (args.Length >= 2
-        && string.Equals(
-            args[0],
-            "dev",
-            StringComparison.OrdinalIgnoreCase)
-        && string.Equals(
-            args[1],
-            "usage-compare",
-            StringComparison.OrdinalIgnoreCase))
-    {
-        if (!UsageCompareDevCommand.TryParseArguments(
-                args.Skip(2).ToArray(),
-                out var compareOptions,
-                out var compareError))
-        {
-            Console.Error.WriteLine(compareError);
-            return 1;
-        }
-
-        return await usageCompareCommand.RunAsync(
-            Console.Out,
-            compareOptions!);
     }
 
     /*
@@ -612,8 +579,6 @@ static void PrintUsage(
         "  dev acronis-tenants --production [--names]");
     Console.WriteLine(
         "  dev acronis-usage --production [--metric <name>]... [--tenant <text>] [--names [--out <path>]]");
-    Console.WriteLine(
-        "  dev usage-compare --production [--metric <name>] [--names]");
     Console.WriteLine(
         "  dev bc-subscriptions --production");
     Console.WriteLine(
