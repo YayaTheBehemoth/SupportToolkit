@@ -133,6 +133,35 @@ public class LayeringTests
             string.Join("\n  ", offenders));
     }
 
+    /// <summary>
+    /// The interfaces work with modules' own types (search criteria,
+    /// sign-in expired, and so on), never a provider's.
+    /// </summary>
+    [Fact]
+    public void Ui_DoesNotReferenceProviders()
+    {
+        var root = SourceRoot();
+
+        var files =
+            Directory.EnumerateFiles(Path.Combine(root, "Ui"), "*.*", SearchOption.AllDirectories)
+                .Where(path => path.EndsWith(".cs", StringComparison.Ordinal)
+                               || path.EndsWith(".razor", StringComparison.Ordinal))
+                .ToArray();
+
+        Assert.NotEmpty(files);
+
+        var offenders =
+            files
+                .Where(path => ProvidersReference.IsMatch(StripComments(File.ReadAllText(path))))
+                .Select(path => Path.GetRelativePath(root, path).Replace('\\', '/'))
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            "The UI uses module types, not provider types:\n  " +
+            string.Join("\n  ", offenders));
+    }
+
     private static readonly Regex AboveDomainReference =
         new(
             @"\bSupportToolkit\.(Providers|Modules|Composition|Cli|Ui)\b",
@@ -189,12 +218,14 @@ public class LayeringTests
     private static readonly (string Module, string[] AllowedFolders)[] ProviderAgnosticModules =
     [
         ("Modules/UsageReport/", ["/Production/"]),
-        ("Modules/BackupAggregator/", ["/Production/", "/Fixtures/"])
+        ("Modules/BackupAggregator/", ["/Production/", "/Fixtures/"]),
+        ("Modules/ZendeskBulkDelete/", ["/Production/"])
     ];
 
     [Theory]
     [InlineData("Modules/UsageReport/")]
     [InlineData("Modules/BackupAggregator/")]
+    [InlineData("Modules/ZendeskBulkDelete/")]
     public void ProviderAgnosticModules_ReferenceProviders_OnlyInTheirProductionAdapter(
         string module)
     {
@@ -408,10 +439,15 @@ public class LayeringTests
     [Fact]
     public void AgnosticWorkflows_DoNotNameAProvider()
     {
+        // Not the Zendesk bulk delete module: its own name (and so its
+        // namespace) carries the word. Its Services/ still may not
+        // reference a provider, which the rule above enforces.
+        string[] modules = ["Modules/BackupAggregator/", "Modules/UsageReport/"];
+
         var offenders =
             SourceFiles(["Modules"])
-                .Where(file => ProviderAgnosticModules.Any(
-                    entry => file.RelativePath.StartsWith(entry.Module + "Services/", StringComparison.Ordinal)))
+                .Where(file => modules.Any(
+                    module => file.RelativePath.StartsWith(module + "Services/", StringComparison.Ordinal)))
                 .Where(file => file.Code.Contains("Acronis", StringComparison.Ordinal)
                                || file.Code.Contains("Zendesk", StringComparison.Ordinal)
                                || file.Code.Contains("BusinessCentral", StringComparison.Ordinal))

@@ -1,3 +1,4 @@
+using SupportToolkit.Modules.ZendeskBulkDelete.Production;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -19,10 +20,10 @@ internal static class DeletionTestSupport
     public static readonly DateTimeOffset Now =
         new(2026, 11, 3, 12, 0, 0, TimeSpan.Zero);
 
-    public static readonly ZendeskOperator Operator =
+    public static readonly DeletionOperator Operator =
         new(7, "Example Operator", "operator@example.com", "agent");
 
-    public static ZendeskTicketSummary Ticket(
+    public static TicketSummary Ticket(
         long id,
         string status = "closed",
         TimeSpan? closedAgo = null) =>
@@ -36,13 +37,13 @@ internal static class DeletionTestSupport
             Now - (closedAgo ?? TimeSpan.FromDays(30)));
 
     public static DeletionPreviewResult Preview(
-        IEnumerable<ZendeskTicketSummary> tickets,
+        IEnumerable<TicketSummary> tickets,
         bool complete = true)
     {
         var list = tickets.ToArray();
 
         var search =
-            new ZendeskSearchResult(
+            new TicketSearchResult(
                 list,
                 list.Length,
                 0,
@@ -60,11 +61,11 @@ internal static class DeletionTestSupport
                 Now));
     }
 
-    public static IEnumerable<ZendeskTicketSummary> Closed(int count) =>
+    public static IEnumerable<TicketSummary> Closed(int count) =>
         Enumerable.Range(1, count).Select(i => Ticket(i));
 
     public static DeletionPlan Plan(
-        IEnumerable<ZendeskTicketSummary> tickets,
+        IEnumerable<TicketSummary> tickets,
         params long[] include)
     {
         var preview = Preview(tickets);
@@ -95,7 +96,7 @@ internal static class DeletionTestSupport
         string receiptDirectory,
         TimeSpan? maxJobWait = null) =>
         new(
-            Provider(handler),
+            new ZendeskTicketDeleter(Provider(handler)),
             new DeletionReceiptStore(receiptDirectory),
             new FixedClock(),
             (_, _) => Task.CompletedTask,

@@ -1,8 +1,6 @@
 using SupportToolkit.Core.ErrorHandling;
 using SupportToolkit.Modules.ZendeskBulkDelete.Models;
 using SupportToolkit.Modules.ZendeskBulkDelete.Services;
-using SupportToolkit.Providers.Zendesk.Deletion.Auth;
-using SupportToolkit.Providers.Zendesk.Deletion.Search;
 
 namespace SupportToolkit.Ui.Web;
 
@@ -101,7 +99,7 @@ public sealed class BulkDeleteWebSession : IDisposable
 
     public string? SearchProblem { get; private set; }
 
-    public bool StartSearch(ZendeskSearchCriteria criteria) =>
+    public bool StartSearch(TicketSearchCriteria criteria) =>
         Start(
             "Searching Zendesk...",
             async token =>
@@ -300,7 +298,7 @@ public sealed class BulkDeleteWebSession : IDisposable
                     {
                         Error = Describe(exception);
                         NeedsSignIn =
-                            exception is ZendeskAuthenticationException;
+                            exception is SignInRequiredException;
                     }
                     finally
                     {
@@ -341,7 +339,7 @@ public sealed class BulkDeleteWebSession : IDisposable
     }
 
     private static string Describe(Exception exception) =>
-        exception is ZendeskAuthenticationException
+        exception is SignInRequiredException
             ? "The Zendesk sign-in did not complete or has expired. " +
               ConsoleErrorFormatter.Format(exception)
             : ConsoleErrorFormatter.Format(exception);

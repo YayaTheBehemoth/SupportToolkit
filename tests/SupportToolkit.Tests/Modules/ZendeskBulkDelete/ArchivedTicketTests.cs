@@ -55,7 +55,7 @@ public class ArchivedTicketTests
     public void TheTicketText_IsCarriedIntoThePreview()
     {
         var search =
-            new ZendeskSearchResult(
+            new TicketSearchResult(
                 [Ticket(1) with { Description = "Example ticket text" }],
                 1, 0, true, null);
 

@@ -1,4 +1,3 @@
-using SupportToolkit.Providers.Zendesk.Deletion.Search;
 
 namespace SupportToolkit.Modules.ZendeskBulkDelete.Models;
 
@@ -62,6 +61,6 @@ public sealed record DeletionPreview(
 /// The signed-in operator and the preview of their search.
 /// </summary>
 public sealed record DeletionPreviewResult(
-    ZendeskOperator Operator,
+    DeletionOperator Operator,
     string Query,
     DeletionPreview Preview);

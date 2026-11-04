@@ -9,6 +9,7 @@ using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Modules.UsageReport;
 using SupportToolkit.Modules.UsageReport.Services;
+using SupportToolkit.Modules.ZendeskBulkDelete.Production;
 using SupportToolkit.Modules.ZendeskBulkDelete.Services;
 using SupportToolkit.Ui;
 using SupportToolkit.Ui.Web;
@@ -169,7 +170,7 @@ try
                                 cancellationToken: token);
 
                         return new BulkDeleteConnection(
-                            BulkDeleteReviewSession.From(session),
+                            session.CreateReviewSession(),
                             session);
                     }),
                 new UsageReportWebSession(
