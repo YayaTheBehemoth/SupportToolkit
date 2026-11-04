@@ -1,10 +1,11 @@
+using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Providers.Acronis.Transport;
 using SupportToolkit.Providers.BusinessCentral.Transport;
 using SupportToolkit.Providers.Zendesk.Deletion;
 using SupportToolkit.Providers.Zendesk.Transport;
 
-namespace SupportToolkit.Core.Configuration;
+namespace SupportToolkit.Composition;
 
 /// <summary>
 /// Reports configuration status, and switches the active profile, as data.

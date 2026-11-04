@@ -1,28 +1,27 @@
 
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Core.Ticketing;
-using SupportToolkit.Providers.Zendesk.Tickets;
 using SupportToolkit.Providers.Zendesk.Transport;
 
-namespace SupportToolkit.Core.Ticketing.Services;
+namespace SupportToolkit.Providers.Zendesk.Tickets;
 
 /// <summary>
-/// Owns the runtime lifetime of the configured external ticketing provider.
+/// Owns the Zendesk ticketing transport and the ticket provider built on it.
 ///
-/// Zendesk is currently the concrete production provider, but callers depend
-/// only on the SupportToolkit ticketing capability.
+/// Callers depend only on the SupportToolkit ticketing capability
+/// (ITicketProvider).
 ///
 /// Configuration and destination routing are resolved by the caller before
 /// the session is created.
 /// </summary>
-public sealed class TicketingProductionSession
+public sealed class ZendeskTicketingSession
     : IDisposable
 {
     private readonly HttpClient _httpClient;
 
     public ITicketProvider TicketProvider { get; }
 
-    private TicketingProductionSession(
+    private ZendeskTicketingSession(
         HttpClient httpClient,
         ITicketProvider ticketProvider)
     {
@@ -33,7 +32,7 @@ public sealed class TicketingProductionSession
             ticketProvider;
     }
 
-    public static TicketingProductionSession Create(
+    public static ZendeskTicketingSession Create(
         ZendeskOptions options,
         long groupId,
         ZendeskTicketIdentity identity,
@@ -90,7 +89,7 @@ public sealed class TicketingProductionSession
                 identity
             );
 
-        return new TicketingProductionSession(
+        return new ZendeskTicketingSession(
             httpClient,
             ticketProvider
         );

@@ -1,3 +1,4 @@
+using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
 
 namespace SupportToolkit.Ui.Web;

@@ -156,7 +156,7 @@ public static class BackupAggregatorProduction
             OperationalLogger.FromEnvironment();
 
         using var session =
-            TicketingProductionSession.Create(
+            ZendeskTicketingSession.Create(
                 zendeskOptions,
                 resolvedConnection.GroupId,
                 new ZendeskTicketIdentity(

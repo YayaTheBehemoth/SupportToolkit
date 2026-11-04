@@ -110,6 +110,30 @@ public class LayeringTests
         new(@"\bSupportToolkit\.Providers\b", RegexOptions.CultureInvariant);
 
     /// <summary>
+    /// Providers build on Core (configuration records, logging, shared
+    /// types); Core never depends on a provider. Wiring that needs both
+    /// lives in Composition/ or a module's Production/ adapter.
+    /// </summary>
+    [Fact]
+    public void Core_DoesNotReferenceProviders()
+    {
+        var files = SourceFiles(["Core"]).ToArray();
+
+        Assert.NotEmpty(files);
+
+        var offenders =
+            files
+                .Where(file => ProvidersReference.IsMatch(file.Code))
+                .Select(file => file.RelativePath)
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            "Core sits below Providers:\n  " +
+            string.Join("\n  ", offenders));
+    }
+
+    /// <summary>
     /// Modules whose rules must not know which systems the data came from,
     /// with the folders that may still reference a provider: the Production
     /// adapter to the real systems, and for the Backup Aggregator its
