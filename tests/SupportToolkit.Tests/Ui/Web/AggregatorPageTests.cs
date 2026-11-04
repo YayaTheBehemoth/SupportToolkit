@@ -1,3 +1,4 @@
+using SupportToolkit.Composition;
 using System.Net;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Modules.BackupAggregator.Services;
@@ -35,8 +36,8 @@ public sealed class AggregatorHostFixture : IAsyncLifetime
                     service,
                     new AggregatorWebSession(
                         new BackupReviewSession(
-                            new BackupAggregatorWorkflow(resolver),
-                            new BackupAggregatorScopedWorkflow(resolver)),
+                            BackupAggregatorComposition.Workflow(resolver),
+                            BackupAggregatorComposition.ScopedWorkflow(resolver)),
                         progress)));
 
         Client = new HttpClient(_handler);

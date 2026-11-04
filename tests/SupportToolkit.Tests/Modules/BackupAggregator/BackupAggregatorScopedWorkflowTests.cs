@@ -1,3 +1,4 @@
+using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.MonitoringScope;
 using SupportToolkit.Core.Secrets;
@@ -20,7 +21,7 @@ public class BackupAggregatorScopedWorkflowTests
     {
         // No profile, no Business Central connection: fixture default.
         var workflow =
-            new BackupAggregatorScopedWorkflow(
+            BackupAggregatorComposition.ScopedWorkflow(
                 Resolver(new SupportToolkitConfiguration()));
 
         var result = await workflow.ReviewAsync(Today);
@@ -48,7 +49,7 @@ public class BackupAggregatorScopedWorkflowTests
         var inventory = new HealthyFixtureInventoryProvider(Today);
 
         var workflow =
-            new BackupAggregatorScopedWorkflow(
+            BackupAggregatorComposition.ScopedWorkflow(
                 Resolver(ProductionConfiguration()),
                 new FixtureMonitoringIdentitySource(),
                 _ => Task.FromResult<ISmartSubscriptionEvidenceSource>(
@@ -76,7 +77,7 @@ public class BackupAggregatorScopedWorkflowTests
         var inventory = new HealthyFixtureInventoryProvider(Today);
 
         var workflow =
-            new BackupAggregatorScopedWorkflow(
+            BackupAggregatorComposition.ScopedWorkflow(
                 Resolver(configuration),
                 new FixtureMonitoringIdentitySource(),
                 _ => Task.FromResult<ISmartSubscriptionEvidenceSource>(
@@ -107,7 +108,7 @@ public class BackupAggregatorScopedWorkflowTests
         configuration.Profiles["work"].MonitoringScope.Clear();
 
         var workflow =
-            new BackupAggregatorScopedWorkflow(
+            BackupAggregatorComposition.ScopedWorkflow(
                 Resolver(configuration),
                 new FixtureMonitoringIdentitySource());
 
@@ -129,20 +130,24 @@ public class BackupAggregatorScopedWorkflowTests
         configuration.Profiles["work"].BusinessCentralConnection =
             connection;
 
-        var workflow =
-            new BackupAggregatorScopedWorkflow(Resolver(configuration));
+        var resolver = Resolver(configuration);
 
-        Assert.Equal(expected, await workflow.IsEnabledAsync());
+        Assert.Equal(expected, await resolver.IsMonitoringScopeEnabledAsync());
+
+        // What the monitored review offers follows it.
+        var availability =
+            await BackupAggregatorComposition.ScopedWorkflow(resolver)
+                .GetAvailabilityAsync();
+
+        Assert.Equal(expected, availability.IsAvailable);
     }
 
     [Fact]
     public async Task IsEnabled_IsFalseWithoutAnyProfile()
     {
-        var workflow =
-            new BackupAggregatorScopedWorkflow(
-                Resolver(new SupportToolkitConfiguration()));
-
-        Assert.False(await workflow.IsEnabledAsync());
+        Assert.False(
+            await Resolver(new SupportToolkitConfiguration())
+                .IsMonitoringScopeEnabledAsync());
     }
 
     [Fact]
@@ -152,8 +157,8 @@ public class BackupAggregatorScopedWorkflowTests
 
         var module =
             new BackupAggregatorModule(
-                new BackupAggregatorWorkflow(resolver),
-                new BackupAggregatorScopedWorkflow(resolver));
+                BackupAggregatorComposition.Workflow(resolver),
+                BackupAggregatorComposition.ScopedWorkflow(resolver));
 
         var original = Console.Out;
 
@@ -198,8 +203,8 @@ public class BackupAggregatorScopedWorkflowTests
 
         var module =
             new BackupAggregatorModule(
-                new BackupAggregatorWorkflow(resolver),
-                new BackupAggregatorScopedWorkflow(resolver));
+                BackupAggregatorComposition.Workflow(resolver),
+                BackupAggregatorComposition.ScopedWorkflow(resolver));
 
         var original = Console.Out;
 
@@ -234,8 +239,8 @@ public class BackupAggregatorScopedWorkflowTests
 
         var module =
             new BackupAggregatorModule(
-                new BackupAggregatorWorkflow(resolver),
-                new BackupAggregatorScopedWorkflow(resolver));
+                BackupAggregatorComposition.Workflow(resolver),
+                BackupAggregatorComposition.ScopedWorkflow(resolver));
 
         var original = Console.Out;
         var originalError = Console.Error;
@@ -254,7 +259,7 @@ public class BackupAggregatorScopedWorkflowTests
             // The same error the destination lookup itself raises.
             var lookup =
                 await Assert.ThrowsAsync<InvalidOperationException>(
-                    () => new BackupAggregatorWorkflow(resolver)
+                    () => BackupAggregatorComposition.Workflow(resolver)
                         .GetTicketSubmissionTargetAsync());
 
             Assert.Equal(lookup.Message, failure.Message);
@@ -277,8 +282,8 @@ public class BackupAggregatorScopedWorkflowTests
 
         var module =
             new BackupAggregatorModule(
-                new BackupAggregatorWorkflow(resolver),
-                new BackupAggregatorScopedWorkflow(resolver));
+                BackupAggregatorComposition.Workflow(resolver),
+                BackupAggregatorComposition.ScopedWorkflow(resolver));
 
         var original = Console.Out;
 
@@ -306,7 +311,7 @@ public class BackupAggregatorScopedWorkflowTests
 
         var module =
             new BackupAggregatorModule(
-                new BackupAggregatorWorkflow(resolver));
+                BackupAggregatorComposition.Workflow(resolver));
 
         var originalError = Console.Error;
 
@@ -338,7 +343,7 @@ public class BackupAggregatorScopedWorkflowTests
 
         var module =
             new BackupAggregatorModule(
-                new BackupAggregatorWorkflow(resolver));
+                BackupAggregatorComposition.Workflow(resolver));
 
         var originalError = Console.Error;
 

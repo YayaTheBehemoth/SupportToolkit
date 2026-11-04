@@ -1,3 +1,4 @@
+using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Modules.BackupAggregator.Services;
@@ -110,7 +111,7 @@ public class BackupAggregatorWorkflowTests
                 _ => null
             );
 
-        return new BackupAggregatorWorkflow(
+        return BackupAggregatorComposition.Workflow(
             resolver
         );
     }

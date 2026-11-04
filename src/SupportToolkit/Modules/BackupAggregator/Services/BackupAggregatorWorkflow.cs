@@ -1,96 +1,58 @@
-
 using SupportToolkit.Core.Configuration;
-using SupportToolkit.Modules.BackupAggregator.Fixtures;
 using SupportToolkit.Core.Ticketing.Models;
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.Ticketing;
-using SupportToolkit.Modules.BackupAggregator.Production;
 
 namespace SupportToolkit.Modules.BackupAggregator.Services;
 
 /// <summary>
 /// Application workflow for BackupAggregator.
 ///
-/// User interfaces decide what operation the user wants.
-/// This workflow decides how that operation is executed according to the
-/// active SupportToolkit runtime configuration.
+/// User interfaces decide what operation the user wants. This workflow
+/// executes it against the sources the host chose (synthetic data or the
+/// real systems) and sends tickets to the host's ticket sink.
 ///
 /// Both raw CLI commands and interactive user interfaces should call this
 /// workflow rather than duplicating BackupAggregator orchestration.
 /// </summary>
 public sealed class BackupAggregatorWorkflow
 {
-    private readonly SupportToolkitConfigurationResolver
-        _configurationResolver;
+    private readonly IBackupAggregatorSources _sources;
 
-    private readonly Action<string>? _progress;
+    private readonly IBackupTicketSink _tickets;
 
-    private readonly ReviewRunMode _runMode;
-
-    /// <param name="progress">
-    /// Where operator-facing progress messages from a production review
-    /// go (for example while waiting for in-progress backups). Supplied
-    /// by the host; the workflow itself never writes to a console. Null
-    /// discards them.
-    /// </param>
-    /// <param name="runMode">
-    /// Chosen by the host. Manual (the default) never waits for
-    /// in-progress backups; Automatic waits as the profile says.
-    /// </param>
     public BackupAggregatorWorkflow(
-        SupportToolkitConfigurationResolver configurationResolver,
-        Action<string>? progress = null,
-        ReviewRunMode runMode = ReviewRunMode.Manual)
+        IBackupAggregatorSources sources,
+        IBackupTicketSink tickets)
     {
-        _configurationResolver =
-            configurationResolver
-            ?? throw new ArgumentNullException(
-                nameof(configurationResolver)
-            );
+        _sources =
+            sources
+            ?? throw new ArgumentNullException(nameof(sources));
 
-        _progress = progress;
-        _runMode = runMode;
+        _tickets =
+            tickets
+            ?? throw new ArgumentNullException(nameof(tickets));
     }
 
     public Task<SupportToolkitMode> GetModeAsync(
         CancellationToken cancellationToken = default)
     {
-        return _configurationResolver
-            .GetModuleModeAsync(
-                BackupAggregatorModule.ModuleCommand,
-                cancellationToken
-            );
+        return _sources.GetModeAsync(
+            cancellationToken
+        );
     }
 
-    public async Task<AggregatedBackupReport>
+    public Task<AggregatedBackupReport>
         ReviewAllTenantsAsync(
             CancellationToken cancellationToken = default)
     {
-        var mode =
-            await GetModeAsync(
-                cancellationToken
-            );
-
-        if (mode
-            == SupportToolkitMode.Fixture)
-        {
-            return new BackupAggregatorFixtureFactory()
-                .BuildReport();
-        }
-
-        using var session =
-            await CreateProductionSessionAsync(
-                cancellationToken
-            );
-
-        return await session.ReviewService
-            .ReviewAllTenantsAsync(
-                cancellationToken
-            );
+        return _sources.ReviewAllTenantsAsync(
+            cancellationToken
+        );
     }
 
-    public async Task<AggregatedBackupReport>
+    public Task<AggregatedBackupReport>
         ReviewTenantAsync(
             string tenantName,
             CancellationToken cancellationToken = default)
@@ -104,32 +66,10 @@ public sealed class BackupAggregatorWorkflow
             );
         }
 
-        var normalizedTenantName =
-            tenantName.Trim();
-
-        var mode =
-            await GetModeAsync(
-                cancellationToken
-            );
-
-        if (mode
-            == SupportToolkitMode.Fixture)
-        {
-            return ReviewFixtureTenant(
-                normalizedTenantName
-            );
-        }
-
-        using var session =
-            await CreateProductionSessionAsync(
-                cancellationToken
-            );
-
-        return await session.ReviewService
-            .ReviewTenantAsync(
-                normalizedTenantName,
-                cancellationToken
-            );
+        return _sources.ReviewTenantAsync(
+            tenantName.Trim(),
+            cancellationToken
+        );
     }
 
     /// <summary>
@@ -284,8 +224,7 @@ public sealed class BackupAggregatorWorkflow
     public Task<ZendeskTicketDestinationPreview>
         GetTicketSubmissionTargetAsync(
             CancellationToken cancellationToken = default) =>
-        BackupAggregatorProduction.GetTicketDestinationAsync(
-            _configurationResolver,
+        _tickets.GetDestinationAsync(
             cancellationToken);
 
     private Task<CreatedTicket>
@@ -293,61 +232,8 @@ public sealed class BackupAggregatorWorkflow
             TicketDraft draft,
             CancellationToken cancellationToken,
             ZendeskTicketDestinationPreview? confirmedDestination = null) =>
-        BackupAggregatorProduction.SubmitTicketDraftAsync(
-            _configurationResolver,
+        _tickets.SubmitAsync(
             draft,
             confirmedDestination,
             cancellationToken);
-
-    private Task<BackupAggregatorProductionSession>
-        CreateProductionSessionAsync(
-            CancellationToken cancellationToken) =>
-        BackupAggregatorProduction.CreateSessionAsync(
-            _configurationResolver,
-            _runMode,
-            _progress,
-            cancellationToken);
-
-    private static AggregatedBackupReport ReviewFixtureTenant(
-        string tenantName)
-    {
-        var completeReport =
-            new BackupAggregatorFixtureFactory()
-                .BuildReport();
-
-        var matches =
-            completeReport.Tenants
-                .Where(
-                    tenant =>
-                        string.Equals(
-                            tenant.TenantName,
-                            tenantName,
-                            StringComparison.OrdinalIgnoreCase
-                        )
-                )
-                .ToList();
-
-        if (matches.Count == 0)
-        {
-            throw new InvalidOperationException(
-                $"Fixture tenant '{tenantName}' was not found."
-            );
-        }
-
-        if (matches.Count > 1)
-        {
-            throw new InvalidOperationException(
-                $"More than one fixture tenant named " +
-                $"'{tenantName}' was found."
-            );
-        }
-
-        return new AggregatedBackupReport
-        {
-            Tenants =
-            [
-                matches[0]
-            ]
-        };
-    }
 }

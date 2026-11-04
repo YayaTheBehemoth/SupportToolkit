@@ -1,3 +1,4 @@
+using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Modules.BackupAggregator.Fixtures;
@@ -107,7 +108,7 @@ public class ZendeskDestinationConfirmationTests
             new TestSecretStore(),
             _ => null);
 
-        return new BackupAggregatorWorkflow(resolver);
+        return BackupAggregatorComposition.Workflow(resolver);
     }
 
     private sealed class TestConfigurationStore : ISupportToolkitConfigurationStore

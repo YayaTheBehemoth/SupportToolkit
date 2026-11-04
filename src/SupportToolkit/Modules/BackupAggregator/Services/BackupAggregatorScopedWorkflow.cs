@@ -5,9 +5,7 @@ using SupportToolkit.Core.CustomerMapping.Matching;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Core.MonitoringScope;
 using SupportToolkit.Core.Reconciliation;
-using SupportToolkit.Modules.BackupAggregator.Fixtures;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
-using SupportToolkit.Modules.BackupAggregator.Production;
 
 namespace SupportToolkit.Modules.BackupAggregator.Services;
 
@@ -25,83 +23,15 @@ namespace SupportToolkit.Modules.BackupAggregator.Services;
 /// </summary>
 public sealed class BackupAggregatorScopedWorkflow
 {
-    private readonly SupportToolkitConfigurationResolver
-        _configurationResolver;
-
-    private readonly IMonitoringIdentitySource? _identitySource;
-
-    private readonly ICustomerMappingRepository? _mappingRepository;
-
-    private readonly Func<CancellationToken,
-        Task<ISmartSubscriptionEvidenceSource>> _evidenceSourceFactory;
-
-    private readonly Func<CancellationToken,
-        Task<ICustomerNameSource>> _nameSourceFactory;
-
-    private readonly Func<CancellationToken,
-        Task<ScopedInventoryRuntime>> _inventoryRuntimeFactory;
+    private readonly IScopedReviewSources _sources;
 
     public BackupAggregatorScopedWorkflow(
-        SupportToolkitConfigurationResolver configurationResolver,
-        IMonitoringIdentitySource? identitySource = null,
-        Func<CancellationToken,
-            Task<ISmartSubscriptionEvidenceSource>>?
-            evidenceSourceFactory = null,
-        Func<CancellationToken,
-            Task<ScopedInventoryRuntime>>?
-            inventoryRuntimeFactory = null,
-        ICustomerMappingRepository? mappingRepository = null,
-        Func<CancellationToken,
-            Task<ICustomerNameSource>>?
-            nameSourceFactory = null,
-        Action<string>? progress = null,
-        ReviewRunMode runMode = ReviewRunMode.Manual)
+        IScopedReviewSources sources)
     {
-        _configurationResolver =
-            configurationResolver
+        _sources =
+            sources
             ?? throw new ArgumentNullException(
-                nameof(configurationResolver));
-
-        _mappingRepository =
-            mappingRepository;
-
-        /*
-         * An explicitly supplied identity source decides identities
-         * as before (fixtures, tests). Otherwise they are resolved
-         * automatically each run from Business Central customers and
-         * Acronis tenants, with any stored mappings taking precedence.
-         */
-        _identitySource =
-            identitySource;
-
-        var production =
-            new ScopedReviewProductionSources(
-                configurationResolver,
-                runMode,
-                progress);
-
-        _evidenceSourceFactory =
-            evidenceSourceFactory
-            ?? production.CreateEvidenceSourceAsync;
-
-        _nameSourceFactory =
-            nameSourceFactory
-            ?? production.CreateNameSourceAsync;
-
-        _inventoryRuntimeFactory =
-            inventoryRuntimeFactory
-            ?? production.CreateInventoryRuntimeAsync;
-    }
-
-    /// <summary>
-    /// Local check only: whether the active profile selects a
-    /// Business Central connection.
-    /// </summary>
-    public Task<bool> IsEnabledAsync(
-        CancellationToken cancellationToken = default)
-    {
-        return _configurationResolver
-            .IsMonitoringScopeEnabledAsync(cancellationToken);
+                nameof(sources));
     }
 
     /// <summary>
@@ -109,137 +39,39 @@ public sealed class BackupAggregatorScopedWorkflow
     /// configuration problem simply makes it unavailable, with the
     /// reason; a problem reading the mode itself is not hidden.
     /// </summary>
-    public async Task<ScopedReviewAvailability> GetAvailabilityAsync(
+    public Task<ScopedReviewAvailability> GetAvailabilityAsync(
         CancellationToken cancellationToken = default)
     {
-        var mode =
-            await _configurationResolver.GetModuleModeAsync(
-                BackupAggregatorModule.ModuleCommand,
-                cancellationToken);
-
-        if (mode == SupportToolkitMode.Fixture)
-        {
-            return new ScopedReviewAvailability(mode, true, null);
-        }
-
-        try
-        {
-            return await IsEnabledAsync(cancellationToken)
-                ? new ScopedReviewAvailability(mode, true, null)
-                : new ScopedReviewAvailability(
-                    mode,
-                    false,
-                    "The monitored review needs a Business Central " +
-                    "connection in the active profile.");
-        }
-        catch (InvalidOperationException exception)
-        {
-            return new ScopedReviewAvailability(
-                mode,
-                false,
-                exception.Message);
-        }
+        return _sources.GetAvailabilityAsync(cancellationToken);
     }
 
     /// <summary>
-    /// Scoped review according to the BackupAggregator runtime mode.
-    ///
-    /// Fixture mode uses synthetic subscriptions, tenants and
-    /// inventory and makes no external request.
-    ///
-    /// Production order is deliberate: local configuration is read
-    /// before any sign-in or API request, so a missing setting fails
-    /// with no external activity. Identities are then resolved from
-    /// the evidence and the tenants, never assumed.
+    /// Scoped review over the sources the host chose. Fixture sources
+    /// are synthetic and make no external request. Production sources
+    /// read local configuration before any sign-in or API request, so a
+    /// missing setting fails with no external activity. Identities are
+    /// then resolved from the evidence and the tenants, never assumed.
     /// </summary>
     public async Task<ScopedBackupInventoryReviewResult> ReviewAsync(
         DateOnly asOfDate,
         CancellationToken cancellationToken = default)
     {
-        var mode =
-            await _configurationResolver.GetModuleModeAsync(
-                BackupAggregatorModule.ModuleCommand,
-                cancellationToken);
-
-        if (mode == SupportToolkitMode.Fixture)
-        {
-            var inventory =
-                new HealthyFixtureInventoryProvider(asOfDate);
-
-            var fixtureMappings =
-                await CreateFixtureMappingRepositoryAsync(
-                    cancellationToken);
-
-            return await ExecuteAsync(
-                [SmartSubscriptionFixtureFactory
-                    .FixtureMonitoringItemNumber],
-                new ConfirmedMappingIdentitySource(fixtureMappings),
-                _ => Task.FromResult<ISmartSubscriptionEvidenceSource>(
-                    new FixtureSmartSubscriptionEvidenceSource()),
-                null,
-                _ => Task.FromResult(
-                    ScopedReviewFixtureInventory.CreateRuntime(
-                        inventory)),
+        var inputs =
+            await _sources.GetInputsAsync(
                 asOfDate,
-                cancellationToken,
-                mappingRepository: fixtureMappings);
-        }
-
-        var itemNumbers =
-            await _configurationResolver
-                .GetMonitoringItemNumbersAsync(
-                    BackupAggregatorModule.ModuleCommand,
-                    cancellationToken);
-
-        var excludedTenantIds =
-            await _configurationResolver
-                .GetExcludedTenantIdsAsync(
-                    BackupAggregatorModule.ModuleCommand,
-                    cancellationToken);
-
-        var serviceItemNumbers =
-            await _configurationResolver
-                .GetServiceItemNumbersAsync(
-                    BackupAggregatorModule.ModuleCommand,
-                    cancellationToken);
+                cancellationToken);
 
         return await ExecuteAsync(
-            itemNumbers,
-            _identitySource,
-            _evidenceSourceFactory,
-            _nameSourceFactory,
-            _inventoryRuntimeFactory,
+            inputs.MonitoringItemNumbers,
+            inputs.IdentitySource,
+            inputs.EvidenceSource,
+            inputs.NameSource,
+            inputs.InventoryRuntime,
             asOfDate,
             cancellationToken,
-            excludedTenantIds,
-            _mappingRepository,
-            serviceItemNumbers);
-    }
-
-    /// <summary>
-    /// Synthetic Confirmed mappings matching the fixture identities.
-    /// </summary>
-    private static async Task<ICustomerMappingRepository>
-        CreateFixtureMappingRepositoryAsync(
-            CancellationToken cancellationToken)
-    {
-        var repository =
-            new InMemoryCustomerMappingRepository();
-
-        foreach (var identity in await new FixtureMonitoringIdentitySource()
-            .GetIdentitiesAsync(cancellationToken))
-        {
-            await repository.AddAsync(
-                new CustomerMappingRecord(
-                    Guid.NewGuid(),
-                    identity.AcronisTenantId,
-                    identity.BusinessCentralCustomerNumber,
-                    CustomerMappingState.Confirmed,
-                    CustomerMatchMethod.Manual),
-                cancellationToken);
-        }
-
-        return repository;
+            inputs.ExcludedTenantIds,
+            inputs.MappingRepository,
+            inputs.ServiceItemNumbers);
     }
 
     private static async Task<ScopedBackupInventoryReviewResult>

@@ -36,13 +36,13 @@ var devCommands =
         configurationResolver);
 
 var backupAggregatorWorkflow =
-    new BackupAggregatorWorkflow(
+    BackupAggregatorComposition.Workflow(
         configurationResolver,
         ConsoleProgress.Write,
         ReviewRunMode.Manual);
 
 var backupAggregatorScopedWorkflow =
-    new BackupAggregatorScopedWorkflow(
+    BackupAggregatorComposition.ScopedWorkflow(
         configurationResolver,
         progress: ConsoleProgress.Write,
         runMode: ReviewRunMode.Manual);
@@ -112,13 +112,13 @@ try
         var usageProgress = new ProgressFeed();
 
         var webWorkflow =
-            new BackupAggregatorWorkflow(
+            BackupAggregatorComposition.Workflow(
                 configurationResolver,
                 webProgress.Write,
                 ReviewRunMode.Manual);
 
         var webScopedWorkflow =
-            new BackupAggregatorScopedWorkflow(
+            BackupAggregatorComposition.ScopedWorkflow(
                 configurationResolver,
                 progress: webProgress.Write,
                 runMode: ReviewRunMode.Manual);

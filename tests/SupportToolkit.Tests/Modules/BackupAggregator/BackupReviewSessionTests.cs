@@ -1,3 +1,4 @@
+using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.MonitoringScope;
 using SupportToolkit.Core.Secrets;
@@ -338,7 +339,7 @@ public class BackupReviewSessionTests
     {
         var session =
             new BackupReviewSession(
-                new BackupAggregatorWorkflow(
+                BackupAggregatorComposition.Workflow(
                     Resolver(new SupportToolkitConfiguration())),
                 null);
 
@@ -357,7 +358,7 @@ public class BackupReviewSessionTests
         var calls = 0;
 
         var scoped =
-            new BackupAggregatorScopedWorkflow(
+            BackupAggregatorComposition.ScopedWorkflow(
                 Resolver(ProductionConfiguration()),
                 new FixtureMonitoringIdentitySource(),
                 _ =>
@@ -387,7 +388,7 @@ public class BackupReviewSessionTests
 
         var session =
             new BackupReviewSession(
-                new BackupAggregatorWorkflow(
+                BackupAggregatorComposition.Workflow(
                     Resolver(ProductionConfiguration())),
                 scoped);
 
@@ -434,13 +435,13 @@ public class BackupReviewSessionTests
         var resolver = Resolver(configuration);
 
         return new BackupReviewSession(
-            new BackupAggregatorWorkflow(resolver),
-            new BackupAggregatorScopedWorkflow(resolver));
+            BackupAggregatorComposition.Workflow(resolver),
+            BackupAggregatorComposition.ScopedWorkflow(resolver));
     }
 
     private static BackupAggregatorWorkflow Workflow(
         bool withZendesk) =>
-        new(
+        BackupAggregatorComposition.Workflow(
             Resolver(
                 withZendesk
                     ? ZendeskConfiguration()
@@ -448,7 +449,7 @@ public class BackupReviewSessionTests
 
     private static BackupAggregatorScopedWorkflow Scoped(
         SupportToolkitConfiguration configuration) =>
-        new(Resolver(configuration));
+        BackupAggregatorComposition.ScopedWorkflow(Resolver(configuration));
 
     private static SupportToolkitConfiguration ZendeskConfiguration()
     {

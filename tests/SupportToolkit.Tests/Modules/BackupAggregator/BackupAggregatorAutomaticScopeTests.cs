@@ -1,3 +1,4 @@
+using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.CustomerMapping;
 using SupportToolkit.Core.CustomerMapping.Matching;
@@ -183,7 +184,7 @@ public class BackupAggregatorAutomaticScopeTests
         var inventory = new HealthyFixtureInventoryProvider(Today);
 
         var workflow =
-            new BackupAggregatorScopedWorkflow(
+            BackupAggregatorComposition.ScopedWorkflow(
                 Resolver(),
                 new FixtureMonitoringIdentitySource(),
                 _ => Task.FromResult<ISmartSubscriptionEvidenceSource>(
@@ -265,7 +266,7 @@ public class BackupAggregatorAutomaticScopeTests
                     nameFailure);
 
         var workflow =
-            new BackupAggregatorScopedWorkflow(
+            BackupAggregatorComposition.ScopedWorkflow(
                 Resolver(),
                 evidenceSourceFactory: _ =>
                     Task.FromResult<ISmartSubscriptionEvidenceSource>(
@@ -435,7 +436,7 @@ public class BackupAggregatorAutomaticScopeTests
         Assert.Empty(run.Result.TicketBlockers);
 
         var draft =
-            new BackupAggregatorWorkflow(Resolver(ServiceItems))
+            BackupAggregatorComposition.Workflow(Resolver(ServiceItems))
                 .CreateScopedTicketDraft(run.Result);
 
         Assert.Contains("SCOPE", draft.Body);
@@ -465,7 +466,7 @@ public class BackupAggregatorAutomaticScopeTests
         Assert.Empty(run.Result.TicketBlockers);
 
         var draft =
-            new BackupAggregatorWorkflow(Resolver(ServiceItems))
+            BackupAggregatorComposition.Workflow(Resolver(ServiceItems))
                 .CreateScopedTicketDraft(run.Result);
 
         Assert.StartsWith("[INCOMPLETE SCOPE] ", draft.Subject);
@@ -504,7 +505,7 @@ public class BackupAggregatorAutomaticScopeTests
             ServiceItems);
 
         var draft =
-            new BackupAggregatorWorkflow(Resolver(ServiceItems))
+            BackupAggregatorComposition.Workflow(Resolver(ServiceItems))
                 .CreateScopedTicketDraft(run.Result);
 
         Assert.DoesNotContain("INCOMPLETE SCOPE", draft.Subject);
@@ -535,7 +536,7 @@ public class BackupAggregatorAutomaticScopeTests
 
         var exception =
             Assert.Throws<InvalidOperationException>(
-                () => new BackupAggregatorWorkflow(Resolver(ServiceItems))
+                () => BackupAggregatorComposition.Workflow(Resolver(ServiceItems))
                     .CreateScopedTicketDraft(run.Result));
 
         Assert.Contains("not complete", exception.Message);
@@ -555,7 +556,7 @@ public class BackupAggregatorAutomaticScopeTests
             ServiceItems);
 
         var workflow =
-            new BackupAggregatorWorkflow(Resolver(ServiceItems));
+            BackupAggregatorComposition.Workflow(Resolver(ServiceItems));
 
         var scoped =
             workflow.CreateScopedTicketDraft(run.Result);
@@ -629,7 +630,7 @@ public class BackupAggregatorAutomaticScopeTests
         Assert.DoesNotContain("Contoso |", console.Split("STRAY TENANT CHECK")[1]);
 
         var draft =
-            new BackupAggregatorWorkflow(Resolver(ServiceItems))
+            BackupAggregatorComposition.Workflow(Resolver(ServiceItems))
                 .CreateScopedTicketDraft(run.Result);
 
         Assert.Contains("STRAY TENANT CHECK", draft.Body);
@@ -668,7 +669,7 @@ public class BackupAggregatorAutomaticScopeTests
             run.Result.TicketScopeTenantLines);
 
         var body =
-            new BackupAggregatorWorkflow(Resolver(ServiceItems))
+            BackupAggregatorComposition.Workflow(Resolver(ServiceItems))
                 .CreateScopedTicketDraft(run.Result)
                 .Body;
 
@@ -738,7 +739,7 @@ public class BackupAggregatorAutomaticScopeTests
         Assert.Empty(check.LeakCandidates);
 
         var body =
-            new BackupAggregatorWorkflow(Resolver(null))
+            BackupAggregatorComposition.Workflow(Resolver(null))
                 .CreateScopedTicketDraft(run.Result)
                 .Body;
 
@@ -804,7 +805,7 @@ public class BackupAggregatorAutomaticScopeTests
                 .ToArray();
 
         var workflow =
-            new BackupAggregatorScopedWorkflow(
+            BackupAggregatorComposition.ScopedWorkflow(
                 Resolver(serviceItems),
                 evidenceSourceFactory: _ =>
                     Task.FromResult<ISmartSubscriptionEvidenceSource>(

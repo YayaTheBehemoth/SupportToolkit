@@ -18,7 +18,7 @@ namespace SupportToolkit.Tests.Architecture;
 public class LayeringTests
 {
     private static readonly string[] LowerLayers =
-        ["Core", "Providers", "Modules"];
+        ["Core", "Providers", "Modules", "Composition"];
 
     /// <summary>
     /// Files below the UI that may use the console, and why. Console
@@ -228,6 +228,65 @@ public class LayeringTests
             $"'{construction}' belongs in a transport pipeline " +
             "(AcronisHttpPipeline, BusinessCentralHttpPipeline, " +
             "ZendeskTicketingHttpPipeline, ZendeskDeletionHttpPipeline):\n  " +
+            string.Join("\n  ", offenders));
+    }
+
+    /// <summary>
+    /// The host chooses fixture or production per run, in the
+    /// composition root. Workflows and production adapters receive their
+    /// sources and never read the mode themselves.
+    /// </summary>
+    [Fact]
+    public void ModeIsRead_OnlyByTheCompositionRootAndConfiguration()
+    {
+        string[] allowed =
+        [
+            "Composition/",
+            "Core/Configuration/",
+            "Cli/Commands/ConfigureCommand"
+        ];
+
+        var files = AllSourceFiles().ToArray();
+
+        Assert.Contains(
+            files,
+            file => file.RelativePath.StartsWith("Composition/", StringComparison.Ordinal)
+                    && file.Code.Contains("GetModuleModeAsync(", StringComparison.Ordinal));
+
+        var offenders =
+            files
+                .Where(file => !allowed.Any(
+                    prefix => file.RelativePath.StartsWith(prefix, StringComparison.Ordinal)))
+                .Where(file => file.Code.Contains(
+                    "GetModuleModeAsync(",
+                    StringComparison.Ordinal))
+                .Select(file => file.RelativePath)
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            "Only the composition root decides the mode. Take sources " +
+            "through the constructor instead:\n  " +
+            string.Join("\n  ", offenders));
+    }
+
+    [Fact]
+    public void WorkflowsAndProductionAdapters_NeverBranchOnFixtureMode()
+    {
+        var offenders =
+            SourceFiles(["Modules"])
+                .Where(file => file.RelativePath.Contains("/Services/", StringComparison.Ordinal)
+                               || file.RelativePath.Contains("/Production/", StringComparison.Ordinal))
+                .Where(file => file.Code.Contains(
+                    "SupportToolkitMode.Fixture",
+                    StringComparison.Ordinal))
+                .Select(file => file.RelativePath)
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            "Fixture or production is chosen in Composition/, not in a " +
+            "workflow or adapter:\n  " +
             string.Join("\n  ", offenders));
     }
 
