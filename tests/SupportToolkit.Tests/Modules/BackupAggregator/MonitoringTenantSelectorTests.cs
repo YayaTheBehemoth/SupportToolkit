@@ -1,3 +1,4 @@
+using SupportToolkit.Providers.Acronis.Tenants;
 using SupportToolkit.Core.Tenants;
 using SupportToolkit.Core.MonitoringScope;
 
@@ -252,20 +253,20 @@ public class MonitoringTenantSelectorTests
     public void PartnerAndUnitTenants_AreNeverMatchedToACustomer()
     {
         var partner =
-            new TenantRecord
+            new TenantDto
             {
                 Id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                 Name = "Synthetic Partner",
                 Kind = "partner"
-            };
+            }.ToTenantRecord();
 
         var unit =
-            new TenantRecord
+            new TenantDto
             {
                 Id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
                 Name = "Synthetic Unit",
                 Kind = "unit"
-            };
+            }.ToTenantRecord();
 
         var result =
             _selector.Select(
@@ -299,11 +300,11 @@ public class MonitoringTenantSelectorTests
         string id,
         string name = "Synthetic Customer")
     {
-        return new TenantRecord
+        return new TenantDto
         {
             Id = id,
             Name = name,
             Kind = "customer"
-        };
+        }.ToTenantRecord();
     }
 }

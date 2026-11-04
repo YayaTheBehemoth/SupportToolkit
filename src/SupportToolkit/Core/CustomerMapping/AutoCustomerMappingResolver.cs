@@ -43,13 +43,13 @@ public sealed record AutoMappingResult(
             .Select(
                 mapping => new AutoMappingPair(
                     mapping.BcCustomerNo.Trim(),
-                    mapping.AcronisTenantId.Trim()))
+                    mapping.TenantId.Trim()))
             .ToArray();
 }
 
 public sealed record AutoMappingPair(
     string BcCustomerNumber,
-    string AcronisTenantId);
+    string TenantId);
 
 /// <summary>
 /// Resolves Acronis tenants to Business Central customers on every
@@ -105,7 +105,7 @@ public sealed class AutoCustomerMappingResolver
         // resolve what a stronger one could not.
         var flaggedTenants =
             suggestions.Exceptions
-                .SelectMany(exception => exception.AcronisTenantIds)
+                .SelectMany(exception => exception.TenantIds)
                 .Select(id => id.Trim())
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -143,7 +143,7 @@ public sealed class AutoCustomerMappingResolver
         foreach (var suggestion in suggestions.Added
             .Concat(loose.Added)
             .OrderBy(
-                mapping => mapping.AcronisTenantId,
+                mapping => mapping.TenantId,
                 StringComparer.OrdinalIgnoreCase))
         {
             if ((suggestion.MatchScore ?? 0) < _policy.MinimumScore)
@@ -177,7 +177,7 @@ public sealed class AutoCustomerMappingResolver
                         mapping.State == CustomerMappingState.Confirmed
                         && mapping.ConfirmedBy == AutomaticActor)
                 .OrderBy(
-                    mapping => mapping.AcronisTenantId,
+                    mapping => mapping.TenantId,
                     StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
@@ -189,7 +189,7 @@ public sealed class AutoCustomerMappingResolver
                     mapping => mapping.State
                         is CustomerMappingState.Confirmed
                         or CustomerMappingState.Suggested)
-                .Select(mapping => mapping.AcronisTenantId.Trim())
+                .Select(mapping => mapping.TenantId.Trim())
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var linkedCustomers =

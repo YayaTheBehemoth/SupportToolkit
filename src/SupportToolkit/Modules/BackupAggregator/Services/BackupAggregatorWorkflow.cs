@@ -170,7 +170,7 @@ public sealed class BackupAggregatorWorkflow
             );
         }
 
-        ZendeskTicketDestinationPreview destination;
+        TicketDestinationPreview destination;
 
         try
         {
@@ -221,7 +221,7 @@ public sealed class BackupAggregatorWorkflow
     /// Resolve and validate the currently selected Zendesk destination
     /// without calling the external API or exposing credentials to the UI.
     /// </summary>
-    public Task<ZendeskTicketDestinationPreview>
+    public Task<TicketDestinationPreview>
         GetTicketSubmissionTargetAsync(
             CancellationToken cancellationToken = default) =>
         _tickets.GetDestinationAsync(
@@ -231,7 +231,7 @@ public sealed class BackupAggregatorWorkflow
         SubmitTicketDraftAsync(
             TicketDraft draft,
             CancellationToken cancellationToken,
-            ZendeskTicketDestinationPreview? confirmedDestination = null) =>
+            TicketDestinationPreview? confirmedDestination = null) =>
         _tickets.SubmitAsync(
             draft,
             confirmedDestination,

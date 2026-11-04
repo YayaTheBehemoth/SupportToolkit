@@ -43,7 +43,7 @@ public sealed class CustomerMappingConfirmationService
         );
 
         await EnsureNoConfirmedConflictAsync(
-            mapping.AcronisTenantId,
+            mapping.TenantId,
             mapping.BcCustomerNo,
             cancellationToken
         );
@@ -162,7 +162,7 @@ public sealed class CustomerMappingConfirmationService
             mapping =>
                 mapping.State == CustomerMappingState.Suggested
                 && CustomerMappingRules.SameId(
-                    mapping.AcronisTenantId,
+                    mapping.TenantId,
                     acronisTenantId)
                 && CustomerMappingRules.SameId(
                     mapping.BcCustomerNo,
@@ -226,7 +226,7 @@ public sealed class CustomerMappingConfirmationService
                 mapping =>
                     mapping.State == CustomerMappingState.Confirmed
                     && (CustomerMappingRules.SameId(
-                            mapping.AcronisTenantId,
+                            mapping.TenantId,
                             acronisTenantId)
                         || CustomerMappingRules.SameId(
                             mapping.BcCustomerNo,

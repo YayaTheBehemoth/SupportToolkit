@@ -146,7 +146,7 @@ public class CustomerMappingConfirmationServiceTests
                 "reviewer"
             );
 
-        Assert.Equal("t1", mapping.AcronisTenantId);
+        Assert.Equal("t1", mapping.TenantId);
         Assert.Equal(CustomerMappingState.Confirmed, mapping.State);
         Assert.Equal(CustomerMatchMethod.Manual, mapping.MatchMethod);
         Assert.Null(mapping.MatchScore);
@@ -191,7 +191,7 @@ public class CustomerMappingConfirmationServiceTests
             );
 
         Assert.Equal("BC-1", identity.BusinessCentralCustomerNumber);
-        Assert.Equal("t1", identity.AcronisTenantId);
+        Assert.Equal("t1", identity.TenantId);
     }
 
     [Fact]

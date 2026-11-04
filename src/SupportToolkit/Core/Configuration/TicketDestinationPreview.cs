@@ -2,14 +2,15 @@ namespace SupportToolkit.Core.Configuration;
 
 /// <summary>
 /// Non-secret destination identity shown before an interactive ticket write.
-/// DestinationName is a SupportToolkit alias, not a Zendesk group name.
+/// DestinationName is a SupportToolkit alias, not the ticketing system's
+/// own group name.
 /// </summary>
-public sealed record ZendeskTicketDestinationPreview(
+public sealed record TicketDestinationPreview(
     string InstanceHost,
     string DestinationName,
     long GroupId)
 {
-    public bool IsSameAs(ZendeskTicketDestinationPreview other)
+    public bool IsSameAs(TicketDestinationPreview other)
     {
         ArgumentNullException.ThrowIfNull(other);
 

@@ -314,6 +314,68 @@ public class LayeringTests
             string.Join("\n  ", offenders));
     }
 
+    private static readonly Regex ProviderConvention =
+        new(
+            @"""(customer|partner)""|\bGuid\.(Try)?Parse\(",
+            RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// A provider's own conventions (its tenant kind names, its identifier
+    /// format) are applied once, in the provider's mapping to TenantRecord.
+    /// Shared and provider-agnostic code reads TenantRecord.Role and
+    /// CanonicalId instead.
+    /// </summary>
+    [Fact]
+    public void ProviderConventions_StayInTheProviderMapping()
+    {
+        var files =
+            SourceFiles(["Core", "Modules"])
+                .Where(file => file.RelativePath.StartsWith("Core/", StringComparison.Ordinal)
+                               || ProviderAgnosticModules.Any(
+                                   entry => file.RelativePath.StartsWith(entry.Module, StringComparison.Ordinal)
+                                            && !entry.AllowedFolders.Any(
+                                                folder => file.RelativePath.Contains(folder, StringComparison.Ordinal))))
+                .ToArray();
+
+        Assert.NotEmpty(files);
+
+        var offenders =
+            files
+                .Where(file => ProviderConvention.IsMatch(file.Code))
+                .Select(file => file.RelativePath)
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            "These files apply a provider's own convention. Classify in " +
+            "the provider's mapping and read TenantRecord.Role / " +
+            "CanonicalId instead:\n  " +
+            string.Join("\n  ", offenders));
+    }
+
+    /// <summary>
+    /// The workflows of provider-agnostic modules do not name a provider,
+    /// in code or in text: a source states its system's name itself.
+    /// </summary>
+    [Fact]
+    public void AgnosticWorkflows_DoNotNameAProvider()
+    {
+        var offenders =
+            SourceFiles(["Modules"])
+                .Where(file => ProviderAgnosticModules.Any(
+                    entry => file.RelativePath.StartsWith(entry.Module + "Services/", StringComparison.Ordinal)))
+                .Where(file => file.Code.Contains("Acronis", StringComparison.Ordinal)
+                               || file.Code.Contains("Zendesk", StringComparison.Ordinal)
+                               || file.Code.Contains("BusinessCentral", StringComparison.Ordinal))
+                .Select(file => file.RelativePath)
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            "An agnostic workflow names a provider:\n  " +
+            string.Join("\n  ", offenders));
+    }
+
     [Fact]
     public void RazorComponents_LiveOnlyInTheWebUi()
     {

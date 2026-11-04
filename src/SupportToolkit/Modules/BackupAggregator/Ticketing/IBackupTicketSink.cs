@@ -14,7 +14,7 @@ public interface IBackupTicketSink
     /// The configured destination, resolved and validated locally without
     /// calling the ticketing system or exposing credentials.
     /// </summary>
-    Task<ZendeskTicketDestinationPreview> GetDestinationAsync(
+    Task<TicketDestinationPreview> GetDestinationAsync(
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -23,6 +23,6 @@ public interface IBackupTicketSink
     /// </summary>
     Task<CreatedTicket> SubmitAsync(
         TicketDraft draft,
-        ZendeskTicketDestinationPreview? confirmedDestination,
+        TicketDestinationPreview? confirmedDestination,
         CancellationToken cancellationToken);
 }

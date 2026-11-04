@@ -102,7 +102,7 @@ public sealed class ProductionUsageReportSources : IUsageReportSources
         var tenants = await _acronis.Provider.GetTenantsAsync(cancellationToken);
 
         // Customer tenants only; the operator's own and deleted ones out.
-        var parties = AcronisCustomerParties.ForResolution(tenants.ToTenantRecords());
+        var parties = TenantCustomerParties.ForResolution(tenants.ToTenantRecords());
 
         return new UsageTenants(parties.Parties, parties.Notice);
     }

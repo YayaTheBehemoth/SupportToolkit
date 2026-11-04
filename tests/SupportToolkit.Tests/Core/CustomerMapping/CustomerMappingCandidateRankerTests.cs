@@ -113,7 +113,7 @@ public class CustomerMappingCandidateRankerTests
         // t2 also competes for it, so nothing is suggested for t2 and
         // the exact pair is still suggested.
         var added = Assert.Single(result.Added);
-        Assert.Equal("t1", added.AcronisTenantId);
+        Assert.Equal("t1", added.TenantId);
     }
 
     [Fact]

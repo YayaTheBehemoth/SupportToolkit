@@ -1,6 +1,8 @@
 
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Core.Tenants;
+using SupportToolkit.Providers.Acronis.Tenants;
+using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 
 namespace SupportToolkit.Modules.BackupAggregator.Fixtures;
 
@@ -83,12 +85,13 @@ public static class MonitoringTenantSelectionFixtureFactory
         string id,
         string name)
     {
-        return new TenantRecord
+        // Through the Acronis mapping, as production tenants are.
+        return new TenantDto
         {
             Id = id,
             Name = name,
             Kind = "customer",
             Enabled = true
-        };
+        }.ToTenantRecord();
     }
 }

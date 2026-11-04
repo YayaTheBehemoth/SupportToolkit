@@ -157,9 +157,9 @@ public sealed class BackupInventoryReviewService
         if (tenants.Count == 0)
         {
             throw new InvalidOperationException(
-                "Acronis tenant discovery returned zero customer tenants. " +
+                $"{_source.SystemName} tenant discovery returned zero customer tenants. " +
                 "The all-tenant backup review cannot be considered complete. " +
-                "Verify the configured Acronis connection and tenant scope.");
+                $"Verify the configured {_source.SystemName} connection and tenant scope.");
         }
 
         return await ReviewTenantsAsync(
@@ -510,29 +510,24 @@ public sealed class BackupInventoryReviewService
 
         foreach (var tenant in candidates)
         {
-            if (!string.Equals(
-                tenant.Kind,
-                "customer",
-                StringComparison.OrdinalIgnoreCase))
+            if (tenant.Role != TenantRole.Customer)
             {
                 throw new ArgumentException(
-                    "Scoped inventory candidates must be Acronis customer tenants.",
+                    "Scoped inventory candidates must be customer tenants.",
                     nameof(candidates)
                 );
             }
 
-            if (!Guid.TryParse(
-                tenant.Id,
-                out var parsedId))
+            if (tenant.CanonicalId is null)
             {
                 throw new ArgumentException(
-                    "Scoped inventory candidate has no valid Acronis tenant UUID.",
+                    "Scoped inventory candidate has no valid tenant ID.",
                     nameof(candidates)
                 );
             }
 
             if (!ids.Add(
-                parsedId.ToString("D")))
+                tenant.CanonicalId))
             {
                 throw new ArgumentException(
                     "Scoped inventory candidates contain duplicate tenant UUIDs.",
@@ -645,21 +640,21 @@ public sealed class BackupInventoryReviewService
         return typeName;
     }
 
-    private static string GetSafeFailureReason(
+    private string GetSafeFailureReason(
         Exception exception)
     {
         if (exception is HttpRequestException httpException
             && httpException.StatusCode is HttpStatusCode statusCode)
         {
             return
-                $"Acronis returned HTTP " +
+                $"{_source.SystemName} returned HTTP " +
                 $"{(int)statusCode} ({statusCode}).";
         }
 
         if (exception is TaskCanceledException)
         {
             return
-                "The Acronis request timed out.";
+                $"The {_source.SystemName} request timed out.";
         }
 
         return

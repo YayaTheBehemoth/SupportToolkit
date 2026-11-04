@@ -126,7 +126,7 @@ public sealed class FixtureScopedReviewSources : IScopedReviewSources
             await repository.AddAsync(
                 new CustomerMappingRecord(
                     Guid.NewGuid(),
-                    identity.AcronisTenantId,
+                    identity.TenantId,
                     identity.BusinessCentralCustomerNumber,
                     CustomerMappingState.Confirmed,
                     CustomerMatchMethod.Manual),

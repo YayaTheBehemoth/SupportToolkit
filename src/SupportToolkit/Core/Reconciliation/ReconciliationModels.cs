@@ -5,7 +5,7 @@ namespace SupportToolkit.Core.Reconciliation;
 ///
 /// Enabled null means the source did not report it.
 /// </summary>
-public sealed record AcronisTenantObservation(
+public sealed record TenantObservation(
     string TenantId,
     bool? Enabled,
     bool Deleted
@@ -82,7 +82,7 @@ public sealed record ReconciliationDiscrepancy(
 ///
 /// SubjectId is the mapping id, tenant id, customer number or
 /// subscription number, depending on Subject. For a mapping subject,
-/// AcronisTenantId and BcCustomerNo identify both sides.
+/// TenantId and BcCustomerNo identify both sides.
 /// </summary>
 public sealed record ReconciliationResult(
     ReconciliationBucket Bucket,
@@ -92,7 +92,7 @@ public sealed record ReconciliationResult(
     IReadOnlyList<ReconciliationDiscrepancy> Discrepancies,
     IReadOnlyList<string> Reasons)
 {
-    public string? AcronisTenantId { get; init; }
+    public string? TenantId { get; init; }
 
     public string? BcCustomerNo { get; init; }
 }

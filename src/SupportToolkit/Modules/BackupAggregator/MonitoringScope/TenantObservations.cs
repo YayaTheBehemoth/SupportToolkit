@@ -8,9 +8,9 @@ namespace SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 /// reconciliation evidence. Non-customer tenants are excluded, as in
 /// tenant selection.
 /// </summary>
-public static class AcronisTenantObservations
+public static class TenantObservations
 {
-    public static IReadOnlyList<AcronisTenantObservation> FromCustomerTenants(
+    public static IReadOnlyList<TenantObservation> FromCustomerTenants(
         IEnumerable<TenantRecord> tenants)
     {
         ArgumentNullException.ThrowIfNull(tenants);
@@ -18,15 +18,11 @@ public static class AcronisTenantObservations
         return tenants
             .Where(
                 tenant =>
-                    string.Equals(
-                        tenant.Kind,
-                        "customer",
-                        StringComparison.OrdinalIgnoreCase
-                    )
+                    tenant.Role == TenantRole.Customer
             )
             .Select(
                 tenant =>
-                    new AcronisTenantObservation(
+                    new TenantObservation(
                         tenant.Id,
                         tenant.Enabled,
                         tenant.DeletedAt.HasValue

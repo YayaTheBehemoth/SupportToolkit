@@ -190,7 +190,7 @@ public sealed class BackupAggregatorScopedWorkflow
                                 cancellationToken),
                             scope.Evidence.Headers,
                             scope.Evidence.Lines,
-                            AcronisTenantObservations.FromCustomerTenants(
+                            TenantObservations.FromCustomerTenants(
                                 tenants),
                             asOfDate,
                             SubscriptionItemNumbers.ToSet(itemNumbers),
@@ -278,7 +278,7 @@ public sealed class BackupAggregatorScopedWorkflow
             ?? new HashSet<string>();
 
         var acronisParties =
-            AcronisCustomerParties.ForResolution(tenants)
+            TenantCustomerParties.ForResolution(tenants)
                 .Parties
                 .Where(
                     party => !excluded.Contains(party.Id.Trim()))

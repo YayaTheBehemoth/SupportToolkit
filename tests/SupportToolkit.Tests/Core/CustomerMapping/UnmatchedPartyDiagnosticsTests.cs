@@ -103,7 +103,7 @@ public class UnmatchedPartyDiagnosticsTests
     public void WeakNameCandidateException_IsNotReportedAsAmbiguity()
     {
         var acronis =
-            new AcronisPartyBuild(
+            new TenantPartyBuild(
                 [new("t1", "Alpine Consulting Services Nord")],
                 false,
                 null);

@@ -67,7 +67,7 @@ public static class BackupAggregatorProduction
     /// The configured Zendesk destination, resolved and validated without
     /// calling Zendesk or exposing credentials.
     /// </summary>
-    public static async Task<ZendeskTicketDestinationPreview> GetTicketDestinationAsync(
+    public static async Task<TicketDestinationPreview> GetTicketDestinationAsync(
         SupportToolkitConfigurationResolver configurationResolver,
         CancellationToken cancellationToken)
     {
@@ -80,7 +80,7 @@ public static class BackupAggregatorProduction
             connection.ClientId,
             connection.ClientSecret);
 
-        return new ZendeskTicketDestinationPreview(
+        return new TicketDestinationPreview(
             options.BaseUri.Host,
             connection.DestinationName,
             connection.GroupId);
@@ -94,7 +94,7 @@ public static class BackupAggregatorProduction
     public static async Task<CreatedTicket> SubmitTicketDraftAsync(
         SupportToolkitConfigurationResolver configurationResolver,
         TicketDraft draft,
-        ZendeskTicketDestinationPreview? confirmedDestination,
+        TicketDestinationPreview? confirmedDestination,
         CancellationToken cancellationToken)
     {
         /*
@@ -116,7 +116,7 @@ public static class BackupAggregatorProduction
 
         if (confirmedDestination is not null)
         {
-            var currentDestination = new ZendeskTicketDestinationPreview(
+            var currentDestination = new TicketDestinationPreview(
                 zendeskOptions.BaseUri.Host,
                 resolvedConnection.DestinationName,
                 resolvedConnection.GroupId);

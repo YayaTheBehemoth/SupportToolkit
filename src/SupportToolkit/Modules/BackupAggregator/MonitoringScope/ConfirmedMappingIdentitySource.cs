@@ -39,7 +39,7 @@ public sealed class ConfirmedMappingIdentitySource
         var duplicated =
             confirmed
                 .GroupBy(
-                    mapping => mapping.AcronisTenantId.Trim(),
+                    mapping => mapping.TenantId.Trim(),
                     StringComparer.OrdinalIgnoreCase)
                 .Any(group => group.Count() > 1)
             || confirmed
@@ -62,7 +62,7 @@ public sealed class ConfirmedMappingIdentitySource
                 mapping =>
                     new ResolvedMonitoringCustomerIdentity(
                         mapping.BcCustomerNo.Trim(),
-                        mapping.AcronisTenantId.Trim()
+                        mapping.TenantId.Trim()
                     )
             )
             .ToArray();

@@ -140,7 +140,7 @@ public static class UsageReportBuilder
                 .ToDictionary(
                     group => group.Key,
                     group => group
-                        .Select(link => link.AcronisTenantId.Trim())
+                        .Select(link => link.TenantId.Trim())
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .Order(StringComparer.OrdinalIgnoreCase)
                         .ToArray(),
@@ -153,7 +153,7 @@ public static class UsageReportBuilder
 
         var pendingTenants =
             inputs.Matching.PendingReview
-                .Select(link => link.AcronisTenantId.Trim())
+                .Select(link => link.TenantId.Trim())
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var rows = new List<UsageReportRow>();

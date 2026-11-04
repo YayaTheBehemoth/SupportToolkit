@@ -96,9 +96,9 @@ public class ReconciliationEngineTests
         bool deleted,
         bool enabled)
     {
-        IReadOnlyList<AcronisTenantObservation> tenants =
+        IReadOnlyList<TenantObservation> tenants =
             tenantPresent || !enabled
-                ? [new AcronisTenantObservation("t1", enabled, deleted)]
+                ? [new TenantObservation("t1", enabled, deleted)]
                 : [];
 
         var report =
@@ -127,7 +127,7 @@ public class ReconciliationEngineTests
                 Reconcile(
                     [Confirmed("t1", "BC-1")],
                     [Header("SUB-1", "BC-1", "Suspended")],
-                    [new AcronisTenantObservation("t1", false, false)]
+                    [new TenantObservation("t1", false, false)]
                 ),
                 ReconciliationSubject.Mapping
             );
@@ -187,7 +187,7 @@ public class ReconciliationEngineTests
                 Reconcile(
                     [Confirmed("t1", "BC-1")],
                     [Header("SUB-1", "BC-1", "Active")],
-                    [new AcronisTenantObservation("t1", null, false)]
+                    [new TenantObservation("t1", null, false)]
                 ),
                 ReconciliationSubject.Mapping
             );
@@ -214,7 +214,7 @@ public class ReconciliationEngineTests
             "Not entitled; monitored status unknown.",
             Assert.Single(result.Reasons));
 
-        Assert.Equal("t1", result.AcronisTenantId);
+        Assert.Equal("t1", result.TenantId);
         Assert.Equal("BC-1", result.BcCustomerNo);
     }
 
@@ -290,7 +290,7 @@ public class ReconciliationEngineTests
             Reconcile(
                 [],
                 [Header("SUB-1", null, "Active")],
-                [new AcronisTenantObservation("t-deleted", true, true)],
+                [new TenantObservation("t-deleted", true, true)],
                 [
                     new SmartSubscriptionLine("SUB-1", "ITEM"),
                     new SmartSubscriptionLine("SUB-ORPHAN", "ITEM"),
@@ -366,7 +366,7 @@ public class ReconciliationEngineTests
     private static ReconciliationReport Reconcile(
         IReadOnlyList<CustomerMappingRecord> mappings,
         IReadOnlyList<SmartSubscriptionHeader> headers,
-        IReadOnlyList<AcronisTenantObservation> tenants,
+        IReadOnlyList<TenantObservation> tenants,
         IReadOnlyList<SmartSubscriptionLine>? lines = null,
         IReadOnlySet<string>? relevantItemNumbers = null)
     {
@@ -398,10 +398,10 @@ public class ReconciliationEngineTests
         return Mapping(tenant, customer, CustomerMappingState.Confirmed);
     }
 
-    private static AcronisTenantObservation Tenant(
+    private static TenantObservation Tenant(
         string id)
     {
-        return new AcronisTenantObservation(id, true, false);
+        return new TenantObservation(id, true, false);
     }
 
     private static SmartSubscriptionHeader Header(

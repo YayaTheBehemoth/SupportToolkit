@@ -30,6 +30,8 @@ public sealed class AcronisBackupInventorySource : IBackupInventorySource
                 normalizer);
     }
 
+    public string SystemName => "Acronis";
+
     public Task<TenantRecord> ResolveExactAsync(
         string tenantName,
         CancellationToken cancellationToken = default) =>

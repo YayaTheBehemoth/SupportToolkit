@@ -30,7 +30,7 @@ public class CustomerMappingSuggesterTests
         Assert.Empty(result.Exceptions);
 
         Assert.Collection(
-            result.Added.OrderBy(mapping => mapping.AcronisTenantId),
+            result.Added.OrderBy(mapping => mapping.TenantId),
             mapping => AssertSuggested(mapping, "t1", "BC-1", CustomerMatchMethod.Cvr, 1.0),
             mapping => AssertSuggested(mapping, "t2", "BC-2", CustomerMatchMethod.EmailDomain, 0.8),
             mapping => AssertSuggested(mapping, "t3", "BC-3", CustomerMatchMethod.Name, 0.5)
@@ -66,7 +66,7 @@ public class CustomerMappingSuggesterTests
             exception =>
                 exception.Kind == CustomerMatchExceptionKind.OneToMany
                 && exception.Key == CustomerMatchKey.Cvr
-                && exception.AcronisTenantIds.SequenceEqual(["t1"])
+                && exception.TenantIds.SequenceEqual(["t1"])
         );
 
         Assert.Contains(
@@ -163,7 +163,7 @@ public class CustomerMappingSuggesterTests
         var added =
             Assert.Single(result.Added);
 
-        Assert.Equal("t3", added.AcronisTenantId);
+        Assert.Equal("t3", added.TenantId);
         Assert.Equal("BC-3", added.BcCustomerNo);
     }
 
@@ -230,7 +230,7 @@ public class CustomerMappingSuggesterTests
         CustomerMatchMethod method,
         double score)
     {
-        Assert.Equal(tenant, mapping.AcronisTenantId);
+        Assert.Equal(tenant, mapping.TenantId);
         Assert.Equal(customer, mapping.BcCustomerNo);
         Assert.Equal(CustomerMappingState.Suggested, mapping.State);
         Assert.Equal(method, mapping.MatchMethod);

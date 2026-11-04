@@ -4,7 +4,7 @@ namespace SupportToolkit.Core.CustomerMapping.Matching;
 /// A tenant and a customer whose names are alike without being equal.
 /// </summary>
 public sealed record LooseNameCandidate(
-    string AcronisTenantId,
+    string TenantId,
     string BcCustomerNo,
     LooseNameTier Tier
 );
@@ -82,7 +82,7 @@ public sealed class CustomerMappingCandidateRanker
 
         var occupiedTenants =
             occupied
-                .Select(mapping => mapping.AcronisTenantId.Trim())
+                .Select(mapping => mapping.TenantId.Trim())
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var occupiedCustomers =
@@ -97,7 +97,7 @@ public sealed class CustomerMappingCandidateRanker
                         mapping.State == CustomerMappingState.Rejected)
                 .Select(
                     mapping => Pair(
-                        mapping.AcronisTenantId,
+                        mapping.TenantId,
                         mapping.BcCustomerNo))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -134,7 +134,7 @@ public sealed class CustomerMappingCandidateRanker
         }
 
         var bestPerTenant =
-            BestTier(candidates, candidate => candidate.AcronisTenantId);
+            BestTier(candidates, candidate => candidate.TenantId);
 
         var bestPerCustomer =
             BestTier(candidates, candidate => candidate.BcCustomerNo);
@@ -150,14 +150,14 @@ public sealed class CustomerMappingCandidateRanker
 
         foreach (var candidate in candidates
             .OrderBy(
-                candidate => candidate.AcronisTenantId,
+                candidate => candidate.TenantId,
                 StringComparer.OrdinalIgnoreCase)
             .ThenBy(
                 candidate => candidate.BcCustomerNo,
                 StringComparer.OrdinalIgnoreCase))
         {
             var tenantTops =
-                Tops(candidates, bestPerTenant, candidate.AcronisTenantId,
+                Tops(candidates, bestPerTenant, candidate.TenantId,
                     byTenant: true);
 
             var customerTops =
@@ -165,7 +165,7 @@ public sealed class CustomerMappingCandidateRanker
                     byTenant: false);
 
             var isBestForBoth =
-                candidate.Tier == bestPerTenant[candidate.AcronisTenantId]
+                candidate.Tier == bestPerTenant[candidate.TenantId]
                 && candidate.Tier == bestPerCustomer[candidate.BcCustomerNo];
 
             var unique =
@@ -182,7 +182,7 @@ public sealed class CustomerMappingCandidateRanker
                 var suggestion =
                     new CustomerMappingRecord(
                         Guid.NewGuid(),
-                        candidate.AcronisTenantId,
+                        candidate.TenantId,
                         candidate.BcCustomerNo,
                         CustomerMappingState.Suggested,
                         CustomerMatchMethod.LooseName,
@@ -200,7 +200,7 @@ public sealed class CustomerMappingCandidateRanker
 
             // Only report a candidate that is a top choice for at least
             // one side; lesser alternatives would only add noise.
-            if (candidate.Tier != bestPerTenant[candidate.AcronisTenantId]
+            if (candidate.Tier != bestPerTenant[candidate.TenantId]
                 && candidate.Tier != bestPerCustomer[candidate.BcCustomerNo])
             {
                 continue;
@@ -217,7 +217,7 @@ public sealed class CustomerMappingCandidateRanker
                             _ => CustomerMatchExceptionKind.ManyToMany
                         },
                     CustomerMatchKey.Name,
-                    [candidate.AcronisTenantId],
+                    [candidate.TenantId],
                     [candidate.BcCustomerNo]));
         }
 
@@ -250,7 +250,7 @@ public sealed class CustomerMappingCandidateRanker
                 candidate =>
                     string.Equals(
                         byTenant
-                            ? candidate.AcronisTenantId
+                            ? candidate.TenantId
                             : candidate.BcCustomerNo,
                         id,
                         StringComparison.OrdinalIgnoreCase)

@@ -1,3 +1,4 @@
+using SupportToolkit.Providers.Acronis.Tenants;
 using SupportToolkit.Core.Tenants;
 using System.Net;
 using SupportToolkit.Core.MonitoringScope;
@@ -148,12 +149,12 @@ public class MonitoringScopeServiceTests
         var result =
             new MonitoringTenantSelector()
                 .Select(
-                    [new TenantRecord
+                    [new TenantDto
                     {
                         Id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                         Name = "Other",
                         Kind = "customer"
-                    }],
+                    }.ToTenantRecord()],
                     observations,
                     []);
 

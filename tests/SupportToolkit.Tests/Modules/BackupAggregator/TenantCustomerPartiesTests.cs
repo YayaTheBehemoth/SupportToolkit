@@ -1,3 +1,4 @@
+using SupportToolkit.Providers.Acronis.Tenants;
 using SupportToolkit.Core.Tenants;
 using SupportToolkit.Core.CustomerMapping;
 using SupportToolkit.Core.CustomerMapping.Matching;
@@ -6,14 +7,14 @@ using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 
 namespace SupportToolkit.Tests;
 
-public class AcronisCustomerPartiesTests
+public class TenantCustomerPartiesTests
 {
     [Fact]
     public void CustomerTenant_BecomesNameOnlyParty()
     {
         var party =
             Assert.Single(
-                AcronisCustomerParties.FromCustomerTenants(
+                TenantCustomerParties.FromCustomerTenants(
                     [Tenant("t1", "Example Trading", "customer")]
                 )
             );
@@ -27,7 +28,7 @@ public class AcronisCustomerPartiesTests
     public void NonCustomerAndDeletedTenants_AreExcluded()
     {
         var parties =
-            AcronisCustomerParties.FromCustomerTenants(
+            TenantCustomerParties.FromCustomerTenants(
                 [
                     Tenant("t1", "Partner", "partner"),
                     Tenant("t2", "Folder", "folder"),
@@ -43,7 +44,7 @@ public class AcronisCustomerPartiesTests
     public void Profile_OfTenantParties_OnlyNameIsUsable()
     {
         var acronis =
-            AcronisCustomerParties.FromCustomerTenants(
+            TenantCustomerParties.FromCustomerTenants(
                 [Tenant("t1", "Example Trading", "customer")]
             );
 
@@ -75,13 +76,13 @@ public class AcronisCustomerPartiesTests
         string kind,
         DateTimeOffset? deletedAt = null)
     {
-        return new TenantRecord
+        return new TenantDto
         {
             Id = id,
             Name = name,
             Kind = kind,
             Enabled = true,
             DeletedAt = deletedAt
-        };
+        }.ToTenantRecord();
     }
 }

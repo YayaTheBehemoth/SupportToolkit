@@ -53,7 +53,7 @@ public sealed class ReconciliationEngine
         IReadOnlyList<CustomerMappingRecord> mappings,
         IReadOnlyList<SmartSubscriptionHeader> headers,
         IReadOnlyList<SmartSubscriptionLine> lines,
-        IReadOnlyList<AcronisTenantObservation> tenants,
+        IReadOnlyList<TenantObservation> tenants,
         DateOnly asOfDate,
         IReadOnlySet<string>? relevantItemNumbers = null,
         IReadOnlySet<string>? excludedTenantIds = null,
@@ -89,7 +89,7 @@ public sealed class ReconciliationEngine
             mappings
                 .Where(
                     mapping => !excluded.Contains(
-                        mapping.AcronisTenantId.Trim()))
+                        mapping.TenantId.Trim()))
                 .ToArray();
 
         var period =
@@ -190,7 +190,7 @@ public sealed class ReconciliationEngine
                     mapping =>
                         mapping.State == CustomerMappingState.Confirmed)
                 .OrderBy(
-                    mapping => mapping.AcronisTenantId,
+                    mapping => mapping.TenantId,
                     StringComparer.OrdinalIgnoreCase)
                 .ThenBy(
                     mapping => mapping.BcCustomerNo,
@@ -199,7 +199,7 @@ public sealed class ReconciliationEngine
 
         var mappedTenants =
             confirmed
-                .Select(mapping => mapping.AcronisTenantId.Trim())
+                .Select(mapping => mapping.TenantId.Trim())
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var mappedCustomers =
@@ -217,12 +217,12 @@ public sealed class ReconciliationEngine
                         mapping.BcCustomerNo.Trim())
                         ?? [],
                     liveTenants.GetValueOrDefault(
-                        mapping.AcronisTenantId.Trim())
+                        mapping.TenantId.Trim())
                         ?? [],
                     duplicateSubscriptionNumbers,
                     asOfDate,
                     period,
-                    monitored?.Contains(mapping.AcronisTenantId.Trim())
+                    monitored?.Contains(mapping.TenantId.Trim())
                 )
             );
         }
@@ -270,7 +270,7 @@ public sealed class ReconciliationEngine
         CustomerMappingRecord mapping,
         IReadOnlyList<CustomerMappingRecord> confirmed,
         IReadOnlyList<SmartSubscriptionHeader> customerHeaders,
-        IReadOnlyList<AcronisTenantObservation> tenantObservations,
+        IReadOnlyList<TenantObservation> tenantObservations,
         IReadOnlySet<string> duplicateSubscriptionNumbers,
         DateOnly asOfDate,
         string period,
@@ -281,8 +281,8 @@ public sealed class ReconciliationEngine
 
         if (confirmed.Count(
                 other => CustomerMappingRules.SameId(
-                    other.AcronisTenantId,
-                    mapping.AcronisTenantId)) > 1
+                    other.TenantId,
+                    mapping.TenantId)) > 1
             || confirmed.Count(
                 other => CustomerMappingRules.SameId(
                     other.BcCustomerNo,
@@ -387,7 +387,7 @@ public sealed class ReconciliationEngine
                 ambiguity
             )
             {
-                AcronisTenantId = mapping.AcronisTenantId.Trim(),
+                TenantId = mapping.TenantId.Trim(),
                 BcCustomerNo = mapping.BcCustomerNo.Trim()
             };
         }
@@ -483,7 +483,7 @@ public sealed class ReconciliationEngine
                 : [consistentReason]
         )
         {
-            AcronisTenantId = mapping.AcronisTenantId.Trim(),
+            TenantId = mapping.TenantId.Trim(),
             BcCustomerNo = mapping.BcCustomerNo.Trim()
         };
     }

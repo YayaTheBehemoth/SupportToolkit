@@ -40,7 +40,7 @@ public static class OperatorTenantDetector
 
         var partners =
             all
-                .Where(tenant => IsKind(tenant, "partner"))
+                .Where(tenant => tenant.Role == TenantRole.Partner)
                 .ToArray();
 
         if (partners.Length == 0)
@@ -50,7 +50,7 @@ public static class OperatorTenantDetector
 
         var candidates =
             all
-                .Where(tenant => IsKind(tenant, "customer"))
+                .Where(tenant => tenant.Role == TenantRole.Customer)
                 .Select(
                     tenant => (
                         Tenant: tenant,
@@ -90,15 +90,5 @@ public static class OperatorTenantDetector
                 $"{matches.Length} customer tenants match a partner " +
                 "tenant's name; none was excluded as the operator's own.")
         };
-    }
-
-    private static bool IsKind(
-        TenantRecord tenant,
-        string kind)
-    {
-        return string.Equals(
-            tenant.Kind,
-            kind,
-            StringComparison.OrdinalIgnoreCase);
     }
 }

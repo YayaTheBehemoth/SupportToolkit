@@ -209,7 +209,7 @@ public sealed class ZendeskBackupTicketSink : IBackupTicketSink
             ?? throw new ArgumentNullException(nameof(configurationResolver));
     }
 
-    public Task<ZendeskTicketDestinationPreview> GetDestinationAsync(
+    public Task<TicketDestinationPreview> GetDestinationAsync(
         CancellationToken cancellationToken) =>
         BackupAggregatorProduction.GetTicketDestinationAsync(
             _configurationResolver,
@@ -217,7 +217,7 @@ public sealed class ZendeskBackupTicketSink : IBackupTicketSink
 
     public Task<CreatedTicket> SubmitAsync(
         TicketDraft draft,
-        ZendeskTicketDestinationPreview? confirmedDestination,
+        TicketDestinationPreview? confirmedDestination,
         CancellationToken cancellationToken) =>
         BackupAggregatorProduction.SubmitTicketDraftAsync(
             _configurationResolver,

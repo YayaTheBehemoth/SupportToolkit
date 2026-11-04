@@ -86,7 +86,7 @@ public sealed class CustomerMappingFixtureCommand
         foreach (var mapping in suggestions.Added)
         {
             output.WriteLine(
-                $"  {mapping.AcronisTenantId} -> {mapping.BcCustomerNo} | " +
+                $"  {mapping.TenantId} -> {mapping.BcCustomerNo} | " +
                 $"{mapping.MatchMethod} | score " +
                 (mapping.MatchScore ?? 0).ToString(
                     "0.0",
@@ -104,7 +104,7 @@ public sealed class CustomerMappingFixtureCommand
             output.WriteLine(
                 $"  {exception.Kind}" +
                 (exception.Key is null ? "" : $" on {exception.Key}") +
-                $" | Acronis: {string.Join(", ", exception.AcronisTenantIds)}" +
+                $" | Acronis: {string.Join(", ", exception.TenantIds)}" +
                 $" | BC: {string.Join(", ", exception.BcCustomerNumbers)}"
             );
         }
@@ -139,7 +139,7 @@ public sealed class CustomerMappingFixtureCommand
         foreach (var candidate in loose.Candidates)
         {
             output.WriteLine(
-                $"  {candidate.AcronisTenantId} -> " +
+                $"  {candidate.TenantId} -> " +
                 $"{candidate.BcCustomerNo} | {candidate.Tier}"
             );
         }
@@ -285,7 +285,7 @@ public sealed class CustomerMappingFixtureCommand
                     mappings,
                     headers,
                     lines,
-                    AcronisTenantObservations.FromCustomerTenants(
+                    TenantObservations.FromCustomerTenants(
                         tenants
                     ),
                     asOfDate,

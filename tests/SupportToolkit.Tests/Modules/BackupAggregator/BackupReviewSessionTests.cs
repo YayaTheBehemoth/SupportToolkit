@@ -162,7 +162,7 @@ public class BackupReviewSessionTests
             {
                 Destination =
                     new SupportToolkit.Core.Configuration
-                        .ZendeskTicketDestinationPreview(
+                        .TicketDestinationPreview(
                             "different.zendesk.com",
                             "dev",
                             12345)

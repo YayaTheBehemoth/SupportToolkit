@@ -43,7 +43,7 @@ public enum CustomerMatchMethod
 /// </summary>
 public sealed record CustomerMappingRecord(
     Guid Id,
-    string AcronisTenantId,
+    string TenantId,
     string BcCustomerNo,
     CustomerMappingState State,
     CustomerMatchMethod MatchMethod,

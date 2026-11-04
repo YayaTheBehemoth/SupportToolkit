@@ -1,3 +1,4 @@
+using SupportToolkit.Providers.Acronis.Tenants;
 using SupportToolkit.Core.Tenants;
 using System.Globalization;
 using SupportToolkit.Core.CustomerMapping;
@@ -303,7 +304,7 @@ public class MonitoringScopeReportTests
                     Lines(),
                     [.. Tenants()
                         .Where(tenant => tenant.Kind == "customer")
-                        .Select(tenant => new AcronisTenantObservation(tenant.Id, true, false))],
+                        .Select(tenant => new TenantObservation(tenant.Id, true, false))],
                     AsOf,
                     new HashSet<string> { Item },
                     selection.ExcludedTenants
@@ -331,7 +332,7 @@ public class MonitoringScopeReportTests
                         mapping =>
                             new ResolvedMonitoringCustomerIdentity(
                                 mapping.BcCustomerNo,
-                                mapping.AcronisTenantId))
+                                mapping.TenantId))
                     .ToArray(),
                 new HashSet<string> { ConfiguredId });
     }
@@ -407,12 +408,12 @@ public class MonitoringScopeReportTests
         string name,
         string kind = "customer")
     {
-        return new TenantRecord
+        return new TenantDto
         {
             Id = id,
             Name = name,
             Kind = kind,
             Enabled = true
-        };
+        }.ToTenantRecord();
     }
 }

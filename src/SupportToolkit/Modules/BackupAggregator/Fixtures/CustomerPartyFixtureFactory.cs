@@ -27,7 +27,7 @@ public static class CustomerPartyFixtureFactory
     ) Create()
     {
         var acronis =
-            AcronisCustomerParties.FromCustomerTenants(
+            TenantCustomerParties.FromCustomerTenants(
                 MonitoringTenantSelectionFixtureFactory
                     .Create()
                     .Tenants

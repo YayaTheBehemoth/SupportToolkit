@@ -1,3 +1,4 @@
+using SupportToolkit.Providers.Acronis.Tenants;
 using SupportToolkit.Core.Tenants;
 using SupportToolkit.Core.CustomerMapping;
 using SupportToolkit.Core.MonitoringScope;
@@ -377,7 +378,7 @@ public class MonitoringReconciliationCasesTests
                 [Confirmed(TenantA, "BC-1")],
                 [Header("SUB-1", "BC-1", status: "Suspended")],
                 [Line("SUB-1", Entitled)],
-                [new AcronisTenantObservation(TenantA, false, false)],
+                [new TenantObservation(TenantA, false, false)],
                 monitored: [TenantA]);
 
         Assert.Equal(
@@ -560,7 +561,7 @@ public class MonitoringReconciliationCasesTests
         Assert.Empty(result.Tenants);
 
         Assert.Empty(
-            AcronisTenantObservations.FromCustomerTenants(tenants));
+            TenantObservations.FromCustomerTenants(tenants));
     }
 
     [Fact]
@@ -963,7 +964,7 @@ public class MonitoringReconciliationCasesTests
         IReadOnlyList<CustomerMappingRecord> mappings,
         IReadOnlyList<SmartSubscriptionHeader> headers,
         IReadOnlyList<SmartSubscriptionLine> lines,
-        IReadOnlyList<AcronisTenantObservation> tenants,
+        IReadOnlyList<TenantObservation> tenants,
         string[]? monitored = null,
         string[]? excluded = null)
     {
@@ -994,10 +995,10 @@ public class MonitoringReconciliationCasesTests
         return Mapping(tenant, customer, CustomerMappingState.Confirmed);
     }
 
-    private static AcronisTenantObservation Observed(
+    private static TenantObservation Observed(
         string id)
     {
-        return new AcronisTenantObservation(id, true, false);
+        return new TenantObservation(id, true, false);
     }
 
     private static TenantRecord Tenant(
@@ -1005,12 +1006,12 @@ public class MonitoringReconciliationCasesTests
         string name = "Synthetic Customer",
         string kind = "customer")
     {
-        return new TenantRecord
+        return new TenantDto
         {
             Id = id,
             Name = name,
             Kind = kind
-        };
+        }.ToTenantRecord();
     }
 
     private static SmartSubscriptionHeader Header(

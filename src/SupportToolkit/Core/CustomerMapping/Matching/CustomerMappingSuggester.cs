@@ -28,7 +28,7 @@ public enum CustomerMatchExceptionKind
 public sealed record CustomerMatchException(
     CustomerMatchExceptionKind Kind,
     CustomerMatchKey? Key,
-    IReadOnlyList<string> AcronisTenantIds,
+    IReadOnlyList<string> TenantIds,
     IReadOnlyList<string> BcCustomerNumbers
 );
 
@@ -106,7 +106,7 @@ public sealed class CustomerMappingSuggester
 
         var occupiedTenants =
             occupied
-                .Select(mapping => mapping.AcronisTenantId.Trim())
+                .Select(mapping => mapping.TenantId.Trim())
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var occupiedCustomers =
@@ -122,7 +122,7 @@ public sealed class CustomerMappingSuggester
                 )
                 .Select(
                     mapping => PairKey(
-                        mapping.AcronisTenantId,
+                        mapping.TenantId,
                         mapping.BcCustomerNo
                     )
                 )

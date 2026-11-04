@@ -27,7 +27,7 @@ public class ZendeskDestinationConfirmationTests
     {
         var workflow = CreateWorkflow();
         var report = new BackupAggregatorFixtureFactory().BuildReport();
-        var staleDestination = new ZendeskTicketDestinationPreview(
+        var staleDestination = new TicketDestinationPreview(
             "different.zendesk.com", "dev", 12345);
 
         var stalePlan = new TicketSubmissionPlan(
@@ -45,16 +45,16 @@ public class ZendeskDestinationConfirmationTests
     [Fact]
     public void SameDestination_MatchesCaseInsensitivelyButNotDifferentGroups()
     {
-        var first = new ZendeskTicketDestinationPreview(
+        var first = new TicketDestinationPreview(
             "fixture-trial.zendesk.com", "dev", 12345);
 
-        Assert.True(first.IsSameAs(new ZendeskTicketDestinationPreview(
+        Assert.True(first.IsSameAs(new TicketDestinationPreview(
             "FIXTURE-TRIAL.ZENDESK.COM", "DEV", 12345)));
 
-        Assert.False(first.IsSameAs(new ZendeskTicketDestinationPreview(
+        Assert.False(first.IsSameAs(new TicketDestinationPreview(
             "fixture-trial.zendesk.com", "dev", 54321)));
 
-        Assert.False(first.IsSameAs(new ZendeskTicketDestinationPreview(
+        Assert.False(first.IsSameAs(new TicketDestinationPreview(
             "fixture-trial.zendesk.com", "operations", 12345)));
     }
 
