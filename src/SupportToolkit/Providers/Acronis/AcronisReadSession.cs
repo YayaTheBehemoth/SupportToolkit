@@ -49,16 +49,7 @@ public sealed class AcronisReadSession : IDisposable
                 connection.ClientSecret);
 
         var httpClient =
-            new HttpClient(
-                new AcronisReadOnlyHandler(
-                    options.DatacenterUrl,
-                    new HttpClientHandler
-                    {
-                        AllowAutoRedirect = false
-                    }))
-            {
-                Timeout = TimeSpan.FromSeconds(30)
-            };
+            AcronisHttpPipeline.Create(options);
 
         var logger =
             OperationalLogger.FromEnvironment();

@@ -45,29 +45,10 @@ public sealed class BackupAggregatorProductionSession
             logger
         );
 
-        var innerHandler =
-            new HttpClientHandler
-            {
-                AllowAutoRedirect =
-                    false
-            };
-
-        var readOnlyHandler =
-            new AcronisReadOnlyHandler(
-                options.DatacenterUrl,
-                innerHandler
-            );
-
         var httpClient =
-            new HttpClient(
-                readOnlyHandler
-            )
-            {
-                Timeout =
-                    TimeSpan.FromSeconds(
-                        30
-                    )
-            };
+            AcronisHttpPipeline.Create(
+                options
+            );
 
         var diagnosticLogger =
             logger.DebugEnabled

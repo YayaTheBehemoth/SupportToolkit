@@ -60,27 +60,8 @@ public sealed class TicketingProductionSession
             );
         }
 
-        var handler =
-            new HttpClientHandler
-            {
-                /*
-                 * Do not allow authenticated requests to follow redirects
-                 * automatically.
-                 */
-                AllowAutoRedirect =
-                    false
-            };
-
         var httpClient =
-            new HttpClient(
-                handler
-            )
-            {
-                Timeout =
-                    TimeSpan.FromSeconds(
-                        30
-                    )
-            };
+            ZendeskTicketingHttpPipeline.Create();
 
         /*
          * The ticketing connection authenticates with its own

@@ -191,6 +191,46 @@ public class LayeringTests
             string.Join("\n  ", offenders));
     }
 
+    /// <summary>
+    /// Each transport's safety wiring (read-only handlers, no redirects,
+    /// timeouts) is assembled in one pipeline file, so no other code can
+    /// build a client that skips it.
+    /// </summary>
+    [Theory]
+    [InlineData("new HttpClient(", "HttpPipeline.cs")]
+    [InlineData("new HttpClientHandler", "HttpPipeline.cs")]
+    [InlineData("new AcronisReadOnlyHandler(", "Providers/Acronis/Transport/AcronisHttpPipeline.cs")]
+    public void HttpClients_AreBuiltOnlyInTheTransportPipelines(
+        string construction,
+        string allowedPathSuffix)
+    {
+        var files = AllSourceFiles().ToArray();
+
+        // Not vacuous: the construction does occur, in a pipeline.
+        Assert.Contains(
+            files,
+            file => file.RelativePath.EndsWith(allowedPathSuffix, StringComparison.Ordinal)
+                    && file.Code.Contains(construction, StringComparison.Ordinal));
+
+        var offenders =
+            files
+                .Where(file => !file.RelativePath.EndsWith(
+                    allowedPathSuffix,
+                    StringComparison.Ordinal))
+                .Where(file => file.Code.Contains(
+                    construction,
+                    StringComparison.Ordinal))
+                .Select(file => file.RelativePath)
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            $"'{construction}' belongs in a transport pipeline " +
+            "(AcronisHttpPipeline, BusinessCentralHttpPipeline, " +
+            "ZendeskTicketingHttpPipeline, ZendeskDeletionHttpPipeline):\n  " +
+            string.Join("\n  ", offenders));
+    }
+
     [Fact]
     public void RazorComponents_LiveOnlyInTheWebUi()
     {
