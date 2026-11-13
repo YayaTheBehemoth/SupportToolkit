@@ -43,9 +43,9 @@ public sealed class AcronisTenantDirectoryDevCommand
         ArgumentNullException.ThrowIfNull(output);
 
         using var session =
-            await AcronisReadSession.CreateAsync(
-                _configurationResolver,
-                cancellationToken);
+            AcronisReadSession.Create(
+                await _configurationResolver.GetAcronisConnectionAsync(
+                    cancellationToken));
 
         /*
          * This is the same production tenant-discovery implementation

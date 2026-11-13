@@ -1,7 +1,7 @@
 using System.Globalization;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Logging;
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Core.Ticketing.Models;
 using SupportToolkit.Core.Ticketing.Services;
 using SupportToolkit.Modules.BackupAggregator.Services;
@@ -67,7 +67,7 @@ public static class BackupAggregatorProduction
     /// The configured Zendesk destination, resolved and validated without
     /// calling Zendesk or exposing credentials.
     /// </summary>
-    public static async Task<ZendeskTicketDestinationPreview> GetTicketDestinationAsync(
+    public static async Task<TicketDestinationPreview> GetTicketDestinationAsync(
         SupportToolkitConfigurationResolver configurationResolver,
         CancellationToken cancellationToken)
     {
@@ -80,7 +80,7 @@ public static class BackupAggregatorProduction
             connection.ClientId,
             connection.ClientSecret);
 
-        return new ZendeskTicketDestinationPreview(
+        return new TicketDestinationPreview(
             options.BaseUri.Host,
             connection.DestinationName,
             connection.GroupId);
@@ -94,7 +94,7 @@ public static class BackupAggregatorProduction
     public static async Task<CreatedTicket> SubmitTicketDraftAsync(
         SupportToolkitConfigurationResolver configurationResolver,
         TicketDraft draft,
-        ZendeskTicketDestinationPreview? confirmedDestination,
+        TicketDestinationPreview? confirmedDestination,
         CancellationToken cancellationToken)
     {
         /*
@@ -116,7 +116,7 @@ public static class BackupAggregatorProduction
 
         if (confirmedDestination is not null)
         {
-            var currentDestination = new ZendeskTicketDestinationPreview(
+            var currentDestination = new TicketDestinationPreview(
                 zendeskOptions.BaseUri.Host,
                 resolvedConnection.DestinationName,
                 resolvedConnection.GroupId);
@@ -156,7 +156,7 @@ public static class BackupAggregatorProduction
             OperationalLogger.FromEnvironment();
 
         using var session =
-            TicketingProductionSession.Create(
+            ZendeskTicketingSession.Create(
                 zendeskOptions,
                 resolvedConnection.GroupId,
                 new ZendeskTicketIdentity(
@@ -244,8 +244,14 @@ public sealed class ScopedReviewProductionSources
             CancellationToken cancellationToken)
     {
         return _businessCentralBundle ??=
-            BusinessCentralProviderFactory.CreateAsync(
-                _configurationResolver,
+            CreateBusinessCentralBundleAsync(
                 cancellationToken);
     }
+
+    private async Task<BusinessCentralProviderBundle>
+        CreateBusinessCentralBundleAsync(
+            CancellationToken cancellationToken) =>
+        BusinessCentralProviderFactory.Create(
+            await _configurationResolver.GetBusinessCentralConnectionAsync(
+                cancellationToken));
 }

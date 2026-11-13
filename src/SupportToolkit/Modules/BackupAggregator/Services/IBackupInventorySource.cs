@@ -1,4 +1,4 @@
-using SupportToolkit.Core.Tenants;
+using SupportToolkit.Domain.Tenants;
 using SupportToolkit.Modules.BackupAggregator.Models;
 
 namespace SupportToolkit.Modules.BackupAggregator.Services;
@@ -12,6 +12,12 @@ namespace SupportToolkit.Modules.BackupAggregator.Services;
 /// </summary>
 public interface IBackupInventorySource
 {
+    /// <summary>
+    /// The backup system's name, as operators know it, for failure
+    /// messages ("... returned HTTP 503").
+    /// </summary>
+    string SystemName { get; }
+
     /// <summary>
     /// The one tenant with exactly this name. Fails when there is none, or
     /// more than one: a tenant is never guessed.

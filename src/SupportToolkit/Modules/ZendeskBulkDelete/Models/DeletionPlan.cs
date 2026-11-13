@@ -1,4 +1,3 @@
-using SupportToolkit.Providers.Zendesk.Deletion.Search;
 
 namespace SupportToolkit.Modules.ZendeskBulkDelete.Models;
 
@@ -30,7 +29,7 @@ public sealed class DeletionPlan
         Guid id,
         DateTimeOffset createdAt,
         string instance,
-        ZendeskOperator operatorUser,
+        DeletionOperator operatorUser,
         string query,
         IReadOnlyList<PlannedTicket> tickets)
     {
@@ -49,7 +48,7 @@ public sealed class DeletionPlan
     /// <summary>The Zendesk subdomain the tickets belong to.</summary>
     public string Instance { get; }
 
-    public ZendeskOperator Operator { get; }
+    public DeletionOperator Operator { get; }
 
     public string Query { get; }
 

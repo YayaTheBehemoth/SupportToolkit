@@ -1,6 +1,6 @@
 using SupportToolkit.Core.Configuration;
-using SupportToolkit.Core.CustomerMapping;
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.CustomerMapping;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Modules.UsageReport.Models;
 using SupportToolkit.Modules.UsageReport.Services;
 using SupportToolkit.Providers.Acronis.Tenants;
@@ -43,14 +43,14 @@ public sealed class ProductionUsageReportSources : IUsageReportSources
         // Local configuration first: a missing connection fails before
         // any sign-in or request.
         var businessCentral =
-            await BusinessCentralProviderFactory.CreateAsync(
-                resolver,
-                cancellationToken);
+            BusinessCentralProviderFactory.Create(
+                await resolver.GetBusinessCentralConnectionAsync(
+                    cancellationToken));
 
         var acronis =
-            await AcronisReadSession.CreateAsync(
-                resolver,
-                cancellationToken);
+            AcronisReadSession.Create(
+                await resolver.GetAcronisConnectionAsync(
+                    cancellationToken));
 
         return new ProductionUsageReportSources(businessCentral, acronis);
     }
@@ -102,7 +102,7 @@ public sealed class ProductionUsageReportSources : IUsageReportSources
         var tenants = await _acronis.Provider.GetTenantsAsync(cancellationToken);
 
         // Customer tenants only; the operator's own and deleted ones out.
-        var parties = AcronisCustomerParties.ForResolution(tenants.ToTenantRecords());
+        var parties = TenantCustomerParties.ForResolution(tenants.ToTenantRecords());
 
         return new UsageTenants(parties.Parties, parties.Notice);
     }

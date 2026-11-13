@@ -1,3 +1,4 @@
+using SupportToolkit.Modules.ZendeskBulkDelete.Production;
 using System.Net;
 using System.Text.Json;
 using SupportToolkit.Modules.ZendeskBulkDelete.Models;
@@ -266,6 +267,11 @@ public class ZendeskDeletionExecutorTests : IDisposable
             await Executor(api, _receipts).ExecuteAsync(plan, Confirm(plan));
 
         Assert.Equal(3, run.Outcome.Count(TicketDeletionState.Unknown));
+
+        // The receipt names the underlying failure, not a wrapper.
+        Assert.Contains(
+            "did not complete clearly (HttpRequestException)",
+            run.Outcome.Results[0].Detail);
     }
 
     [Fact]
@@ -286,6 +292,10 @@ public class ZendeskDeletionExecutorTests : IDisposable
         Assert.Equal(100, run.Outcome.Count(TicketDeletionState.Unknown));
         Assert.Equal(50, run.Outcome.Count(TicketDeletionState.NotAttempted));
         Assert.Equal("J1", run.Outcome.Results[0].JobId);
+
+        Assert.Contains(
+            "could not be read (ZendeskApiException)",
+            run.Outcome.Results[0].Detail);
     }
 
     [Fact]
@@ -458,7 +468,7 @@ public class ZendeskDeletionExecutorTests : IDisposable
 
         var executor =
             new ZendeskDeletionExecutor(
-                Provider(api),
+                new ZendeskTicketDeleter(Provider(api)),
                 new DeletionReceiptStore(_receipts),
                 new FixedClock(),
                 (_, token) =>

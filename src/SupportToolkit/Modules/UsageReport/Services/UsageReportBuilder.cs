@@ -1,7 +1,7 @@
 using System.Globalization;
 using SupportToolkit.Core.Configuration;
-using SupportToolkit.Core.CustomerMapping;
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.CustomerMapping;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Modules.UsageReport.Models;
 
 namespace SupportToolkit.Modules.UsageReport.Services;
@@ -140,7 +140,7 @@ public static class UsageReportBuilder
                 .ToDictionary(
                     group => group.Key,
                     group => group
-                        .Select(link => link.AcronisTenantId.Trim())
+                        .Select(link => link.TenantId.Trim())
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .Order(StringComparer.OrdinalIgnoreCase)
                         .ToArray(),
@@ -153,7 +153,7 @@ public static class UsageReportBuilder
 
         var pendingTenants =
             inputs.Matching.PendingReview
-                .Select(link => link.AcronisTenantId.Trim())
+                .Select(link => link.TenantId.Trim())
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var rows = new List<UsageReportRow>();

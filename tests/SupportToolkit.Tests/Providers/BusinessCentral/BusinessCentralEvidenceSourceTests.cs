@@ -1,4 +1,4 @@
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Providers.BusinessCentral.Subscriptions;
 using SupportToolkit.Providers.BusinessCentral.Subscriptions.Dtos;
 using SupportToolkit.Providers.BusinessCentral.Transport;
@@ -77,7 +77,7 @@ public class BusinessCentralEvidenceSourceTests
             typeof(ISmartSubscriptionEvidenceSource).Assembly
                 .GetTypes()
                 .Where(t => t.Namespace ==
-                    "SupportToolkit.Core.MonitoringScope");
+                    "SupportToolkit.Domain.MonitoringScope");
 
         Assert.NotEmpty(coreTypes);
 

@@ -5,8 +5,10 @@ using SupportToolkit.Core.Modules;
 using SupportToolkit.Core.Ticketing.Models;
 using SupportToolkit.Core.Ticketing.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Models;
+using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.Reporting;
 using SupportToolkit.Modules.BackupAggregator.Services;
+using SupportToolkit.Modules.BackupAggregator.Ticketing;
 
 namespace SupportToolkit.Modules.BackupAggregator;
 
@@ -53,16 +55,6 @@ public sealed class BackupAggregatorModule
         if (IsScopedTicketCommand(args, "submit"))
         {
             return await RunScopedTicketAsync(submit: true);
-        }
-
-        if (IsTicketPreviewCommand(args))
-        {
-            return await RunTicketPreviewAsync();
-        }
-
-        if (IsTicketSubmitCommand(args))
-        {
-            return await RunTicketSubmitAsync();
         }
 
         if (IsScopedReviewCommand(args))
@@ -169,73 +161,78 @@ public sealed class BackupAggregatorModule
             return 1;
         }
 
+        // The same session, and so the same gate and single-use plan, as
+        // the interactive console and the web page.
+        var session =
+            new BackupReviewSession(
+                _workflow,
+                _scopedWorkflow);
+
         var result =
-            await _scopedWorkflow.ReviewAsync(
-                DateOnly.FromDateTime(DateTime.Today));
-
-        // The one gate that decides whether a ticket may be produced;
-        // the interactive console and any other interface use it too.
-        var preparation =
-            _workflow.PrepareScopedTicketDraft(result);
-
-        if (!preparation.IsReady)
-        {
-            var blockers =
-                preparation.NotReady.Reasons;
-
-            new ConsoleScopedReviewReporter(
-                    OperationalLogger.FromEnvironment().DebugEnabled)
-                .Write(Console.Out, result);
-
-            Console.Error.WriteLine();
-
-            Console.Error.WriteLine(
-                submit
-                    ? "No ticket was submitted. The monitored review " +
-                      "is not complete:"
-                    : "No ticket draft was produced. The monitored " +
-                      "review is not complete:");
-
-            foreach (var blocker in blockers)
-            {
-                Console.Error.WriteLine($"  - {blocker}");
-            }
-
-            return 2;
-        }
+            await session.RunReviewAsync();
 
         if (!submit)
         {
+            var draft =
+                session.PreviewTicket();
+
+            if (!draft.IsReady)
+            {
+                return WriteNotReady(result, draft.NotReady, submit);
+            }
+
             WriteTicketPreview(
-                preparation.Value);
+                draft.Value);
 
             return 0;
         }
 
+        var plan =
+            await session.PrepareSubmissionAsync();
+
+        if (!plan.IsReady)
+        {
+            // A missing or invalid destination is a configuration error,
+            // reported as one, not as an incomplete review.
+            if (plan.NotReady.Kind == TicketNotReadyKind.DestinationUnavailable)
+            {
+                throw new InvalidOperationException(
+                    plan.NotReady.Reasons[0]);
+            }
+
+            return WriteNotReady(result, plan.NotReady, submit);
+        }
+
         WriteCreatedTicket(
-            await _workflow.SubmitScopedTicketAsync(result));
+            await session.SubmitAsync(plan.Value));
 
         return 0;
     }
 
-    private async Task<int> RunTicketPreviewAsync()
+    private static int WriteNotReady(
+        ScopedBackupInventoryReviewResult result,
+        TicketNotReady notReady,
+        bool submit)
     {
-        var draft =
-            await _workflow.CreateTicketDraftAsync();
+        new ConsoleScopedReviewReporter(
+                OperationalLogger.FromEnvironment().DebugEnabled)
+            .Write(Console.Out, result);
 
-        WriteTicketPreview(draft);
+        Console.Error.WriteLine();
 
-        return 0;
-    }
+        Console.Error.WriteLine(
+            submit
+                ? "No ticket was submitted. The monitored review " +
+                  "is not complete:"
+                : "No ticket draft was produced. The monitored " +
+                  "review is not complete:");
 
-    private async Task<int> RunTicketSubmitAsync()
-    {
-        var ticket =
-            await _workflow.SubmitTicketAsync();
+        foreach (var blocker in notReady.Reasons)
+        {
+            Console.Error.WriteLine($"  - {blocker}");
+        }
 
-        WriteCreatedTicket(ticket);
-
-        return 0;
+        return 2;
     }
 
     private static void WriteReport(
@@ -307,34 +304,6 @@ public sealed class BackupAggregatorModule
                 StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsTicketPreviewCommand(
-        string[] args)
-    {
-        return args.Length == 2
-            && string.Equals(
-                args[0],
-                "ticket",
-                StringComparison.OrdinalIgnoreCase)
-            && string.Equals(
-                args[1],
-                "preview",
-                StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsTicketSubmitCommand(
-        string[] args)
-    {
-        return args.Length == 2
-            && string.Equals(
-                args[0],
-                "ticket",
-                StringComparison.OrdinalIgnoreCase)
-            && string.Equals(
-                args[1],
-                "submit",
-                StringComparison.OrdinalIgnoreCase);
-    }
-
     private static void PrintUsage()
     {
         Console.WriteLine("Backup Aggregator");
@@ -349,16 +318,6 @@ public sealed class BackupAggregatorModule
         Console.WriteLine(
             "  SupportToolkit backup-aggregator " +
             "inventory-review --all");
-
-        Console.WriteLine();
-
-        Console.WriteLine("Ticket workflow:");
-
-        Console.WriteLine(
-            "  SupportToolkit backup-aggregator ticket preview");
-
-        Console.WriteLine(
-            "  SupportToolkit backup-aggregator ticket submit");
 
         Console.WriteLine();
 

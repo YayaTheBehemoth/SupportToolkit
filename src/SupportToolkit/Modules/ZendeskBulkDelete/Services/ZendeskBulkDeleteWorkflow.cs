@@ -1,36 +1,23 @@
 using SupportToolkit.Modules.ZendeskBulkDelete.Models;
-using SupportToolkit.Providers.Zendesk.Deletion.Auth;
-using SupportToolkit.Providers.Zendesk.Deletion.Search;
-using SupportToolkit.Providers.Zendesk.Deletion.Transport;
 
 namespace SupportToolkit.Modules.ZendeskBulkDelete.Services;
 
 /// <summary>
 /// Sign in, search and preview for bulk ticket deletion. It contains no
-/// console or user interface code, and no deletion: it cannot delete,
-/// because the connection's transport does not allow it yet.
+/// console or user interface code, and no deletion: the directory it is
+/// given is read-only.
 ///
 /// Interactive only: the sign-in needs an operator at the browser.
 /// </summary>
 public sealed class ZendeskBulkDeleteWorkflow
 {
-    private readonly Func<CancellationToken, Task> _signIn;
-    private readonly ZendeskTicketSearchProvider _search;
-    private readonly ZendeskDirectoryProvider _directory;
+    private readonly ITicketDirectory _directory;
     private readonly TimeProvider _timeProvider;
 
     public ZendeskBulkDeleteWorkflow(
-        Func<CancellationToken, Task> signIn,
-        ZendeskTicketSearchProvider search,
-        ZendeskDirectoryProvider directory,
+        ITicketDirectory directory,
         TimeProvider? timeProvider = null)
     {
-        _signIn =
-            signIn ?? throw new ArgumentNullException(nameof(signIn));
-
-        _search =
-            search ?? throw new ArgumentNullException(nameof(search));
-
         _directory =
             directory ?? throw new ArgumentNullException(nameof(directory));
 
@@ -38,12 +25,20 @@ public sealed class ZendeskBulkDeleteWorkflow
     }
 
     /// <summary>
+    /// The exact query the ticketing system runs for these criteria.
+    /// Throws ArgumentException when a term cannot be searched for.
+    /// </summary>
+    public string DescribeQuery(
+        TicketSearchCriteria criteria) =>
+        _directory.DescribeQuery(criteria);
+
+    /// <summary>
     /// Signs the operator in and returns who they are.
     /// </summary>
-    public async Task<ZendeskOperator> SignInAsync(
+    public async Task<DeletionOperator> SignInAsync(
         CancellationToken cancellationToken = default)
     {
-        await _signIn(cancellationToken);
+        await _directory.SignInAsync(cancellationToken);
 
         return await _directory.GetCurrentUserAsync(cancellationToken);
     }
@@ -54,17 +49,17 @@ public sealed class ZendeskBulkDeleteWorkflow
     /// the preview says so. A failed search does fail it.
     /// </summary>
     public async Task<DeletionPreviewResult> PreviewAsync(
-        ZendeskOperator operatorUser,
-        ZendeskSearchCriteria criteria,
+        DeletionOperator operatorUser,
+        TicketSearchCriteria criteria,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(operatorUser);
         ArgumentNullException.ThrowIfNull(criteria);
 
-        var query = ZendeskSearchQuery.Build(criteria);
+        var query = _directory.DescribeQuery(criteria);
 
         var search =
-            await _search.SearchTicketsAsync(
+            await _directory.SearchAsync(
                 criteria,
                 cancellationToken);
 
@@ -82,8 +77,7 @@ public sealed class ZendeskBulkDeleteWorkflow
                         .Select(ticket => ticket.OrganizationId!.Value),
                     cancellationToken);
         }
-        catch (Exception exception)
-            when (IsLookupFailure(exception))
+        catch (DirectoryLookupException)
         {
             notes.Add(
                 "Organization names could not be read, so organizations " +
@@ -99,8 +93,7 @@ public sealed class ZendeskBulkDeleteWorkflow
                         .Select(ticket => ticket.RequesterId!.Value),
                     cancellationToken);
         }
-        catch (Exception exception)
-            when (IsLookupFailure(exception))
+        catch (DirectoryLookupException)
         {
             notes.Add(
                 "Requester emails could not be read, so requester " +
@@ -119,16 +112,4 @@ public sealed class ZendeskBulkDeleteWorkflow
                     : string.Join(" ", notes),
                 _timeProvider.GetUtcNow()));
     }
-
-    // Sign-in problems (a 401, or a failed sign-in) are never swallowed
-    // as a lookup gap.
-    private static bool IsLookupFailure(
-        Exception exception) =>
-        exception is ZendeskApiException
-            {
-                StatusCode: not System.Net.HttpStatusCode.Unauthorized
-            }
-            or HttpRequestException
-            or InvalidOperationException
-            or System.Text.Json.JsonException;
 }

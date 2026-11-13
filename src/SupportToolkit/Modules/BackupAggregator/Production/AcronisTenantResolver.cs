@@ -1,4 +1,4 @@
-using SupportToolkit.Core.Tenants;
+using SupportToolkit.Domain.Tenants;
 using SupportToolkit.Providers.Acronis.Tenants;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 

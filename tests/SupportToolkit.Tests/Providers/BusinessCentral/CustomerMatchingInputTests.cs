@@ -1,8 +1,9 @@
-using SupportToolkit.Core.Tenants;
+using SupportToolkit.Providers.Acronis.Tenants;
+using SupportToolkit.Domain.Tenants;
 using SupportToolkit.Cli.Commands;
-using SupportToolkit.Core.CustomerMapping;
-using SupportToolkit.Core.CustomerMapping.Matching;
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.CustomerMapping;
+using SupportToolkit.Domain.CustomerMapping.Matching;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Providers.Acronis.Tenants.Dtos;
 using SupportToolkit.Providers.BusinessCentral.Subscriptions;
@@ -66,20 +67,20 @@ public class CustomerMatchingInputTests
     public void AcronisParties_ExcludeTheOperatorPartnersUnitsAndDeleted()
     {
         var build =
-            AcronisCustomerParties.ForResolution(
+            TenantCustomerParties.ForResolution(
             [
                 Tenant(OwnPartner, "SYNTHETIC OPERATOR", "partner"),
                 Tenant(OwnCustomer, "Synthetic Operator", "customer"),
                 Tenant(TenantA, "Northwind Traders", "customer"),
                 Tenant(TenantB, "Contoso", "customer"),
                 Tenant(Guid.NewGuid().ToString(), "Unit", "unit"),
-                new TenantRecord
+                new TenantDto
                 {
                     Id = Guid.NewGuid().ToString(),
                     Name = "Deleted",
                     Kind = "customer",
                     DeletedAt = DateTimeOffset.UtcNow
-                }
+                }.ToTenantRecord()
             ]);
 
         Assert.True(build.OperatorTenantExcluded);
@@ -102,7 +103,7 @@ public class CustomerMatchingInputTests
                 0);
 
         var acronis =
-            new AcronisPartyBuild(
+            new TenantPartyBuild(
                 [new(TenantA, "Secret Corp")],
                 true,
                 null);
@@ -158,7 +159,7 @@ public class CustomerMatchingInputTests
                 0);
 
         var acronis =
-            new AcronisPartyBuild([], false, null);
+            new TenantPartyBuild([], false, null);
 
         var result =
             await new AutoCustomerMappingResolver()
@@ -197,7 +198,7 @@ public class CustomerMatchingInputTests
                 "Bad request.\nnewline");
 
         var acronis =
-            new AcronisPartyBuild([], false, null);
+            new TenantPartyBuild([], false, null);
 
         var result =
             await new AutoCustomerMappingResolver()
@@ -256,11 +257,11 @@ public class CustomerMatchingInputTests
         string name,
         string kind)
     {
-        return new TenantRecord
+        return new TenantDto
         {
             Id = id,
             Name = name,
             Kind = kind
-        };
+        }.ToTenantRecord();
     }
 }

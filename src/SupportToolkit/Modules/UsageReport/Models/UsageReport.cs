@@ -1,4 +1,5 @@
 using SupportToolkit.Core.Configuration;
+using SupportToolkit.Core.Units;
 
 namespace SupportToolkit.Modules.UsageReport.Models;
 
@@ -11,8 +12,8 @@ public sealed record UsageMeasurement(
     string? Problem,
     bool NotReported = false)
 {
-    public const decimal BytesPerGb = 1_000_000_000m;
-    public const decimal BytesPerPortalGb = 1_073_741_824m;
+    public const decimal BytesPerGb = StorageUnits.BytesPerGb;
+    public const decimal BytesPerPortalGb = StorageUnits.BytesPerGib;
 
     public static UsageMeasurement Unknown(string problem) =>
         new(null, problem);

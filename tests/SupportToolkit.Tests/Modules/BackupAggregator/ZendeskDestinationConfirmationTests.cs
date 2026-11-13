@@ -1,7 +1,10 @@
+using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Modules.BackupAggregator.Fixtures;
+using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.Services;
+using SupportToolkit.Modules.BackupAggregator.Ticketing;
 
 namespace SupportToolkit.Tests.Modules.BackupAggregator;
 
@@ -24,12 +27,16 @@ public class ZendeskDestinationConfirmationTests
     {
         var workflow = CreateWorkflow();
         var report = new BackupAggregatorFixtureFactory().BuildReport();
-        var staleDestination = new ZendeskTicketDestinationPreview(
+        var staleDestination = new TicketDestinationPreview(
             "different.zendesk.com", "dev", 12345);
 
+        var stalePlan = new TicketSubmissionPlan(
+            new BackupReviewTicketDraftFactory().Create(report),
+            staleDestination,
+            new ReviewSummary(report.TenantCount, report.TenantsAttempted, report.FindingsCount, 0, true));
+
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => workflow.SubmitTicketToConfirmedDestinationAsync(
-                report, staleDestination));
+            () => workflow.SubmitPlannedTicketAsync(stalePlan));
 
         Assert.Contains("changed since confirmation", failure.Message);
         Assert.Contains("No ticket was submitted", failure.Message);
@@ -38,16 +45,16 @@ public class ZendeskDestinationConfirmationTests
     [Fact]
     public void SameDestination_MatchesCaseInsensitivelyButNotDifferentGroups()
     {
-        var first = new ZendeskTicketDestinationPreview(
+        var first = new TicketDestinationPreview(
             "fixture-trial.zendesk.com", "dev", 12345);
 
-        Assert.True(first.IsSameAs(new ZendeskTicketDestinationPreview(
+        Assert.True(first.IsSameAs(new TicketDestinationPreview(
             "FIXTURE-TRIAL.ZENDESK.COM", "DEV", 12345)));
 
-        Assert.False(first.IsSameAs(new ZendeskTicketDestinationPreview(
+        Assert.False(first.IsSameAs(new TicketDestinationPreview(
             "fixture-trial.zendesk.com", "dev", 54321)));
 
-        Assert.False(first.IsSameAs(new ZendeskTicketDestinationPreview(
+        Assert.False(first.IsSameAs(new TicketDestinationPreview(
             "fixture-trial.zendesk.com", "operations", 12345)));
     }
 
@@ -101,7 +108,7 @@ public class ZendeskDestinationConfirmationTests
             new TestSecretStore(),
             _ => null);
 
-        return new BackupAggregatorWorkflow(resolver);
+        return BackupAggregatorComposition.Workflow(resolver);
     }
 
     private sealed class TestConfigurationStore : ISupportToolkitConfigurationStore

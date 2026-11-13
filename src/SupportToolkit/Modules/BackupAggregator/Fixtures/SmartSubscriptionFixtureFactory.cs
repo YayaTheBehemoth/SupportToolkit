@@ -1,4 +1,4 @@
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.MonitoringScope;
 
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 

@@ -1,3 +1,4 @@
+using SupportToolkit.Composition;
 using System.Net;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Modules.UsageReport.Fixtures;
@@ -36,7 +37,7 @@ internal static class UsageReportWebSupport
 
         return new UsageReportWebSession(
             new UsageReportSession(
-                new UsageReportWorkflow(resolver, progress.Write, productionSources)),
+                UsageReportComposition.Workflow(resolver, progress.Write, productionSources)),
             progress);
     }
 }

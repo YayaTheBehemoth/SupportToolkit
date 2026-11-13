@@ -18,13 +18,13 @@ public class BulkDeleteReviewSessionTests : IDisposable
         Directory.Delete(_receipts, recursive: true);
     }
 
-    private static readonly ZendeskSearchCriteria Criteria =
+    private static readonly TicketSearchCriteria Criteria =
         new(Organization: "Example Org");
 
     private int _searches;
 
     private BulkDeleteReviewSession NewSession(
-        IEnumerable<ZendeskTicketSummary> tickets,
+        IEnumerable<TicketSummary> tickets,
         FakeDeleteApi? api = null,
         bool complete = true,
         bool withExecutor = true)
@@ -91,7 +91,7 @@ public class BulkDeleteReviewSessionTests : IDisposable
 
         await session.SignInAsync();
 
-        var message = await session.SearchAsync(new ZendeskSearchCriteria());
+        var message = await session.SearchAsync(new TicketSearchCriteria());
 
         Assert.NotNull(message);
         Assert.Equal(0, _searches);

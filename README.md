@@ -76,13 +76,10 @@ Direct CLI commands are also available for scripting and development.
 | `serve [--port <n>] [--no-browser]` | Open the local web UI. See [Web UI](#web-ui). | Listens on 127.0.0.1 only. What the pages do depends on the active profile's mode. |
 | `configure [status \| profile <name> \| profile delete <name> \| use <name> \| import [file]]` | Manage profiles, connections and credentials. `import` moves a settings file into place (see [Configuration storage](#configuration-storage)). | Local configuration and Windows Credential Manager only. |
 | `backup-aggregator inventory-review <tenant> \| --all` | Consolidated Acronis inventory review. | Read-only in production mode. |
-| `backup-aggregator ticket preview` | Generate and display a Zendesk ticket draft. | None. |
-| `backup-aggregator ticket submit` | Create a Zendesk ticket from a completed review. | **Writes to Zendesk.** |
 | `backup-aggregator scoped-review` | Review only tenants entitled to monitoring in Business Central, plus the operator's own tenant. | Read-only Acronis and Business Central calls; interactive Business Central sign-in. |
 | `backup-aggregator ticket preview --scoped` / `ticket submit --scoped` | Ticket from a complete scoped review. | `submit` **writes to Zendesk.** |
 | `dev acronis-tenants --production [--names]` | Tenant discovery diagnostics. | Read-only Acronis calls. |
 | `usage-report [--names]` | Acronis storage per customer against Business Central billing for the backup items. See [Usage report](#usage-report). | Read-only Business Central and Acronis calls in production mode; interactive Business Central sign-in. |
-| `dev usage-compare --production [--metric <name>] [--names]` | Read-only comparison of Business Central backup quantities with Acronis `storage_total`, per customer. The developer forerunner of `usage-report`. | Read-only Business Central and Acronis calls. |
 | `dev acronis-usage --production [--metric <name>]... [--tenant <text>] [--names [--out <path>]]` | Per-tenant Acronis usage probe for joining to other data. | Read-only Acronis calls. |
 | `dev bc-subscriptions [--production]` | Business Central subscription evidence diagnostics. | Read-only; `--production` signs in interactively. |
 | `dev zendesk-bulk-delete --production [--organization <name>] [--sender <name>] [--requester <email>] [--domain <domain>] [--text <text>] [--dry-run \| --delete [--include <ids>] [--exclude <ids>] [--receipt-dir <path>]]` | Zendesk bulk delete: sign in, search, preview; with `--dry-run` shows the requests, with `--delete` deletes the selection after two typed confirmations and writes a receipt. | Read-only by default. **`--delete` deletes Zendesk tickets** (recoverable for 30 days); browser sign-in, interactive only. |
@@ -345,7 +342,7 @@ Ticketing is not an independent operational module. It is an integration capabil
 
 BackupAggregator can:
 
-- Generate a ticket draft from a completed backup review.
+- Generate a ticket draft from a complete monitored (scoped) review.
 - Preview the subject and internal ticket content.
 - Submit the ticket to a configured Zendesk destination.
 - Display the resulting ticket ID and browser link.
@@ -356,7 +353,7 @@ Tickets include review findings and unclassified resources while suppressing hea
 ### Preview a ticket
 
 ```cmd
-dotnet run --project src\SupportToolkit -- backup-aggregator ticket preview
+dotnet run --project src\SupportToolkit -- backup-aggregator ticket preview --scoped
 ```
 
 A preview does not create a Zendesk ticket.
@@ -364,7 +361,7 @@ A preview does not create a Zendesk ticket.
 ### Submit a ticket
 
 ```cmd
-dotnet run --project src\SupportToolkit -- backup-aggregator ticket submit
+dotnet run --project src\SupportToolkit -- backup-aggregator ticket submit --scoped
 ```
 
 **This command performs a real external write.**
@@ -875,7 +872,7 @@ The main menu provides:
 - Configuration wizard
 - Debug logging toggle
 
-The BackupAggregator menu offers the monitored review (the tenants Business Central entitles, plus the operator's own), ticket preview, and destination-aware ticket submission from that review. It needs a Business Central connection in the active profile, or fixture mode. The all-tenant review and its ticket are not in the menu; they remain available as `inventory-review` and `ticket preview` / `ticket submit` on the command line for development.
+The BackupAggregator menu offers the monitored review (the tenants Business Central entitles, plus the operator's own), ticket preview, and destination-aware ticket submission from that review. It needs a Business Central connection in the active profile, or fixture mode. The all-tenant review is not in the menu; it remains available as `inventory-review` on the command line as a read-only diagnostic, without a ticket. Tickets come only from a complete monitored review, through the same gate in the console, the web page and `ticket preview/submit --scoped`.
 
 Interactive and raw CLI operations share the same application workflows.
 
@@ -931,22 +928,29 @@ src/
     │   ├── Interactive/
     │   └── Web/ (Blazor Server pages, local-only host)
     │
-    ├── Core/
+    ├── Composition/  (chooses fixture or production per run; builds the workflows)
+    │
+    ├── Core/         (infrastructure: no provider, no domain rules)
     │   ├── Configuration/
     │   ├── Secrets/
-    │   ├── MonitoringScope/
-    │   ├── CustomerMapping/ (Matching/ inside)
-    │   ├── Reconciliation/
     │   ├── Ticketing/
+    │   ├── Units/
     │   ├── Logging/
     │   ├── ErrorHandling/
     │   └── Modules/
     │
-    ├── Modules/
+    ├── Domain/       (commercial rules shared by modules)
+    │   ├── Tenants/
+    │   ├── CustomerMapping/ (Matching/ inside)
+    │   ├── MonitoringScope/
+    │   └── Reconciliation/
+    │
+    ├── Modules/      (each module: Production/ is the only part that knows a provider)
     │   ├── BackupAggregator/
     │   │   ├── Fixtures/
     │   │   ├── Models/
     │   │   ├── MonitoringScope/
+    │   │   ├── Production/
     │   │   ├── Reporting/
     │   │   ├── Services/
     │   │   └── Ticketing/
@@ -954,12 +958,13 @@ src/
     │   ├── UsageReport/
     │   │   ├── Fixtures/
     │   │   ├── Models/
-    │   │   ├── Production/   (the only part that knows Acronis and Business Central)
+    │   │   ├── Production/
     │   │   ├── Reporting/
     │   │   └── Services/
     │   │
     │   └── ZendeskBulkDelete/
     │       ├── Models/
+    │       ├── Production/
     │       ├── Reporting/
     │       └── Services/
     │
@@ -977,21 +982,27 @@ scripts/
 
 ### Modules
 
-Modules implement operational workflows and own their domain-specific logic, models, and reporting.
+Modules implement operational workflows and own their logic, models and reporting. They are provider-agnostic: a workflow receives its sources through its constructor, as the module's own types (for example `IBackupAggregatorSources`, `IUsageReportSetup`, `ITicketDirectory`), and never reads the mode or a connection itself. Each module's `Production/` folder is the adapter to the real systems, and the only part of the module that may reference a provider. The Backup Aggregator's `Fixtures/` also reference Acronis, because they fake it, so fixture mode runs the real adapter.
+
+### Composition
+
+`Composition/` builds the workflows for a host. For each module it reads the mode (environment variable, then profile, then the fixture default) on every call and hands the workflow the fixture or production sources, so a profile switched while the program runs takes effect on the next run. Creating production sources never signs in; sign-in happens on the first request.
 
 ### Providers
 
-Providers handle integration with external systems.
+Providers handle integration with external systems, and take resolved connection records rather than the configuration. Each transport is assembled in one pipeline file (`AcronisHttpPipeline`, `BusinessCentralHttpPipeline`, `ZendeskTicketingHttpPipeline`, `ZendeskDeletionHttpPipeline`) that carries its safety wiring: read-only handlers, no redirects, timeouts.
 
-Acronis integrations are separated by responsibility, including tenant discovery, Microsoft 365 resources, and devices.
+Providers map their own data into Domain types (for example Acronis tenants into `TenantRecord`, classifying their kind as a `TenantRole` and their ID as canonical or not), so a provider's conventions are applied once, in its mapping.
 
-Zendesk implements the shared ticket-provider capability.
+Acronis integrations are separated by responsibility, including tenant discovery, Microsoft 365 resources, and devices. Zendesk implements the shared ticket-provider capability and the bulk deletion transport. Business Central supplies subscription evidence and customer names.
 
-Business Central supplies subscription evidence and customer names through neutral Core contracts, so any module can scope itself by entitlement with its own item numbers.
+### Domain
+
+Domain holds the commercial rules shared by modules: the toolkit's tenant type, customer matching, monitoring scope and entitlement, and reconciliation. It may use Core and nothing above it.
 
 ### Core
 
-Core contains shared configuration, secure credential storage, logging, error handling, and ticketing abstractions.
+Core contains shared configuration, secure credential storage, logging, error handling, units and ticketing abstractions. It references neither the Domain nor any provider.
 
 ### CLI and UI
 
@@ -1004,7 +1015,7 @@ Workflows and providers return models and take callbacks. They do not write to a
 - **Progress** is a callback the host supplies to the workflow constructor. The console host passes `ConsoleProgress.Write`; a different host passes its own.
 - **Whether a ticket can be created** is decided in one place, `BackupAggregatorWorkflow.PrepareScopedTicketDraft` and `PrepareScopedTicketSubmissionAsync`. They return a typed result (ready, or not ready with a kind and reasons) instead of throwing for expected conditions. A submission plan bundles the exact draft, the Zendesk destination and the review's numbers, and is what the operator confirms.
 - **The review an operator is working with** is held by `BackupReviewSession`, not by the console menu. It owns the rules: nothing can be prepared before a review, a plan is valid only for the review it was prepared from, and a plan is submitted once. The console menu, and any other interface, are thin adapters over it.
-- **A test enforces the layering** (`LayeringTests`): nothing in `Core`, `Providers` or `Modules` may use the console, reference the `Ui` or `Cli` layers, or reference a web or desktop UI framework. Console reporters (`Reporting/Console*.cs`) and a module's CLI command class (`Modules/<Name>/<Name>Module.cs`) are the adapters. Fix a failure by moving the console code up, not by extending the test's allowlist. A provider-agnostic module (currently the usage report) may reference `Providers` only in its `Production` folder, which maps provider data to the module's own types.
+- **Tests enforce the layering** (`LayeringTests`): nothing in `Core`, `Domain`, `Providers`, `Modules` or `Composition` may use the console, reference the `Ui` or `Cli` layers, or reference a web or desktop UI framework. Console reporters (`Reporting/Console*.cs`) and a module's CLI command class (`Modules/<Name>/<Name>Module.cs`) are the adapters. Core references no provider and no domain; Domain references only Core; the UI references no provider. Every module references `Providers` only in its `Production` folder (and the Backup Aggregator's fakes in `Fixtures`). Only `Composition` and the configuration code read the mode. HTTP clients are built only in the transport pipelines. Kind names and ID formats of a provider stay in its mapping. Fix a failure by moving the code to the right layer, not by extending the test's allowlist.
 
 ---
 

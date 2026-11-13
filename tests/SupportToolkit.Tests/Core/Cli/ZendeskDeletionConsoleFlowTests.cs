@@ -21,7 +21,7 @@ public class ZendeskDeletionConsoleFlowTests : IDisposable
         long[]? include = null,
         long[]? exclude = null) =>
         new(
-            new ZendeskSearchCriteria(FreeText: "example"),
+            new TicketSearchCriteria(FreeText: "example"),
             mode,
             include,
             exclude);

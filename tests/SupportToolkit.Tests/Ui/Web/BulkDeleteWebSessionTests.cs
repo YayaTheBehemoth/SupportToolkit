@@ -13,7 +13,7 @@ namespace SupportToolkit.Tests.Ui.Web;
 /// </summary>
 public class BulkDeleteWebSessionTests : IDisposable
 {
-    private static readonly ZendeskSearchCriteria Criteria =
+    private static readonly TicketSearchCriteria Criteria =
         new(Organization: "Example Org");
 
     private readonly string _receipts = NewTempDirectory();
@@ -25,7 +25,7 @@ public class BulkDeleteWebSessionTests : IDisposable
 
     private BulkDeleteWebSession NewWeb(
         FakeDeleteApi? api = null,
-        Func<CancellationToken, Task<ZendeskOperator>>? signIn = null,
+        Func<CancellationToken, Task<DeletionOperator>>? signIn = null,
         int tickets = 3)
     {
         var list = Closed(tickets).ToArray();
@@ -85,7 +85,7 @@ public class BulkDeleteWebSessionTests : IDisposable
     {
         var web =
             NewWeb(
-                signIn: _ => throw new ZendeskAuthenticationException(
+                signIn: _ => throw new SignInRequiredException(
                     "The sign-in timed out."));
 
         web.StartSignIn();
@@ -104,7 +104,7 @@ public class BulkDeleteWebSessionTests : IDisposable
         web.StartSignIn();
         await WaitUntilIdle(web);
 
-        web.StartSearch(new ZendeskSearchCriteria());
+        web.StartSearch(new TicketSearchCriteria());
         await WaitUntilIdle(web);
 
         Assert.NotNull(web.SearchProblem);

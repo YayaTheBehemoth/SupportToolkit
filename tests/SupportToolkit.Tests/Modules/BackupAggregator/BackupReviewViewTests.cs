@@ -1,3 +1,4 @@
+using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Modules.BackupAggregator.Models;
@@ -25,7 +26,7 @@ public class BackupReviewViewTests
                 new Secrets(),
                 _ => null);
 
-        return await new BackupAggregatorScopedWorkflow(resolver)
+        return await BackupAggregatorComposition.ScopedWorkflow(resolver)
             .ReviewAsync(Today);
     }
 

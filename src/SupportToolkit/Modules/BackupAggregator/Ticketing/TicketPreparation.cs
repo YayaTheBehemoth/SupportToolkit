@@ -84,5 +84,5 @@ public sealed class TicketPreparation<T>
 /// </summary>
 public sealed record TicketSubmissionPlan(
     TicketDraft Draft,
-    ZendeskTicketDestinationPreview Destination,
+    TicketDestinationPreview Destination,
     ReviewSummary Review);

@@ -1,5 +1,5 @@
 using SupportToolkit.Core.Logging;
-using SupportToolkit.Core.Tenants;
+using SupportToolkit.Domain.Tenants;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Providers.Acronis.Devices;
 using SupportToolkit.Providers.Acronis.Microsoft365;
@@ -29,6 +29,8 @@ public sealed class AcronisBackupInventorySource : IBackupInventorySource
                 deviceInventory,
                 normalizer);
     }
+
+    public string SystemName => "Acronis";
 
     public Task<TenantRecord> ResolveExactAsync(
         string tenantName,

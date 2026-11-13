@@ -1,5 +1,5 @@
 using SupportToolkit.Modules.BackupAggregator.Services;
-using SupportToolkit.Core.Tenants;
+using SupportToolkit.Domain.Tenants;
 using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Providers.Acronis.Devices;
 using SupportToolkit.Providers.Acronis.Devices.Dtos;

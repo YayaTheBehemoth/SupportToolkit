@@ -1,4 +1,5 @@
 
+using SupportToolkit.Composition;
 using SupportToolkit.Cli.Commands;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.ErrorHandling;
@@ -31,34 +32,18 @@ var configureCommand =
         configurationStore,
         secretStore);
 
-var tenantDirectoryCommand =
-    new AcronisTenantDirectoryDevCommand(
-        configurationResolver);
-
-var usageProbeCommand =
-    new AcronisUsageDevCommand(
-        configurationResolver);
-
-var usageCompareCommand =
-    new UsageCompareDevCommand(
-        configurationResolver);
-
-var businessCentralDiagnosticsCommand =
-    new BusinessCentralSubscriptionDevCommand(
-        configurationResolver);
-
-var zendeskBulkDeleteCommand =
-    new ZendeskBulkDeleteDevCommand(
+var devCommands =
+    DevCommandTable.Create(
         configurationResolver);
 
 var backupAggregatorWorkflow =
-    new BackupAggregatorWorkflow(
+    BackupAggregatorComposition.Workflow(
         configurationResolver,
         ConsoleProgress.Write,
         ReviewRunMode.Manual);
 
 var backupAggregatorScopedWorkflow =
-    new BackupAggregatorScopedWorkflow(
+    BackupAggregatorComposition.ScopedWorkflow(
         configurationResolver,
         progress: ConsoleProgress.Write,
         runMode: ReviewRunMode.Manual);
@@ -73,7 +58,7 @@ ISupportToolkitModule[] modules =
 
     new UsageReportModule(
         new UsageReportSession(
-            new UsageReportWorkflow(
+            UsageReportComposition.Workflow(
                 configurationResolver,
                 ConsoleProgress.Write)))
 ];
@@ -132,13 +117,13 @@ try
         var usageProgress = new ProgressFeed();
 
         var webWorkflow =
-            new BackupAggregatorWorkflow(
+            BackupAggregatorComposition.Workflow(
                 configurationResolver,
                 webProgress.Write,
                 ReviewRunMode.Manual);
 
         var webScopedWorkflow =
-            new BackupAggregatorScopedWorkflow(
+            BackupAggregatorComposition.ScopedWorkflow(
                 configurationResolver,
                 progress: webProgress.Write,
                 runMode: ReviewRunMode.Manual);
@@ -156,377 +141,35 @@ try
                         webScopedWorkflow),
                     webProgress),
                 new BulkDeleteWebSession(
-                    async token =>
-                    {
-                        try
-                        {
-                            var connection =
-                                await configurationResolver
-                                    .GetZendeskDeletionConnectionAsync(token);
-
-                            return new BulkDeleteAvailability(
-                                true,
-                                connection.Subdomain,
-                                null);
-                        }
-                        catch (InvalidOperationException exception)
-                        {
-                            return new BulkDeleteAvailability(
-                                false,
-                                null,
-                                exception.Message);
-                        }
-                    },
-                    async token =>
-                    {
-                        // Deletion is enabled here, and only here: this is
-                        // the connection that can delete, used after the
-                        // operator's typed confirmations.
-                        var session =
-                            await ZendeskBulkDeleteSession.CreateAsync(
-                                configurationResolver,
-                                enableDeletion: true,
-                                cancellationToken: token);
-
-                        return new BulkDeleteConnection(
-                            BulkDeleteReviewSession.From(session),
-                            session);
-                    }),
+                    token => ZendeskBulkDeleteComposition.GetAvailabilityAsync(
+                        configurationResolver,
+                        token),
+                    // Deletion is enabled here, and only here: this is the
+                    // connection that can delete, used after the
+                    // operator's typed confirmations.
+                    token => ZendeskBulkDeleteComposition.ConnectWithDeletionAsync(
+                        configurationResolver,
+                        token)),
                 new UsageReportWebSession(
                     new UsageReportSession(
-                        new UsageReportWorkflow(
+                        UsageReportComposition.Workflow(
                             configurationResolver,
                             usageProgress.Write)),
                     usageProgress)));
     }
 
     /*
-     * Host-level developer utility.
-     *
-     * --production explicitly authorizes a read-only Acronis API call.
-     * --names additionally permits customer names in console output.
-     *
-     * This is infrastructure diagnostics, not an operational module.
+     * Developer diagnostics: `dev <name> ...`. Each command validates its
+     * own arguments; an unknown name falls through to module dispatch.
      */
-    if (args.Length >= 2
-        && string.Equals(
-            args[0],
-            "dev",
-            StringComparison.OrdinalIgnoreCase)
-        && string.Equals(
-            args[1],
-            "acronis-tenants",
-            StringComparison.OrdinalIgnoreCase))
+    var devCommand =
+        DevCommandTable.Find(
+            devCommands,
+            args);
+
+    if (devCommand is not null)
     {
-        var validArguments =
-            (args.Length == 3 || args.Length == 4)
-            && string.Equals(
-                args[2],
-                "--production",
-                StringComparison.OrdinalIgnoreCase)
-            && (args.Length == 3
-                || string.Equals(
-                    args[3],
-                    "--names",
-                    StringComparison.OrdinalIgnoreCase));
-
-        if (!validArguments)
-        {
-            Console.Error.WriteLine(
-                "Usage: SupportToolkit dev acronis-tenants " +
-                "--production [--names]");
-            return 1;
-        }
-
-        return await tenantDirectoryCommand.RunAsync(
-            Console.Out,
-            showNames: args.Length == 4);
-    }
-
-    /*
-     * Host-level developer utility: Zendesk bulk delete, sign-in, search
-     * and preview only. Nothing is deleted. Interactive only.
-     *
-     * --production explicitly authorizes the interactive Zendesk
-     * sign-in and read-only calls, using the profile's Zendesk deletion
-     * connection (not the ticketing connection).
-     */
-    if (args.Length >= 2
-        && string.Equals(
-            args[0],
-            "dev",
-            StringComparison.OrdinalIgnoreCase)
-        && string.Equals(
-            args[1],
-            "zendesk-bulk-delete",
-            StringComparison.OrdinalIgnoreCase))
-    {
-        if (!ZendeskBulkDeleteDevCommand.TryParseArguments(
-                args.Skip(2).ToArray(),
-                out var bulkDeleteOptions,
-                out var bulkDeleteError))
-        {
-            Console.Error.WriteLine(bulkDeleteError);
-            return 1;
-        }
-
-        return await zendeskBulkDeleteCommand.RunAsync(
-            Console.Out,
-            bulkDeleteOptions!);
-    }
-
-    /*
-     * Host-level developer utility.
-     *
-     * --production explicitly authorizes read-only Acronis calls.
-     * --names adds one row per customer tenant (customer names);
-     * --out writes those rows to a file outside any git working tree.
-     */
-    if (args.Length >= 2
-        && string.Equals(
-            args[0],
-            "dev",
-            StringComparison.OrdinalIgnoreCase)
-        && string.Equals(
-            args[1],
-            "acronis-usage",
-            StringComparison.OrdinalIgnoreCase))
-    {
-        if (!AcronisUsageDevCommand.TryParseArguments(
-                args.Skip(2).ToArray(),
-                out var usageOptions,
-                out var usageError))
-        {
-            Console.Error.WriteLine(usageError);
-            return 1;
-        }
-
-        return await usageProbeCommand.RunAsync(
-            Console.Out,
-            usageOptions!);
-    }
-
-    /*
-     * Host-level developer utility: read-only comparison of Business
-     * Central backup quantities with Acronis usage. --production
-     * explicitly authorizes the read-only reads.
-     */
-    if (args.Length >= 2
-        && string.Equals(
-            args[0],
-            "dev",
-            StringComparison.OrdinalIgnoreCase)
-        && string.Equals(
-            args[1],
-            "usage-compare",
-            StringComparison.OrdinalIgnoreCase))
-    {
-        if (!UsageCompareDevCommand.TryParseArguments(
-                args.Skip(2).ToArray(),
-                out var compareOptions,
-                out var compareError))
-        {
-            Console.Error.WriteLine(compareError);
-            return 1;
-        }
-
-        return await usageCompareCommand.RunAsync(
-            Console.Out,
-            compareOptions!);
-    }
-
-    /*
-     * Host-level developer utility.
-     *
-     * --production explicitly authorizes a read-only Business Central
-     * read with an interactive sign-in. Output is aggregate counts only.
-     */
-    if (args.Length >= 2
-        && string.Equals(
-            args[0],
-            "dev",
-            StringComparison.OrdinalIgnoreCase)
-        && string.Equals(
-            args[1],
-            "bc-subscriptions",
-            StringComparison.OrdinalIgnoreCase))
-    {
-        if (args.Length != 3
-            || !string.Equals(
-                args[2],
-                "--production",
-                StringComparison.OrdinalIgnoreCase))
-        {
-            Console.Error.WriteLine(
-                "Usage: SupportToolkit dev bc-subscriptions " +
-                "--production");
-
-            return 1;
-        }
-
-        return await businessCentralDiagnosticsCommand.RunAsync(
-            Console.Out);
-    }
-
-    /*
-     * Host-level developer utility.
-     *
-     * --production explicitly authorizes read-only Business Central
-     * (interactive sign-in) and Acronis reads. Nothing is stored.
-     * --names additionally prints names and customer numbers.
-     */
-    if (args.Length >= 2
-        && string.Equals(
-            args[0],
-            "dev",
-            StringComparison.OrdinalIgnoreCase)
-        && string.Equals(
-            args[1],
-            "customer-matching",
-            StringComparison.OrdinalIgnoreCase))
-    {
-        var matchingOptions =
-            args.Skip(2).ToArray();
-
-        var validMatchingArguments =
-            matchingOptions.Length is >= 1 and <= 3
-            && matchingOptions.Contains(
-                "--production",
-                StringComparer.OrdinalIgnoreCase)
-            && matchingOptions.All(
-                option =>
-                    option.Equals(
-                        "--production",
-                        StringComparison.OrdinalIgnoreCase)
-                    || option.Equals(
-                        "--names",
-                        StringComparison.OrdinalIgnoreCase)
-                    || option.Equals(
-                        "--why",
-                        StringComparison.OrdinalIgnoreCase))
-            && matchingOptions.Distinct(
-                StringComparer.OrdinalIgnoreCase).Count()
-                == matchingOptions.Length;
-
-        if (!validMatchingArguments)
-        {
-            Console.Error.WriteLine(
-                "Usage: SupportToolkit dev customer-matching " +
-                "--production [--names] [--why]");
-
-            return 1;
-        }
-
-        return await new CustomerMatchingDevCommand(
-                configurationResolver)
-            .RunAsync(
-                Console.Out,
-                showNames: matchingOptions.Contains(
-                    "--names",
-                    StringComparer.OrdinalIgnoreCase),
-                explainUnmatched: matchingOptions.Contains(
-                    "--why",
-                    StringComparer.OrdinalIgnoreCase));
-    }
-
-    /*
-     * Fixture-only monitoring-scope investigation.
-     *
-     * No external providers are accessed.
-     */
-    if (args.Length >= 2
-        && string.Equals(
-            args[0],
-            "dev",
-            StringComparison.OrdinalIgnoreCase)
-        && string.Equals(
-            args[1],
-            "monitoring-scope",
-            StringComparison.OrdinalIgnoreCase))
-    {
-        if (args.Length != 2)
-        {
-            Console.Error.WriteLine(
-                "Usage: SupportToolkit dev monitoring-scope"
-            );
-
-            return 1;
-        }
-
-        return new MonitoringScopeFixtureCommand()
-            .Run(
-                Console.Out,
-                DateOnly.FromDateTime(
-                    DateTime.Today
-                )
-            );
-    }
-
-    /*
-     * Fixture-only customer mapping and shadow reconciliation.
-     *
-     * No external providers are accessed and nothing is persisted.
-     */
-    if (args.Length >= 2
-        && string.Equals(
-            args[0],
-            "dev",
-            StringComparison.OrdinalIgnoreCase)
-        && string.Equals(
-            args[1],
-            "customer-mapping",
-            StringComparison.OrdinalIgnoreCase))
-    {
-        if (args.Length != 2)
-        {
-            Console.Error.WriteLine(
-                "Usage: SupportToolkit dev customer-mapping"
-            );
-
-            return 1;
-        }
-
-        return await new CustomerMappingFixtureCommand()
-            .RunAsync(
-                Console.Out,
-                DateOnly.FromDateTime(
-                    DateTime.Today
-                )
-            );
-    }
-
-    /*
-     * Fixture-only scoped BackupAggregator execution.
-     *
-     * Uses synthetic tenant selection and in-memory inventory
-     * providers. Does not affect production module dispatch.
-     */
-    if (args.Length >= 2
-        && string.Equals(
-            args[0],
-            "dev",
-            StringComparison.OrdinalIgnoreCase)
-        && string.Equals(
-            args[1],
-            "scoped-backup-review",
-            StringComparison.OrdinalIgnoreCase))
-    {
-        if (args.Length != 2)
-        {
-            Console.Error.WriteLine(
-                "Usage: SupportToolkit dev scoped-backup-review"
-            );
-
-            return 1;
-        }
-
-        return await new ScopedBackupReviewFixtureCommand()
-            .RunAsync(
-                Console.Out,
-                DateOnly.FromDateTime(
-                    DateTime.Today
-                )
-            );
+        return await devCommand.RunAsync(args);
     }
 
     /*
@@ -665,8 +308,6 @@ static void PrintUsage(
         "  dev acronis-tenants --production [--names]");
     Console.WriteLine(
         "  dev acronis-usage --production [--metric <name>]... [--tenant <text>] [--names [--out <path>]]");
-    Console.WriteLine(
-        "  dev usage-compare --production [--metric <name>] [--names]");
     Console.WriteLine(
         "  dev bc-subscriptions --production");
     Console.WriteLine(

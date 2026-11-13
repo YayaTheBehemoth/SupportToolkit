@@ -1,9 +1,9 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using SupportToolkit.Core.Configuration;
-using SupportToolkit.Core.CustomerMapping;
-using SupportToolkit.Core.CustomerMapping.Matching;
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.CustomerMapping;
+using SupportToolkit.Domain.CustomerMapping.Matching;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Providers.Acronis.Tenants;
@@ -60,9 +60,9 @@ public sealed class CustomerMatchingDevCommand
                 cancellationToken);
 
         var bundle =
-            await BusinessCentralProviderFactory.CreateAsync(
-                _configurationResolver,
-                cancellationToken);
+            BusinessCentralProviderFactory.Create(
+                await _configurationResolver.GetBusinessCentralConnectionAsync(
+                    cancellationToken));
 
         output.WriteLine("Reading Business Central (read-only)...");
 
@@ -93,16 +93,16 @@ public sealed class CustomerMatchingDevCommand
         output.WriteLine("Reading Acronis tenants (read-only)...");
 
         using var session =
-            await AcronisReadSession.CreateAsync(
-                _configurationResolver,
-                cancellationToken);
+            AcronisReadSession.Create(
+                await _configurationResolver.GetAcronisConnectionAsync(
+                    cancellationToken));
 
         var tenants =
             await session.Provider.GetTenantsAsync(
                 cancellationToken);
 
         var acronis =
-            AcronisCustomerParties.ForResolution(tenants.ToTenantRecords());
+            TenantCustomerParties.ForResolution(tenants.ToTenantRecords());
 
         var result =
             await new AutoCustomerMappingResolver()
@@ -155,7 +155,7 @@ public sealed class CustomerMatchingDevCommand
     /// Why each tenant without an accepted link got none.
     /// </summary>
     public static IReadOnlyList<UnmatchedPartyDiagnosis> Explain(
-        AcronisPartyBuild acronis,
+        TenantPartyBuild acronis,
         ScopedCustomerParties matched,
         ScopedCustomerParties allCustomers,
         SmartSubscriptionEvidence evidence,
@@ -163,7 +163,7 @@ public sealed class CustomerMatchingDevCommand
     {
         var acceptedTenants =
             result.Accepted
-                .Select(mapping => mapping.AcronisTenantId.Trim())
+                .Select(mapping => mapping.TenantId.Trim())
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var linkedCustomers =
@@ -178,7 +178,7 @@ public sealed class CustomerMatchingDevCommand
                 .Where(
                     exception => exception.Kind
                         != CustomerMatchExceptionKind.WeakNameCandidate)
-                .SelectMany(exception => exception.AcronisTenantIds)
+                .SelectMany(exception => exception.TenantIds)
                 .Select(id => id.Trim())
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -343,7 +343,7 @@ public sealed class CustomerMatchingDevCommand
         TextWriter output,
         IReadOnlyList<MonitoringEntitlementObservation> observations,
         ScopedCustomerParties bc,
-        AcronisPartyBuild acronis,
+        TenantPartyBuild acronis,
         AutoMappingResult result,
         bool showNames)
     {
@@ -470,7 +470,7 @@ public sealed class CustomerMatchingDevCommand
     private static void WriteWorksheet(
         TextWriter output,
         ScopedCustomerParties bc,
-        AcronisPartyBuild acronis,
+        TenantPartyBuild acronis,
         AutoMappingResult result,
         IReadOnlyList<string> bcGaps,
         Func<string, CustomerEntitlementState> stateOf)
@@ -488,8 +488,8 @@ public sealed class CustomerMatchingDevCommand
         string Pair(CustomerMappingRecord mapping) =>
             $"BC {mapping.BcCustomerNo.Trim()} " +
             $"{Name(bcById, mapping.BcCustomerNo)}  <->  " +
-            $"Acronis {Short(mapping.AcronisTenantId)} " +
-            $"{Name(acronisById, mapping.AcronisTenantId)}";
+            $"Acronis {Short(mapping.TenantId)} " +
+            $"{Name(acronisById, mapping.TenantId)}";
 
         output.WriteLine();
         output.WriteLine("WORKSHEET (local review, not stored)");

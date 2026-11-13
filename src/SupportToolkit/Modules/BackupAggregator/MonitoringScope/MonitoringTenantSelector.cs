@@ -1,7 +1,7 @@
-using SupportToolkit.Core.CustomerMapping;
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.CustomerMapping;
+using SupportToolkit.Domain.MonitoringScope;
 
-using SupportToolkit.Core.Tenants;
+using SupportToolkit.Domain.Tenants;
 
 namespace SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 
@@ -14,7 +14,7 @@ namespace SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 /// </summary>
 public sealed record ResolvedMonitoringCustomerIdentity(
     string BusinessCentralCustomerNumber,
-    string AcronisTenantId
+    string TenantId
 );
 
 public enum MonitoringTenantSelectionStatus
@@ -206,7 +206,7 @@ public sealed class MonitoringTenantSelector
             var hasBusinessCentralLink =
                 identities.Any(
                     identity => string.Equals(
-                        identity.AcronisTenantId?.Trim(),
+                        identity.TenantId?.Trim(),
                         ownId,
                         StringComparison.OrdinalIgnoreCase));
 
@@ -239,11 +239,7 @@ public sealed class MonitoringTenantSelector
                         StringComparison.OrdinalIgnoreCase))
                 .Where(
                     tenant =>
-                        string.Equals(
-                            tenant.Kind,
-                            "customer",
-                            StringComparison.OrdinalIgnoreCase
-                        )
+                        tenant.Role == TenantRole.Customer
                 )
                 .OrderBy(
                     tenant => tenant.Name,
@@ -293,7 +289,7 @@ public sealed class MonitoringTenantSelector
                 continue;
             }
 
-            if (!Guid.TryParse(tenant.Id, out _))
+            if (tenant.CanonicalId is null)
             {
                 findings.Add(
                     Review(
@@ -322,7 +318,7 @@ public sealed class MonitoringTenantSelector
                     .Where(
                         identity =>
                             string.Equals(
-                                identity.AcronisTenantId?.Trim(),
+                                identity.TenantId?.Trim(),
                                 tenant.Id,
                                 StringComparison.OrdinalIgnoreCase
                             )
@@ -499,15 +495,12 @@ public sealed class MonitoringTenantSelector
                             tenant.Id?.Trim(),
                             operatorTenantId,
                             StringComparison.OrdinalIgnoreCase)
-                        && string.Equals(
-                            tenant.Kind,
-                            "customer",
-                            StringComparison.OrdinalIgnoreCase));
+                        && tenant.Role == TenantRole.Customer);
 
         if (operatorTenant is not null)
         {
             findings.Add(
-                Guid.TryParse(operatorTenant.Id, out _)
+                operatorTenant.CanonicalId is not null
                     ? new MonitoringTenantSelectionFinding(
                         operatorTenant,
                         MonitoringTenantSelectionStatus.CandidateForInventory,
@@ -545,7 +538,7 @@ public sealed class MonitoringTenantSelector
                 .Where(
                     identity =>
                         existingTenantIds.Contains(
-                            identity.AcronisTenantId?.Trim()
+                            identity.TenantId?.Trim()
                             ?? string.Empty
                         )
                 )
@@ -590,10 +583,7 @@ public sealed class MonitoringTenantSelector
             acronisTenants
                 .Where(
                     tenant =>
-                        string.Equals(
-                            tenant.Kind,
-                            "customer",
-                            StringComparison.OrdinalIgnoreCase)
+                        tenant.Role == TenantRole.Customer
                         && excluded.Contains(tenant.Id?.Trim() ?? string.Empty))
                 .OrderBy(
                     tenant => tenant.Name,

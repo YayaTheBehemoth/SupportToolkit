@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.Production;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Providers.Acronis.Devices;
