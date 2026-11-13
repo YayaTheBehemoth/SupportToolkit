@@ -1,11 +1,11 @@
 
-using System.Net;
 using SupportToolkit.Core.Modules;
 using SupportToolkit.Modules.Compliance.Fixtures;
 using SupportToolkit.Modules.Compliance.Reporting;
 using SupportToolkit.Modules.Compliance.Services;
 using SupportToolkit.Providers.MicrosoftGraph.ManagedDevices;
 using SupportToolkit.Providers.MicrosoftGraph.ComplianceSettings;
+using SupportToolkit.Providers.MicrosoftGraph.Transport;
 
 namespace SupportToolkit.Modules.Compliance;
 
@@ -93,20 +93,7 @@ public sealed class ComplianceModule : ISupportToolkitModule
         }
 
         // Preserve the existing Dev Proxy workflow.
-        using var handler = new HttpClientHandler
-        {
-            UseProxy = true,
-            Proxy = new WebProxy(
-                "http://127.0.0.1:8000"
-            ),
-            UseDefaultCredentials = false,
-            UseCookies = false
-        };
-
-        using var httpClient = new HttpClient(handler)
-        {
-            Timeout = TimeSpan.FromSeconds(15)
-        };
+        using var httpClient = GraphDevProxyHttpPipeline.Create();
 
         var deviceProvider = new GraphManagedDeviceProvider(
             httpClient

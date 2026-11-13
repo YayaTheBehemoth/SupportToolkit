@@ -329,7 +329,8 @@ public class LayeringTests
             offenders.Length == 0,
             $"'{construction}' belongs in a transport pipeline " +
             "(AcronisHttpPipeline, BusinessCentralHttpPipeline, " +
-            "ZendeskTicketingHttpPipeline, ZendeskDeletionHttpPipeline):\n  " +
+            "ZendeskTicketingHttpPipeline, ZendeskDeletionHttpPipeline, " +
+            "GraphDevProxyHttpPipeline):\n  " +
             string.Join("\n  ", offenders));
     }
 
