@@ -1,5 +1,4 @@
 using SupportToolkit.Modules.ZendeskBulkDelete.Models;
-using SupportToolkit.Providers.Zendesk.Deletion.Search;
 
 namespace SupportToolkit.Modules.ZendeskBulkDelete.Services;
 
@@ -46,7 +45,7 @@ public static class DeletionPreviewBuilder
     /// Null when the lookup failed: every requester domain is then unknown.
     /// </param>
     public static DeletionPreview Build(
-        ZendeskSearchResult search,
+        TicketSearchResult search,
         IReadOnlyDictionary<long, string>? organizationNames,
         IReadOnlyDictionary<long, string>? userEmails,
         string? directoryNote,
@@ -80,7 +79,7 @@ public static class DeletionPreviewBuilder
     }
 
     private static DeletionPreviewTicket ToPreviewTicket(
-        ZendeskTicketSummary ticket,
+        TicketSummary ticket,
         IReadOnlyDictionary<long, string>? organizationNames,
         IReadOnlyDictionary<long, string>? userEmails,
         DateTimeOffset now)

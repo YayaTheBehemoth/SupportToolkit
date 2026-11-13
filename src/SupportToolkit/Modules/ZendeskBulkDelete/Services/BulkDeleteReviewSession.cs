@@ -1,5 +1,4 @@
 using SupportToolkit.Modules.ZendeskBulkDelete.Models;
-using SupportToolkit.Providers.Zendesk.Deletion.Search;
 
 namespace SupportToolkit.Modules.ZendeskBulkDelete.Services;
 
@@ -126,25 +125,32 @@ public sealed record BulkDeleteResultSummary(
 /// </summary>
 public sealed class BulkDeleteReviewSession
 {
-    private readonly Func<CancellationToken, Task<ZendeskOperator>> _signIn;
+    private readonly Func<CancellationToken, Task<DeletionOperator>> _signIn;
 
-    private readonly Func<ZendeskOperator, ZendeskSearchCriteria,
+    private readonly Func<DeletionOperator, TicketSearchCriteria,
         CancellationToken, Task<DeletionPreviewResult>> _preview;
 
     private readonly ZendeskDeletionExecutor? _executor;
     private readonly TimeProvider _timeProvider;
+    private readonly Func<TicketSearchCriteria, string>? _describeQuery;
 
     private readonly object _lock = new();
 
     private DeletionSelection? _selection;
 
+    /// <param name="describeQuery">
+    /// The ticketing system's query for the criteria, which throws
+    /// ArgumentException for a term it cannot search for; the message is
+    /// shown to the operator. Null skips that check.
+    /// </param>
     public BulkDeleteReviewSession(
         string instance,
-        Func<CancellationToken, Task<ZendeskOperator>> signIn,
-        Func<ZendeskOperator, ZendeskSearchCriteria, CancellationToken,
+        Func<CancellationToken, Task<DeletionOperator>> signIn,
+        Func<DeletionOperator, TicketSearchCriteria, CancellationToken,
             Task<DeletionPreviewResult>> preview,
         ZendeskDeletionExecutor? executor,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        Func<TicketSearchCriteria, string>? describeQuery = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(instance);
 
@@ -153,24 +159,10 @@ public sealed class BulkDeleteReviewSession
         _preview = preview ?? throw new ArgumentNullException(nameof(preview));
         _executor = executor;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _describeQuery = describeQuery;
     }
 
-    /// <summary>Builds a session over the real connection.</summary>
-    public static BulkDeleteReviewSession From(
-        ZendeskBulkDeleteSession session,
-        TimeProvider? timeProvider = null)
-    {
-        ArgumentNullException.ThrowIfNull(session);
-
-        return new BulkDeleteReviewSession(
-            session.Options.Subdomain,
-            session.Workflow.SignInAsync,
-            session.Workflow.PreviewAsync,
-            session.Executor,
-            timeProvider);
-    }
-
-    /// <summary>The Zendesk subdomain tickets are deleted from.</summary>
+    /// <summary>The ticketing instance tickets are deleted from.</summary>
     public string Instance { get; }
 
     public bool CanDelete => _executor is not null;
@@ -178,12 +170,12 @@ public sealed class BulkDeleteReviewSession
     public BulkDeleteStage Stage { get; private set; } =
         BulkDeleteStage.SignedOut;
 
-    public ZendeskOperator? Operator { get; private set; }
+    public DeletionOperator? Operator { get; private set; }
 
     public DeletionPreviewResult? Preview { get; private set; }
 
     /// <summary>The search terms the current preview came from.</summary>
-    public ZendeskSearchCriteria? Criteria { get; private set; }
+    public TicketSearchCriteria? Criteria { get; private set; }
 
     public DeletionPlan? Plan { get; private set; }
 
@@ -222,7 +214,7 @@ public sealed class BulkDeleteReviewSession
     /// search throws, and leaves no preview.
     /// </summary>
     public async Task<string?> SearchAsync(
-        ZendeskSearchCriteria criteria,
+        TicketSearchCriteria criteria,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(criteria);
@@ -242,7 +234,7 @@ public sealed class BulkDeleteReviewSession
 
         try
         {
-            ZendeskSearchQuery.Build(criteria);
+            _describeQuery?.Invoke(criteria);
         }
         catch (ArgumentException exception)
         {

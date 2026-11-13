@@ -477,7 +477,7 @@ else if (session is not null)
 
     private void OnChanged() => _ = InvokeAsync(StateHasChanged);
 
-    private static IEnumerable<(string Label, string Value)> Terms(ZendeskSearchCriteria? criteria)
+    private static IEnumerable<(string Label, string Value)> Terms(TicketSearchCriteria? criteria)
     {
         if (criteria is null)
         {
@@ -502,7 +502,7 @@ else if (session is not null)
         ClearTyped();
 
         State.BulkDelete!.StartSearch(
-            new ZendeskSearchCriteria(
+            new TicketSearchCriteria(
                 Blank(_organization),
                 Blank(_requester),
                 Blank(_domain),

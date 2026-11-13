@@ -1,4 +1,4 @@
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Providers.BusinessCentral.Transport;
 
 namespace SupportToolkit.Providers.BusinessCentral.Subscriptions;

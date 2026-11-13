@@ -1,7 +1,7 @@
-using SupportToolkit.Core.CustomerMapping;
-using SupportToolkit.Core.MonitoringScope;
-using SupportToolkit.Core.Reconciliation;
-using SupportToolkit.Core.Tenants;
+using SupportToolkit.Domain.CustomerMapping;
+using SupportToolkit.Domain.MonitoringScope;
+using SupportToolkit.Domain.Reconciliation;
+using SupportToolkit.Domain.Tenants;
 
 namespace SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 
@@ -293,8 +293,8 @@ public static class MonitoringScopeReportBuilder
                 ResultOf(reconciliation!, discrepancy);
 
             return new ScopeDiscrepancy(
-                NameOf(result?.AcronisTenantId),
-                result?.AcronisTenantId,
+                NameOf(result?.TenantId),
+                result?.TenantId,
                 result?.BcCustomerNo,
                 discrepancy);
         }
@@ -313,9 +313,9 @@ public static class MonitoringScopeReportBuilder
                     result =>
                         new ScopeException(
                             result.Bucket,
-                            result.AcronisTenantId is null
+                            result.TenantId is null
                                 ? result.SubjectId
-                                : $"{NameOf(result.AcronisTenantId)} | " +
+                                : $"{NameOf(result.TenantId)} | " +
                                   (result.BcCustomerNo ?? "<no customer>"),
                             result.Reasons))
                 .ToArray();

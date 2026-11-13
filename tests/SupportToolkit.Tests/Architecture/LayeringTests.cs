@@ -18,7 +18,7 @@ namespace SupportToolkit.Tests.Architecture;
 public class LayeringTests
 {
     private static readonly string[] LowerLayers =
-        ["Core", "Providers", "Modules"];
+        ["Core", "Domain", "Providers", "Modules", "Composition"];
 
     /// <summary>
     /// Files below the UI that may use the console, and why. Console
@@ -95,19 +95,119 @@ public class LayeringTests
     public void CoreAndProviders_DoNotReferenceModules()
     {
         var offenders =
-            SourceFiles(["Core", "Providers"])
+            SourceFiles(["Core", "Domain", "Providers"])
                 .Where(file => ModulesReference.IsMatch(file.Code))
                 .Select(file => file.RelativePath)
                 .ToArray();
 
         Assert.True(
             offenders.Length == 0,
-            "Core and Providers sit below Modules:\n  " +
+            "Core, Domain and Providers sit below Modules:\n  " +
             string.Join("\n  ", offenders));
     }
 
     private static readonly Regex ProvidersReference =
         new(@"\bSupportToolkit\.Providers\b", RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Providers build on Core (configuration records, logging, shared
+    /// types); Core never depends on a provider. Wiring that needs both
+    /// lives in Composition/ or a module's Production/ adapter.
+    /// </summary>
+    [Fact]
+    public void Core_DoesNotReferenceProviders()
+    {
+        var files = SourceFiles(["Core"]).ToArray();
+
+        Assert.NotEmpty(files);
+
+        var offenders =
+            files
+                .Where(file => ProvidersReference.IsMatch(file.Code))
+                .Select(file => file.RelativePath)
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            "Core sits below Providers:\n  " +
+            string.Join("\n  ", offenders));
+    }
+
+    /// <summary>
+    /// The interfaces work with modules' own types (search criteria,
+    /// sign-in expired, and so on), never a provider's.
+    /// </summary>
+    [Fact]
+    public void Ui_DoesNotReferenceProviders()
+    {
+        var root = SourceRoot();
+
+        var files =
+            Directory.EnumerateFiles(Path.Combine(root, "Ui"), "*.*", SearchOption.AllDirectories)
+                .Where(path => path.EndsWith(".cs", StringComparison.Ordinal)
+                               || path.EndsWith(".razor", StringComparison.Ordinal))
+                .ToArray();
+
+        Assert.NotEmpty(files);
+
+        var offenders =
+            files
+                .Where(path => ProvidersReference.IsMatch(StripComments(File.ReadAllText(path))))
+                .Select(path => Path.GetRelativePath(root, path).Replace('\\', '/'))
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            "The UI uses module types, not provider types:\n  " +
+            string.Join("\n  ", offenders));
+    }
+
+    private static readonly Regex AboveDomainReference =
+        new(
+            @"\bSupportToolkit\.(Providers|Modules|Composition|Cli|Ui)\b",
+            RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Domain/ holds the commercial rules shared by modules: customer
+    /// matching, monitoring scope and entitlement, reconciliation, and the
+    /// toolkit's tenant type. It may use Core, and nothing above it: no
+    /// provider, no module, no host or interface.
+    /// </summary>
+    [Fact]
+    public void Domain_DependsOnlyOnCore()
+    {
+        var files = SourceFiles(["Domain"]).ToArray();
+
+        Assert.NotEmpty(files);
+
+        var offenders =
+            files
+                .Where(file => AboveDomainReference.IsMatch(file.Code))
+                .Select(file => file.RelativePath)
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            "Domain may use Core only:\n  " +
+            string.Join("\n  ", offenders));
+    }
+
+    [Fact]
+    public void Core_DoesNotReferenceTheDomain()
+    {
+        var offenders =
+            SourceFiles(["Core"])
+                .Where(file => file.Code.Contains(
+                    "SupportToolkit.Domain",
+                    StringComparison.Ordinal))
+                .Select(file => file.RelativePath)
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            "Core is infrastructure below the domain:\n  " +
+            string.Join("\n  ", offenders));
+    }
 
     /// <summary>
     /// Modules whose rules must not know which systems the data came from,
@@ -118,12 +218,14 @@ public class LayeringTests
     private static readonly (string Module, string[] AllowedFolders)[] ProviderAgnosticModules =
     [
         ("Modules/UsageReport/", ["/Production/"]),
-        ("Modules/BackupAggregator/", ["/Production/", "/Fixtures/"])
+        ("Modules/BackupAggregator/", ["/Production/", "/Fixtures/"]),
+        ("Modules/ZendeskBulkDelete/", ["/Production/"])
     ];
 
     [Theory]
     [InlineData("Modules/UsageReport/")]
     [InlineData("Modules/BackupAggregator/")]
+    [InlineData("Modules/ZendeskBulkDelete/")]
     public void ProviderAgnosticModules_ReferenceProviders_OnlyInTheirProductionAdapter(
         string module)
     {
@@ -188,6 +290,173 @@ public class LayeringTests
             offenders.Length == 0,
             "The web framework belongs in Ui/Web (and Program.cs, which " +
             "starts it). Everything else stays usable without it:\n  " +
+            string.Join("\n  ", offenders));
+    }
+
+    /// <summary>
+    /// Each transport's safety wiring (read-only handlers, no redirects,
+    /// timeouts) is assembled in one pipeline file, so no other code can
+    /// build a client that skips it.
+    /// </summary>
+    [Theory]
+    [InlineData("new HttpClient(", "HttpPipeline.cs")]
+    [InlineData("new HttpClientHandler", "HttpPipeline.cs")]
+    [InlineData("new AcronisReadOnlyHandler(", "Providers/Acronis/Transport/AcronisHttpPipeline.cs")]
+    public void HttpClients_AreBuiltOnlyInTheTransportPipelines(
+        string construction,
+        string allowedPathSuffix)
+    {
+        var files = AllSourceFiles().ToArray();
+
+        // Not vacuous: the construction does occur, in a pipeline.
+        Assert.Contains(
+            files,
+            file => file.RelativePath.EndsWith(allowedPathSuffix, StringComparison.Ordinal)
+                    && file.Code.Contains(construction, StringComparison.Ordinal));
+
+        var offenders =
+            files
+                .Where(file => !file.RelativePath.EndsWith(
+                    allowedPathSuffix,
+                    StringComparison.Ordinal))
+                .Where(file => file.Code.Contains(
+                    construction,
+                    StringComparison.Ordinal))
+                .Select(file => file.RelativePath)
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            $"'{construction}' belongs in a transport pipeline " +
+            "(AcronisHttpPipeline, BusinessCentralHttpPipeline, " +
+            "ZendeskTicketingHttpPipeline, ZendeskDeletionHttpPipeline):\n  " +
+            string.Join("\n  ", offenders));
+    }
+
+    /// <summary>
+    /// The host chooses fixture or production per run, in the
+    /// composition root. Workflows and production adapters receive their
+    /// sources and never read the mode themselves.
+    /// </summary>
+    [Fact]
+    public void ModeIsRead_OnlyByTheCompositionRootAndConfiguration()
+    {
+        string[] allowed =
+        [
+            "Composition/",
+            "Core/Configuration/",
+            "Cli/Commands/ConfigureCommand"
+        ];
+
+        var files = AllSourceFiles().ToArray();
+
+        Assert.Contains(
+            files,
+            file => file.RelativePath.StartsWith("Composition/", StringComparison.Ordinal)
+                    && file.Code.Contains("GetModuleModeAsync(", StringComparison.Ordinal));
+
+        var offenders =
+            files
+                .Where(file => !allowed.Any(
+                    prefix => file.RelativePath.StartsWith(prefix, StringComparison.Ordinal)))
+                .Where(file => file.Code.Contains(
+                    "GetModuleModeAsync(",
+                    StringComparison.Ordinal))
+                .Select(file => file.RelativePath)
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            "Only the composition root decides the mode. Take sources " +
+            "through the constructor instead:\n  " +
+            string.Join("\n  ", offenders));
+    }
+
+    [Fact]
+    public void WorkflowsAndProductionAdapters_NeverBranchOnFixtureMode()
+    {
+        var offenders =
+            SourceFiles(["Modules"])
+                .Where(file => file.RelativePath.Contains("/Services/", StringComparison.Ordinal)
+                               || file.RelativePath.Contains("/Production/", StringComparison.Ordinal))
+                .Where(file => file.Code.Contains(
+                    "SupportToolkitMode.Fixture",
+                    StringComparison.Ordinal))
+                .Select(file => file.RelativePath)
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            "Fixture or production is chosen in Composition/, not in a " +
+            "workflow or adapter:\n  " +
+            string.Join("\n  ", offenders));
+    }
+
+    private static readonly Regex ProviderConvention =
+        new(
+            @"""(customer|partner)""|\bGuid\.(Try)?Parse\(",
+            RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// A provider's own conventions (its tenant kind names, its identifier
+    /// format) are applied once, in the provider's mapping to TenantRecord.
+    /// Shared and provider-agnostic code reads TenantRecord.Role and
+    /// CanonicalId instead.
+    /// </summary>
+    [Fact]
+    public void ProviderConventions_StayInTheProviderMapping()
+    {
+        var files =
+            SourceFiles(["Core", "Domain", "Modules"])
+                .Where(file => file.RelativePath.StartsWith("Core/", StringComparison.Ordinal)
+                               || file.RelativePath.StartsWith("Domain/", StringComparison.Ordinal)
+                               || ProviderAgnosticModules.Any(
+                                   entry => file.RelativePath.StartsWith(entry.Module, StringComparison.Ordinal)
+                                            && !entry.AllowedFolders.Any(
+                                                folder => file.RelativePath.Contains(folder, StringComparison.Ordinal))))
+                .ToArray();
+
+        Assert.NotEmpty(files);
+
+        var offenders =
+            files
+                .Where(file => ProviderConvention.IsMatch(file.Code))
+                .Select(file => file.RelativePath)
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            "These files apply a provider's own convention. Classify in " +
+            "the provider's mapping and read TenantRecord.Role / " +
+            "CanonicalId instead:\n  " +
+            string.Join("\n  ", offenders));
+    }
+
+    /// <summary>
+    /// The workflows of provider-agnostic modules do not name a provider,
+    /// in code or in text: a source states its system's name itself.
+    /// </summary>
+    [Fact]
+    public void AgnosticWorkflows_DoNotNameAProvider()
+    {
+        // Not the Zendesk bulk delete module: its own name (and so its
+        // namespace) carries the word. Its Services/ still may not
+        // reference a provider, which the rule above enforces.
+        string[] modules = ["Modules/BackupAggregator/", "Modules/UsageReport/"];
+
+        var offenders =
+            SourceFiles(["Modules"])
+                .Where(file => modules.Any(
+                    module => file.RelativePath.StartsWith(module + "Services/", StringComparison.Ordinal)))
+                .Where(file => file.Code.Contains("Acronis", StringComparison.Ordinal)
+                               || file.Code.Contains("Zendesk", StringComparison.Ordinal)
+                               || file.Code.Contains("BusinessCentral", StringComparison.Ordinal))
+                .Select(file => file.RelativePath)
+                .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            "An agnostic workflow names a provider:\n  " +
             string.Join("\n  ", offenders));
     }
 

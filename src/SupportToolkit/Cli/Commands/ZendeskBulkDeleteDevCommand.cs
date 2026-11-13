@@ -1,5 +1,8 @@
+using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Logging;
+using SupportToolkit.Modules.ZendeskBulkDelete.Models;
+using SupportToolkit.Modules.ZendeskBulkDelete.Production;
 using SupportToolkit.Modules.ZendeskBulkDelete.Reporting;
 using SupportToolkit.Modules.ZendeskBulkDelete.Services;
 using SupportToolkit.Providers.Zendesk.Deletion.Search;
@@ -7,7 +10,7 @@ using SupportToolkit.Providers.Zendesk.Deletion.Search;
 namespace SupportToolkit.Cli.Commands;
 
 public sealed record ZendeskBulkDeleteOptions(
-    ZendeskSearchCriteria Criteria,
+    TicketSearchCriteria Criteria,
     ZendeskBulkDeleteMode Mode = ZendeskBulkDeleteMode.Preview,
     IReadOnlyList<long>? Include = null,
     IReadOnlyList<long>? Exclude = null,
@@ -177,7 +180,7 @@ public sealed class ZendeskBulkDeleteDevCommand
         }
 
         var criteria =
-            new ZendeskSearchCriteria(
+            new TicketSearchCriteria(
                 organization,
                 requester,
                 domain,
@@ -194,7 +197,7 @@ public sealed class ZendeskBulkDeleteDevCommand
 
         try
         {
-            ZendeskSearchQuery.Build(criteria);
+            ZendeskSearchQuery.Build(ZendeskTicketDirectory.ToZendesk(criteria));
         }
         catch (ArgumentException exception)
         {
@@ -241,7 +244,7 @@ public sealed class ZendeskBulkDeleteDevCommand
         var logger = OperationalLogger.FromEnvironment();
 
         using var session =
-            await ZendeskBulkDeleteSession.CreateAsync(
+            await ZendeskBulkDeleteComposition.OpenSessionAsync(
                 _configurationResolver,
                 logger.DebugEnabled ? logger : null,
                 options.Mode == ZendeskBulkDeleteMode.Delete,

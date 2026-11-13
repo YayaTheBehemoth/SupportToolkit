@@ -1,9 +1,4 @@
-using System.Net;
-using System.Text.Json;
 using SupportToolkit.Modules.ZendeskBulkDelete.Models;
-using SupportToolkit.Providers.Zendesk.Deletion.Auth;
-using SupportToolkit.Providers.Zendesk.Deletion.Deleting;
-using SupportToolkit.Providers.Zendesk.Deletion.Transport;
 
 namespace SupportToolkit.Modules.ZendeskBulkDelete.Services;
 
@@ -31,7 +26,7 @@ public sealed class ZendeskDeletionExecutor
     public static readonly TimeSpan DefaultMaxJobWait =
         TimeSpan.FromMinutes(5);
 
-    private readonly ZendeskTicketDeletionProvider _provider;
+    private readonly ITicketDeleter _deleter;
     private readonly DeletionReceiptStore _receipts;
     private readonly TimeProvider _timeProvider;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
@@ -39,15 +34,15 @@ public sealed class ZendeskDeletionExecutor
     private readonly int _maxPolls;
 
     public ZendeskDeletionExecutor(
-        ZendeskTicketDeletionProvider provider,
+        ITicketDeleter deleter,
         DeletionReceiptStore receipts,
         TimeProvider? timeProvider = null,
         Func<TimeSpan, CancellationToken, Task>? delay = null,
         TimeSpan? pollInterval = null,
         TimeSpan? maxJobWait = null)
     {
-        _provider =
-            provider ?? throw new ArgumentNullException(nameof(provider));
+        _deleter =
+            deleter ?? throw new ArgumentNullException(nameof(deleter));
 
         _receipts =
             receipts ?? throw new ArgumentNullException(nameof(receipts));
@@ -254,17 +249,17 @@ public sealed class ZendeskDeletionExecutor
         Action<DeletionProgress>? progress,
         CancellationToken cancellationToken)
     {
-        ZendeskDeleteJob job;
+        DeleteJob job;
 
         try
         {
             job =
-                await _provider.StartDeleteAsync(
+                await _deleter.StartDeleteAsync(
                     batch,
                     cancellationToken);
         }
-        catch (ZendeskApiException exception)
-            when (IsClearRejection(exception.StatusCode))
+        catch (DeletionRequestException exception)
+            when (exception.Failure == DeletionRequestFailure.Rejected)
         {
             // Rejected before anything was queued: nothing was deleted.
             MarkUnstarted(
@@ -276,7 +271,8 @@ public sealed class ZendeskDeletionExecutor
 
             return true;
         }
-        catch (ZendeskAuthenticationException exception)
+        catch (DeletionRequestException exception)
+            when (exception.Failure == DeletionRequestFailure.NotSignedIn)
         {
             // The token was needed before anything could be sent.
             MarkUnstarted(
@@ -289,14 +285,16 @@ public sealed class ZendeskDeletionExecutor
             return true;
         }
         catch (Exception exception)
-            when (IsUnclear(exception, cancellationToken))
+            when (exception is DeletionRequestException
+                  || (exception is OperationCanceledException
+                      && !cancellationToken.IsCancellationRequested))
         {
             MarkUnstarted(
                 batch,
                 results,
                 TicketDeletionState.Unknown,
                 "The request did not complete clearly (" +
-                exception.GetType().Name + "). Check the deleted " +
+                SourceType(exception) + "). Check the deleted " +
                 "tickets in Zendesk.",
                 null);
 
@@ -336,16 +334,12 @@ public sealed class ZendeskDeletionExecutor
                 await _delay(_pollInterval, cancellationToken);
 
                 job =
-                    await _provider.GetJobAsync(
+                    await _deleter.GetJobAsync(
                         job.JobId,
                         cancellationToken);
             }
             catch (Exception exception)
-                when (exception is ZendeskApiException
-                          or ZendeskAuthenticationException
-                          or HttpRequestException
-                          or InvalidOperationException
-                          or JsonException
+                when (exception is DeletionRequestException
                       || (exception is OperationCanceledException
                           && !cancellationToken.IsCancellationRequested))
             {
@@ -355,7 +349,7 @@ public sealed class ZendeskDeletionExecutor
                     results,
                     TicketDeletionState.Unknown,
                     "The job's result could not be read (" +
-                    exception.GetType().Name + "). Check the deleted " +
+                    SourceType(exception) + "). Check the deleted " +
                     "tickets in Zendesk.",
                     job.JobId);
 
@@ -372,7 +366,7 @@ public sealed class ZendeskDeletionExecutor
     /// </summary>
     private static bool Apply(
         IReadOnlyList<long> batch,
-        ZendeskDeleteJob job,
+        DeleteJob job,
         Dictionary<long, TicketDeletionResult> results)
     {
         var reported =
@@ -382,11 +376,11 @@ public sealed class ZendeskDeletionExecutor
                     group => group.Key,
                     group => group.Last());
 
-        var jobFailed = job.Status == ZendeskDeleteJob.Failed;
+        var jobFailed = job.State == DeleteJobState.Failed;
         var stop = jobFailed;
 
-        if (job.Status is not (ZendeskDeleteJob.Completed
-            or ZendeskDeleteJob.Failed))
+        if (job.State is not (DeleteJobState.Completed
+            or DeleteJobState.Failed))
         {
             MarkUnstarted(
                 batch,
@@ -462,21 +456,11 @@ public sealed class ZendeskDeletionExecutor
     }
 
     /// <summary>
-    /// A 4xx answer to the deletion request means Zendesk refused it
-    /// before queuing anything.
+    /// The underlying failure's type name, for the receipt.
     /// </summary>
-    private static bool IsClearRejection(
-        HttpStatusCode status) =>
-        (int)status is >= 400 and < 500
-        && status != HttpStatusCode.RequestTimeout;
-
-    private static bool IsUnclear(
-        Exception exception,
-        CancellationToken cancellationToken) =>
-        exception is ZendeskApiException
-            or HttpRequestException
-            or InvalidOperationException
-            or JsonException
-        || (exception is OperationCanceledException
-            && !cancellationToken.IsCancellationRequested);
+    private static string SourceType(
+        Exception exception) =>
+        exception is DeletionRequestException request
+            ? request.SourceType
+            : exception.GetType().Name;
 }

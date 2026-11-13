@@ -1,5 +1,6 @@
+using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
-using SupportToolkit.Core.MonitoringScope;
+using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.Fixtures;
@@ -20,7 +21,7 @@ public class BackupAggregatorScopedWorkflowTests
     {
         // No profile, no Business Central connection: fixture default.
         var workflow =
-            new BackupAggregatorScopedWorkflow(
+            BackupAggregatorComposition.ScopedWorkflow(
                 Resolver(new SupportToolkitConfiguration()));
 
         var result = await workflow.ReviewAsync(Today);
@@ -48,7 +49,7 @@ public class BackupAggregatorScopedWorkflowTests
         var inventory = new HealthyFixtureInventoryProvider(Today);
 
         var workflow =
-            new BackupAggregatorScopedWorkflow(
+            BackupAggregatorComposition.ScopedWorkflow(
                 Resolver(ProductionConfiguration()),
                 new FixtureMonitoringIdentitySource(),
                 _ => Task.FromResult<ISmartSubscriptionEvidenceSource>(
@@ -76,7 +77,7 @@ public class BackupAggregatorScopedWorkflowTests
         var inventory = new HealthyFixtureInventoryProvider(Today);
 
         var workflow =
-            new BackupAggregatorScopedWorkflow(
+            BackupAggregatorComposition.ScopedWorkflow(
                 Resolver(configuration),
                 new FixtureMonitoringIdentitySource(),
                 _ => Task.FromResult<ISmartSubscriptionEvidenceSource>(
@@ -107,7 +108,7 @@ public class BackupAggregatorScopedWorkflowTests
         configuration.Profiles["work"].MonitoringScope.Clear();
 
         var workflow =
-            new BackupAggregatorScopedWorkflow(
+            BackupAggregatorComposition.ScopedWorkflow(
                 Resolver(configuration),
                 new FixtureMonitoringIdentitySource());
 
@@ -129,20 +130,24 @@ public class BackupAggregatorScopedWorkflowTests
         configuration.Profiles["work"].BusinessCentralConnection =
             connection;
 
-        var workflow =
-            new BackupAggregatorScopedWorkflow(Resolver(configuration));
+        var resolver = Resolver(configuration);
 
-        Assert.Equal(expected, await workflow.IsEnabledAsync());
+        Assert.Equal(expected, await resolver.IsMonitoringScopeEnabledAsync());
+
+        // What the monitored review offers follows it.
+        var availability =
+            await BackupAggregatorComposition.ScopedWorkflow(resolver)
+                .GetAvailabilityAsync();
+
+        Assert.Equal(expected, availability.IsAvailable);
     }
 
     [Fact]
     public async Task IsEnabled_IsFalseWithoutAnyProfile()
     {
-        var workflow =
-            new BackupAggregatorScopedWorkflow(
-                Resolver(new SupportToolkitConfiguration()));
-
-        Assert.False(await workflow.IsEnabledAsync());
+        Assert.False(
+            await Resolver(new SupportToolkitConfiguration())
+                .IsMonitoringScopeEnabledAsync());
     }
 
     [Fact]
@@ -152,8 +157,8 @@ public class BackupAggregatorScopedWorkflowTests
 
         var module =
             new BackupAggregatorModule(
-                new BackupAggregatorWorkflow(resolver),
-                new BackupAggregatorScopedWorkflow(resolver));
+                BackupAggregatorComposition.Workflow(resolver),
+                BackupAggregatorComposition.ScopedWorkflow(resolver));
 
         var original = Console.Out;
 
@@ -198,8 +203,8 @@ public class BackupAggregatorScopedWorkflowTests
 
         var module =
             new BackupAggregatorModule(
-                new BackupAggregatorWorkflow(resolver),
-                new BackupAggregatorScopedWorkflow(resolver));
+                BackupAggregatorComposition.Workflow(resolver),
+                BackupAggregatorComposition.ScopedWorkflow(resolver));
 
         var original = Console.Out;
 
@@ -225,13 +230,88 @@ public class BackupAggregatorScopedWorkflowTests
     }
 
     [Fact]
+    public async Task Module_ScopedTicketSubmit_WithoutADestination_FailsAsConfiguration_NotAsAnIncompleteReview()
+    {
+        // Fixture mode, complete review, no Zendesk connection: the gate
+        // is passed, so the missing destination is the error, reported
+        // as an exception (ERROR, exit 1), never as an incomplete review.
+        var resolver = Resolver(new SupportToolkitConfiguration());
+
+        var module =
+            new BackupAggregatorModule(
+                BackupAggregatorComposition.Workflow(resolver),
+                BackupAggregatorComposition.ScopedWorkflow(resolver));
+
+        var original = Console.Out;
+        var originalError = Console.Error;
+
+        try
+        {
+            using var writer = new StringWriter();
+            using var error = new StringWriter();
+            Console.SetOut(writer);
+            Console.SetError(error);
+
+            var failure =
+                await Assert.ThrowsAsync<InvalidOperationException>(
+                    () => module.RunAsync(["ticket", "submit", "--scoped"]));
+
+            // The same error the destination lookup itself raises.
+            var lookup =
+                await Assert.ThrowsAsync<InvalidOperationException>(
+                    () => BackupAggregatorComposition.Workflow(resolver)
+                        .GetTicketSubmissionTargetAsync());
+
+            Assert.Equal(lookup.Message, failure.Message);
+            Assert.DoesNotContain("not complete", error.ToString());
+            Assert.DoesNotContain("SUPPORTTOOLKIT // BACKUP REVIEW", writer.ToString());
+        }
+        finally
+        {
+            Console.SetOut(original);
+            Console.SetError(originalError);
+        }
+    }
+
+    [Theory]
+    [InlineData("preview")]
+    [InlineData("submit")]
+    public async Task Module_AllTenantTicketCommands_AreRetired(string action)
+    {
+        var resolver = Resolver(new SupportToolkitConfiguration());
+
+        var module =
+            new BackupAggregatorModule(
+                BackupAggregatorComposition.Workflow(resolver),
+                BackupAggregatorComposition.ScopedWorkflow(resolver));
+
+        var original = Console.Out;
+
+        try
+        {
+            using var writer = new StringWriter();
+            Console.SetOut(writer);
+
+            var exit = await module.RunAsync(["ticket", action]);
+
+            Assert.Equal(1, exit);
+            Assert.Contains("Backup Aggregator", writer.ToString());
+            Assert.DoesNotContain("SUPPORTTOOLKIT // BACKUP REVIEW", writer.ToString());
+        }
+        finally
+        {
+            Console.SetOut(original);
+        }
+    }
+
+    [Fact]
     public async Task Module_WithoutScopedWorkflow_RejectsScopedTicketCommands()
     {
         var resolver = Resolver(new SupportToolkitConfiguration());
 
         var module =
             new BackupAggregatorModule(
-                new BackupAggregatorWorkflow(resolver));
+                BackupAggregatorComposition.Workflow(resolver));
 
         var originalError = Console.Error;
 
@@ -263,7 +343,7 @@ public class BackupAggregatorScopedWorkflowTests
 
         var module =
             new BackupAggregatorModule(
-                new BackupAggregatorWorkflow(resolver));
+                BackupAggregatorComposition.Workflow(resolver));
 
         var originalError = Console.Error;
 

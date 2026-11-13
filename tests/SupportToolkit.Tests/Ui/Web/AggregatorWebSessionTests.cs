@@ -1,3 +1,4 @@
+using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Ui.Web;
@@ -25,8 +26,8 @@ public class AggregatorWebSessionTests
 
         return new AggregatorWebSession(
             new BackupReviewSession(
-                new BackupAggregatorWorkflow(resolver, local.Write),
-                new BackupAggregatorScopedWorkflow(
+                BackupAggregatorComposition.Workflow(resolver, local.Write),
+                BackupAggregatorComposition.ScopedWorkflow(
                     resolver,
                     progress: local.Write)),
             feed);
@@ -97,8 +98,8 @@ public class AggregatorWebSessionTests
         var session =
             new AggregatorWebSession(
                 new BackupReviewSession(
-                    new BackupAggregatorWorkflow(resolver),
-                    new BackupAggregatorScopedWorkflow(
+                    BackupAggregatorComposition.Workflow(resolver),
+                    BackupAggregatorComposition.ScopedWorkflow(
                         resolver,
                         evidenceSourceFactory:
                             async _ =>
@@ -131,8 +132,8 @@ public class AggregatorWebSessionTests
         var session =
             new AggregatorWebSession(
                 new BackupReviewSession(
-                    new BackupAggregatorWorkflow(resolver),
-                    new BackupAggregatorScopedWorkflow(
+                    BackupAggregatorComposition.Workflow(resolver),
+                    BackupAggregatorComposition.ScopedWorkflow(
                         resolver,
                         evidenceSourceFactory:
                             _ => throw new InvalidOperationException(
@@ -158,8 +159,8 @@ public class AggregatorWebSessionTests
         var session =
             new AggregatorWebSession(
                 new BackupReviewSession(
-                    new BackupAggregatorWorkflow(resolver),
-                    new BackupAggregatorScopedWorkflow(
+                    BackupAggregatorComposition.Workflow(resolver),
+                    BackupAggregatorComposition.ScopedWorkflow(
                         resolver,
                         evidenceSourceFactory:
                             async token =>

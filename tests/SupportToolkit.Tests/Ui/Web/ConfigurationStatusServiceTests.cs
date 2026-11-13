@@ -1,3 +1,4 @@
+using SupportToolkit.Composition;
 using System.Text.Json;
 using SupportToolkit.Core.Configuration;
 using static SupportToolkit.Tests.Ui.Web.StatusTestSupport;

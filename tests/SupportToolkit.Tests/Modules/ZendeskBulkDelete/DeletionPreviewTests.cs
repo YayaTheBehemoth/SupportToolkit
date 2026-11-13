@@ -1,3 +1,4 @@
+using SupportToolkit.Modules.ZendeskBulkDelete.Production;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -17,7 +18,7 @@ public class DeletionPreviewTests
     private static readonly DateTimeOffset Now =
         new(2026, 11, 2, 12, 0, 0, TimeSpan.Zero);
 
-    private static ZendeskTicketSummary Ticket(
+    private static TicketSummary Ticket(
         long id,
         string? status = "closed",
         long? requester = 1,
@@ -33,8 +34,8 @@ public class DeletionPreviewTests
             Now.AddDays(-30),
             noUpdated ? null : Now - (closedAgo ?? TimeSpan.FromDays(10)));
 
-    private static ZendeskSearchResult Result(
-        params ZendeskTicketSummary[] tickets) =>
+    private static TicketSearchResult Result(
+        params TicketSummary[] tickets) =>
         new(tickets, tickets.Length, 0, true, null);
 
     private static readonly Dictionary<long, string> Orgs =
@@ -223,7 +224,7 @@ public class DeletionPreviewTests
     {
         var preview =
             DeletionPreviewBuilder.Build(
-                new ZendeskSearchResult(
+                new TicketSearchResult(
                     [Ticket(1)],
                     1500,
                     2,
@@ -244,7 +245,7 @@ public class DeletionPreviewTests
     {
         var incomplete =
             DeletionPreviewBuilder.Build(
-                new ZendeskSearchResult(
+                new TicketSearchResult(
                     [Ticket(1), Ticket(2, "open")],
                     1500,
                     0,
@@ -260,7 +261,7 @@ public class DeletionPreviewTests
         ConsoleDeletionPreviewReporter.Write(
             output,
             new DeletionPreviewResult(
-                new ZendeskOperator(7, "Example Operator", "op@example.com", "agent"),
+                new DeletionOperator(7, "Example Operator", "op@example.com", "agent"),
                 "type:ticket example",
                 incomplete));
 
@@ -292,7 +293,7 @@ public class DeletionPreviewTests
         ConsoleDeletionPreviewReporter.Write(
             output,
             new DeletionPreviewResult(
-                new ZendeskOperator(7, null, null, null),
+                new DeletionOperator(7, null, null, null),
                 "type:ticket example",
                 preview));
 
@@ -315,7 +316,7 @@ public class DeletionPreviewTests
         var result =
             await workflow.PreviewAsync(
                 operatorUser,
-                new ZendeskSearchCriteria(Organization: "Example Org"));
+                new TicketSearchCriteria(Organization: "Example Org"));
 
         Assert.Equal(
             "type:ticket organization:\"Example Org\"",
@@ -336,8 +337,8 @@ public class DeletionPreviewTests
         var workflow = CreateWorkflow(server);
 
         await workflow.PreviewAsync(
-            new ZendeskOperator(7, null, null, null),
-            new ZendeskSearchCriteria(FreeText: "example"));
+            new DeletionOperator(7, null, null, null),
+            new TicketSearchCriteria(FreeText: "example"));
 
         Assert.NotEmpty(server.Methods);
         Assert.All(server.Methods, method => Assert.Equal("GET", method));
@@ -352,8 +353,8 @@ public class DeletionPreviewTests
 
         var result =
             await workflow.PreviewAsync(
-                new ZendeskOperator(7, null, null, null),
-                new ZendeskSearchCriteria(FreeText: "example"));
+                new DeletionOperator(7, null, null, null),
+                new TicketSearchCriteria(FreeText: "example"));
 
         Assert.Equal(3, result.Preview.Total);
         Assert.Contains("Organization names", result.Preview.DirectoryNote);
@@ -373,8 +374,8 @@ public class DeletionPreviewTests
         var exception =
             await Assert.ThrowsAsync<ZendeskApiException>(
                 () => workflow.PreviewAsync(
-                    new ZendeskOperator(7, null, null, null),
-                    new ZendeskSearchCriteria(FreeText: "example")));
+                    new DeletionOperator(7, null, null, null),
+                    new TicketSearchCriteria(FreeText: "example")));
 
         Assert.Equal(HttpStatusCode.Unauthorized, exception.StatusCode);
     }
@@ -388,8 +389,8 @@ public class DeletionPreviewTests
 
         await Assert.ThrowsAsync<ZendeskApiException>(
             () => workflow.PreviewAsync(
-                new ZendeskOperator(7, null, null, null),
-                new ZendeskSearchCriteria(FreeText: "example")));
+                new DeletionOperator(7, null, null, null),
+                new TicketSearchCriteria(FreeText: "example")));
     }
 
     [Fact]
@@ -399,8 +400,8 @@ public class DeletionPreviewTests
 
         await Assert.ThrowsAsync<ArgumentException>(
             () => workflow.PreviewAsync(
-                new ZendeskOperator(7, null, null, null),
-                new ZendeskSearchCriteria()));
+                new DeletionOperator(7, null, null, null),
+                new TicketSearchCriteria()));
     }
 
     private static ZendeskBulkDeleteWorkflow CreateWorkflow(
@@ -418,13 +419,14 @@ public class DeletionPreviewTests
                     "example-public-client"));
 
         return new ZendeskBulkDeleteWorkflow(
-            _ =>
-            {
-                onSignIn?.Invoke();
-                return Task.CompletedTask;
-            },
-            new ZendeskTicketSearchProvider(client),
-            new ZendeskDirectoryProvider(client),
+            new ZendeskTicketDirectory(
+                _ =>
+                {
+                    onSignIn?.Invoke();
+                    return Task.CompletedTask;
+                },
+                new ZendeskTicketSearchProvider(client),
+                new ZendeskDirectoryProvider(client)),
             new FixedClock());
     }
 
