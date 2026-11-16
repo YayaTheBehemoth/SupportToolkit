@@ -282,6 +282,11 @@ public class UsageReportPageTests : IClassFixture<UsageReportHostFixture>
         Assert.Contains("Fjeldsted Example Revision", html);
         Assert.Contains("-20.00", html);
         Assert.Contains("compared", html);
+
+        // The two compared figures are named as such, with the BC column.
+        Assert.Contains("Business Central quantity (Antal)", html);
+        Assert.Contains("For reference, not compared", html);
+        Assert.Contains("billed less than Acronis", html);
         Assert.Contains("Set up, no usage reported yet", html);
         Assert.Contains("Bakkegaard Example Tandlaeger", html);
         Assert.Contains("Storage without a backup subscription", html);

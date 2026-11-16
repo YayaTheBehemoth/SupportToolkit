@@ -147,7 +147,11 @@
         }
     </div>
     <p class="muted">
-        Difference is billed minus Acronis: negative means less is billed than Acronis reports.
+        Each row compares two figures: the GB billed in Business Central (the quantity, "Antal", on the
+        backup lines) against the total storage Acronis reports for the customer's tenants, in GB as the
+        Acronis portal shows it. The difference is
+        billed minus Acronis, so a negative difference means less is billed than Acronis reports. Amount, Backup
+        and Microsoft 365 are shown for reference and are not compared.
     </p>
 
     @if (detailed)
@@ -168,18 +172,24 @@
     {
         <table>
             <thead>
+            <tr class="group">
+                <th colspan="@(detailed ? 3 : 2)"></th>
+                <th colspan="3" class="cmp">Compared</th>
+                <th></th>
+                <th colspan="@(detailed ? 4 : 3)">For reference, not compared</th>
+            </tr>
             <tr>
                 <th></th>
                 <th>Customer</th>
                 @if (detailed) { <th>No.</th> }
-                <th class="num">Billed GB</th>
-                <th class="num">Amount</th>
-                <th class="num">Acronis GB</th>
-                @if (detailed) { <th class="num">Portal GB</th> }
-                <th class="num">Backup</th>
-                <th class="num">M365</th>
-                <th class="num">Difference</th>
+                <th class="num cmp">Billed GB<small>Business Central quantity (Antal)</small></th>
+                <th class="num cmp">Acronis GB<small>total storage</small></th>
+                <th class="num cmp">Difference<small>billed &minus; Acronis</small></th>
                 <th>Status</th>
+                <th class="num">Amount<small>Business Central</small></th>
+                @if (detailed) { <th class="num">Decimal GB<small>total, 10^9 bytes</small></th> }
+                <th class="num">Backup<small>Acronis GB</small></th>
+                <th class="num">M365<small>Acronis GB</small></th>
             </tr>
             </thead>
             <tbody>
@@ -196,13 +206,15 @@
                     </td>
                     <td>@row.Name</td>
                     @if (detailed) { <td>@row.CustomerNumber</td> }
-                    <td class="num">@Gb(row.BilledQuantity)</td>
-                    <td class="num">@Money(row.BilledAmount)</td>
-                    <td class="num">@Gb(row.Total.Gb)</td>
-                    @if (detailed) { <td class="num">@Gb(row.Total.PortalGb)</td> }
-                    <td class="num">@Gb(row.Backup.Gb)</td>
-                    <td class="num">@Gb(row.Microsoft365.Gb)</td>
-                    <td class="num @(row.DifferenceGb is { } d && d != 0m ? "diff" : "")">@Signed(row.DifferenceGb)</td>
+                    <td class="num cmp">@Gb(row.BilledQuantity)</td>
+                    <td class="num cmp">@Gb(row.Total.Gb)</td>
+                    <td class="num cmp @(row.DifferenceGb is { } d && d != 0m ? "diff" : "")">
+                        @Signed(row.DifferenceGb)
+                        @if (Direction(row.DifferenceGb) is { } direction)
+                        {
+                            <small>@direction</small>
+                        }
+                    </td>
                     <td>
                         @if (row.IsCompared)
                         {
@@ -221,6 +233,10 @@
                             <div class="row-note">check: @remark</div>
                         }
                     </td>
+                    <td class="num">@Money(row.BilledAmount)</td>
+                    @if (detailed) { <td class="num">@Gb(row.Total.DecimalGb)</td> }
+                    <td class="num">@Gb(row.Backup.Gb)</td>
+                    <td class="num">@Gb(row.Microsoft365.Gb)</td>
                 </tr>
 
                 @if (open)
@@ -266,14 +282,14 @@
         <h2>Storage without a backup subscription</h2>
         <p class="muted">Acronis customer tenants with storage that no customer with a backup subscription was matched to.</p>
         <table>
-            <thead><tr><th>Acronis tenant</th><th class="num">Acronis GB</th>@if (detailed) { <th class="num">Portal GB</th> }<th class="num">Backup</th><th class="num">M365</th><th>Note</th></tr></thead>
+            <thead><tr><th>Acronis tenant</th><th class="num">Acronis GB</th>@if (detailed) { <th class="num">Decimal GB</th> }<th class="num">Backup</th><th class="num">M365</th><th>Note</th></tr></thead>
             <tbody>
             @foreach (var row in unbilled)
             {
                 <tr>
                     <td>@row.Name</td>
                     <td class="num">@Gb(row.Total.Gb)</td>
-                    @if (detailed) { <td class="num">@Gb(row.Total.PortalGb)</td> }
+                    @if (detailed) { <td class="num">@Gb(row.Total.DecimalGb)</td> }
                     <td class="num">@Gb(row.Backup.Gb)</td>
                     <td class="num">@Gb(row.Microsoft365.Gb)</td>
                     <td>
@@ -390,6 +406,15 @@
 
     private static string Money(decimal? value) =>
         value is null ? "unknown" : value.Value.ToString("#,##0.00", Invariant);
+
+    private static string? Direction(decimal? difference) =>
+        difference switch
+        {
+            null => null,
+            < 0m => "billed less than Acronis",
+            > 0m => "billed more than Acronis",
+            _ => "equal"
+        };
 
     private static string Signed(decimal? value) =>
         value is null ? "unknown" : value.Value.ToString("+#,##0.00;-#,##0.00;0.00", Invariant);

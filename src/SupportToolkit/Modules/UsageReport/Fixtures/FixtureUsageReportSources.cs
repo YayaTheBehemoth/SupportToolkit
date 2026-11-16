@@ -4,6 +4,8 @@ using SupportToolkit.Modules.UsageReport.Models;
 using SupportToolkit.Modules.UsageReport.Production;
 using SupportToolkit.Modules.UsageReport.Services;
 
+using SupportToolkit.Core.Units;
+
 namespace SupportToolkit.Modules.UsageReport.Fixtures;
 
 /// <summary>
@@ -21,6 +23,10 @@ public sealed class FixtureUsageReportSources : IUsageReportSources
 
     private const string OtherItem = "EXAMPLE-OTHER";
 
+    // Storage is written in GB as the Acronis portal shows it, the
+    // compared unit, so the fixture's figures stay round.
+    private const decimal Gib = StorageUnits.BytesPerGib;
+
     private sealed record Customer(
         string Number,
         string Name,
@@ -37,19 +43,19 @@ public sealed class FixtureUsageReportSources : IUsageReportSources
     [
         // Billed exactly what is reported.
         new("C-0001", "Fjeldsted Example Revision", "Active", 1000m, 100m,
-            "11111111-0000-4000-8000-000000000001", 400e9m, 600e9m),
+            "11111111-0000-4000-8000-000000000001", 400 * Gib, 600 * Gib),
 
         // Billed 20 GB less than is reported.
         new("C-0002", "Nordvik Example Logistik", "Active", 500m, 50m,
-            "11111111-0000-4000-8000-000000000002", 320e9m, 200e9m),
+            "11111111-0000-4000-8000-000000000002", 320 * Gib, 200 * Gib),
 
         // The subscription is suspended: nothing active to compare.
         new("C-0003", "Saltholm Example Marine", "Suspended", 100m, 10m,
-            "11111111-0000-4000-8000-000000000003", 60e9m, 40e9m),
+            "11111111-0000-4000-8000-000000000003", 60 * Gib, 40 * Gib),
 
         // The amount is missing, and the total is not backup + M365.
         new("C-0004", "Ravnsborg Example Advokater", "Active", 250m, null,
-            "11111111-0000-4000-8000-000000000004", 100e9m, 130e9m, 240e9m),
+            "11111111-0000-4000-8000-000000000004", 100 * Gib, 130 * Gib, 240 * Gib),
 
         // No tenant.
         new("C-0005", "Kildebakke Example Byg", "Active", 300m, 30m,
@@ -140,7 +146,7 @@ public sealed class FixtureUsageReportSources : IUsageReportSources
                 .Select(customer => (
                     Id: customer.TenantId!,
                     Storage: Storage(customer.Backup, customer.Microsoft365, customer.Total)))
-                .Append((Id: UnbilledTenant, Storage: Storage(50e9m, 25e9m, null)))
+                .Append((Id: UnbilledTenant, Storage: Storage(50 * Gib, 25 * Gib, null)))
                 .Append((Id: EmptyTenant, Storage: Storage(0m, 0m, null)));
 
         var wanted = tenantIds.ToHashSet(StringComparer.OrdinalIgnoreCase);

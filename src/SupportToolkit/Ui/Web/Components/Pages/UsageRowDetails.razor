@@ -1,9 +1,38 @@
 @* What one report row is built from: the Business Central lines as BC states
    them, and the Acronis figures. Nothing here is calculated beyond the unit
-   conversion. The simple view shows the figures as the Acronis portal does;
-   the detailed view adds the compared decimal GB and the bytes. *@
+   conversion. Figures are in GB as the Acronis portal shows them, which
+   is what is compared; the detailed view adds decimal GB and the bytes. *@
 
 <div class="row-details">
+    <div class="comparison">
+        <div class="side">
+            <span class="label">Billed in Business Central</span>
+            <span class="value">@Gb(Row.BilledQuantity)</span>
+            <span class="muted">quantity (Antal) on the counted backup lines</span>
+        </div>
+        <div class="op">&minus;</div>
+        <div class="side">
+            <span class="label">Acronis total storage</span>
+            <span class="value">@Gb(Row.Total.Gb)</span>
+            <span class="muted">
+                @if (Row.Total.IsKnown)
+                {
+                    <text>as the portal's Total storage shows it</text>
+                }
+                else
+                {
+                    <text>@(Row.Total.Problem ?? "unknown")</text>
+                }
+            </span>
+        </div>
+        <div class="op">=</div>
+        <div class="side">
+            <span class="label">Difference</span>
+            <span class="value @(Row.DifferenceGb is { } d && d != 0m ? "problem" : "")">@Signed(Row.DifferenceGb)</span>
+            <span class="muted">@Direction(Row.DifferenceGb)</span>
+        </div>
+    </div>
+
     <h4>Business Central backup lines</h4>
 
     @if (Row.Lines.Count == 0)
@@ -16,7 +45,7 @@
             <thead>
             <tr>
                 <th>Subscription</th><th>Item</th><th>Description</th><th>Unit</th>
-                <th class="num">Quantity</th><th class="num">Unit price</th>
+                <th class="num cmp">Quantity (Antal)</th><th class="num">Unit price</th>
                 <th class="num">Discount %</th><th class="num">Amount</th>
             </tr>
             </thead>
@@ -28,7 +57,7 @@
                     <td>@line.ItemNumber</td>
                     <td>@(line.Description ?? "-")</td>
                     <td>@(line.UnitOfMeasure ?? "-")</td>
-                    <td class="num">@Number(line.Quantity)</td>
+                    <td class="num cmp">@Number(line.Quantity)</td>
                     <td class="num">@Number(line.UnitPrice)</td>
                     <td class="num">@Number(line.LineDiscountPercent)</td>
                     <td class="num">@Number(line.Amount)</td>
@@ -49,7 +78,7 @@
         Tenant: @(Row.TenantNames.Count == 0 ? "none matched" : string.Join(", ", Row.TenantNames)).
         @if (Detailed)
         {
-            <text>The portal shows binary GB (1,073,741,824 bytes), about 7% lower than the decimal GB used for the comparison.</text>
+            <text>GB is as the portal shows it (1,073,741,824 bytes, binary GB); decimal GB (10^9 bytes) is about 7% higher for the same data.</text>
         }
     </p>
 
@@ -57,13 +86,13 @@
         <thead>
         <tr>
             <th>Figure</th>
-            @if (Detailed) { <th class="num">GB (compared)</th> }
-            <th class="num">GB as the portal shows</th>
+            <th class="num">GB as the portal shows (compared)</th>
+            @if (Detailed) { <th class="num">Decimal GB</th> }
             @if (Detailed) { <th class="num">Bytes</th> }
         </tr>
         </thead>
         <tbody>
-        <Figure Label="Total storage" Value="Row.Total" Detailed="Detailed" />
+        <Figure Label="Total storage (compared)" Value="Row.Total" Detailed="Detailed" Compared="true" />
         <Figure Label="Backup storage" Value="Row.Backup" Detailed="Detailed" />
         <Figure Label="Microsoft 365 and Google Workspace" Value="Row.Microsoft365" Detailed="Detailed" />
         </tbody>
@@ -77,6 +106,21 @@
     [Parameter, EditorRequired] public UsageReportRow Row { get; set; } = default!;
 
     [Parameter] public bool Detailed { get; set; }
+
+    private static string Gb(decimal? value) =>
+        value is null ? "unknown" : value.Value.ToString("#,##0.00", Invariant) + " GB";
+
+    private static string Signed(decimal? value) =>
+        value is null ? "unknown" : value.Value.ToString("+#,##0.00;-#,##0.00;0.00", Invariant) + " GB";
+
+    private static string Direction(decimal? difference) =>
+        difference switch
+        {
+            null => "not compared",
+            < 0m => "billed less than Acronis reports",
+            > 0m => "billed more than Acronis reports",
+            _ => "billed equals Acronis"
+        };
 
     private static string Number(decimal? value) =>
         value is null ? "unknown" : value.Value.ToString("#,##0.##", Invariant);
