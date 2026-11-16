@@ -215,3 +215,18 @@ ul.notes { margin: 4px 0 16px; padding-left: 20px; color: var(--muted); font-siz
 .row-details table { margin-bottom: 8px; }
 .section-head { display: flex; align-items: center; gap: 14px; }
 .section-head h2 { margin-right: auto; }
+
+/* Usage report: the compared figures stand out; the rest is reference. */
+th small { display: block; font-weight: 400; font-size: 11px; }
+td small { display: block; font-weight: 400; font-size: 11px; color: var(--muted); }
+th.cmp { background: #e3eef8; color: var(--accent); }
+td.cmp, tr.cmp td { background: #f3f8fd; }
+tr.group th { border-bottom: none; padding-bottom: 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+tr.group th.cmp { text-align: center; }
+tr.exception td.cmp { background: var(--warn-bg); }
+.comparison { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; margin: 4px 0 14px; }
+.comparison .side { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: #f3f8fd; min-width: 180px; }
+.comparison .label { font-size: 12px; color: var(--muted); }
+.comparison .value { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.comparison .side .muted { font-size: 12px; }
+.comparison .op { align-self: center; font-size: 20px; color: var(--muted); }

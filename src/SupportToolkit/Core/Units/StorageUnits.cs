@@ -1,9 +1,9 @@
 namespace SupportToolkit.Core.Units;
 
 /// <summary>
-/// Storage units, defined once. Business Central bills backup storage
-/// in decimal gigabytes; the Acronis portal shows binary gigabytes
-/// (GiB) while labelling them GB.
+/// Storage units, defined once. The Acronis portal shows binary
+/// gigabytes (GiB) while labelling them GB, and the billed backup
+/// quantity follows the portal's figure.
 /// </summary>
 public static class StorageUnits
 {

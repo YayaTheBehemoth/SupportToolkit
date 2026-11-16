@@ -411,7 +411,7 @@ Every month, finance compares each customer's Acronis storage with what Business
 - **Business Central**: the subscription lines for the backup items, with item, description, unit, quantity, unit price, discount and amount. The amount is Business Central's own figure; the toolkit calculates no prices. These columns are read by a separate request with its own field list, so the entitlement read never asks for prices and a renamed price column fails only this read.
 - Customers are matched to Acronis tenants by name, automatically, as in the monitored review. Nothing is stored.
 
-**Units.** Usage is compared in decimal GB (1 GB = 1,000,000,000 bytes), the unit the backup quantity is billed in. The Acronis portal labels its figures GB but counts 1,073,741,824 bytes per GB, so for the same data it shows about 7% less. Each row's details show the figures as the portal shows them; the detailed view adds the compared decimal GB and the bytes.
+**Units.** Usage is compared in GB as the Acronis portal shows it: the portal labels its figures GB but counts 1,073,741,824 bytes per GB, and the billed backup quantity is taken from the portal's figure. Decimal GB (1,000,000,000 bytes) would be about 7% higher for the same data; the detailed view shows it, with the bytes, for reference.
 
 **What the report computes.** Only a unit conversion, adding up (a metric's lines, a customer's tenants, a customer's backup lines) and one subtraction: billed GB minus the Acronis total. Nothing is judged and there are no thresholds. A customer whose Acronis total is not backup + Microsoft 365 gets a note; no figure is changed.
 

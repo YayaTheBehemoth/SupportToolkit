@@ -41,8 +41,8 @@ public class AcronisStorageReaderTests
 
         var storage = AcronisStorageReader.Read([TenantA], usage).ByTenant[TenantA];
 
-        Assert.Equal(540.46m, Math.Round(storage.Backup.PortalGb!.Value, 2));
-        Assert.Equal(589.35m, Math.Round(storage.Microsoft365.PortalGb!.Value, 2));
+        Assert.Equal(540.46m, Math.Round(storage.Backup.Gb!.Value, 2));
+        Assert.Equal(589.35m, Math.Round(storage.Microsoft365.Gb!.Value, 2));
         Assert.Equal(storage.Total.Bytes, storage.Backup.Bytes + storage.Microsoft365.Bytes);
     }
 

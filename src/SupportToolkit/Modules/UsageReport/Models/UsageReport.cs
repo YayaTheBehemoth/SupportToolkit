@@ -12,8 +12,8 @@ public sealed record UsageMeasurement(
     string? Problem,
     bool NotReported = false)
 {
-    public const decimal BytesPerGb = StorageUnits.BytesPerGb;
-    public const decimal BytesPerPortalGb = StorageUnits.BytesPerGib;
+    public const decimal BytesPerGb = StorageUnits.BytesPerGib;
+    public const decimal BytesPerDecimalGb = StorageUnits.BytesPerGb;
 
     public static UsageMeasurement Unknown(string problem) =>
         new(null, problem);
@@ -47,17 +47,17 @@ public sealed record UsageMeasurement(
     public bool IsKnown => Bytes is not null;
 
     /// <summary>
-    /// Decimal gigabytes (10^9 bytes), the unit Business Central bills
-    /// in. This is the figure that is compared.
+    /// GB as the Acronis portal shows it: 1,073,741,824 bytes per GB,
+    /// although the portal labels it GB. The billed quantity is taken
+    /// from this figure, so this is the figure that is compared.
     /// </summary>
     public decimal? Gb => Bytes / BytesPerGb;
 
     /// <summary>
-    /// The figure the Acronis portal shows. The portal labels it GB but
-    /// counts 1,073,741,824 bytes per GB, so it is about 7% lower than
-    /// <see cref="Gb"/> for the same data.
+    /// Decimal gigabytes (10^9 bytes), for reference only: about 7%
+    /// higher than <see cref="Gb"/> for the same data.
     /// </summary>
-    public decimal? PortalGb => Bytes / BytesPerPortalGb;
+    public decimal? DecimalGb => Bytes / BytesPerDecimalGb;
 }
 
 /// <summary>
@@ -118,7 +118,8 @@ public enum UsageRowKind
 /// missing or contradictory, and the row says what. Remarks are worth a
 /// look but do not stop the comparison.
 ///
-/// Difference is billed quantity minus Acronis total, both in decimal GB.
+/// Difference is billed quantity minus Acronis total, both in GB as the
+/// Acronis portal shows it.
 /// A negative number means less is billed than Acronis reports. Nothing
 /// is judged: there are no thresholds.
 /// </summary>
