@@ -40,8 +40,8 @@ public static class AcronisStorageReader
     [
         "Acronis describes these usage figures as refreshed every few " +
         "hours and not meant for billing.",
-        "The Acronis portal shows binary GB (1,073,741,824 bytes), about 7% " +
-        "lower than the decimal GB used here for the same data."
+        "GB here is GB as the Acronis portal shows it (1,073,741,824 bytes, " +
+        "binary GB); in decimal GB the same data is about 7% higher."
     ];
 
     public static UsageStorage Read(

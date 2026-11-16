@@ -1,15 +1,16 @@
-@* One Acronis figure as the portal shows it, plus the compared decimal GB
-   and the bytes in the detailed view, or why it is unknown. *@
+@* One Acronis figure in GB as the portal shows it (the compared unit),
+   plus decimal GB and the bytes in the detailed view, or why it is
+   unknown. *@
 
-<tr>
+<tr class="@(Compared ? "cmp" : "")">
     <td>@Label</td>
     @if (Value.IsKnown)
     {
+        <td class="num">@Value.Gb!.Value.ToString("#,##0.00", Invariant)</td>
         @if (Detailed)
         {
-            <td class="num">@Value.Gb!.Value.ToString("#,##0.00", Invariant)</td>
+            <td class="num">@Value.DecimalGb!.Value.ToString("#,##0.00", Invariant)</td>
         }
-        <td class="num">@Value.PortalGb!.Value.ToString("#,##0.00", Invariant)</td>
         @if (Detailed)
         {
             <td class="num">@Value.Bytes!.Value.ToString("#,##0", Invariant)</td>
@@ -28,4 +29,7 @@
     [Parameter, EditorRequired] public string Label { get; set; } = "";
     [Parameter, EditorRequired] public UsageMeasurement Value { get; set; } = default!;
     [Parameter] public bool Detailed { get; set; }
+
+    /// <summary>The figure the report compares, highlighted.</summary>
+    [Parameter] public bool Compared { get; set; }
 }

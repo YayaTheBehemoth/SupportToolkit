@@ -1,5 +1,6 @@
 using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
+using SupportToolkit.Core.Units;
 using SupportToolkit.Domain.CustomerMapping;
 using SupportToolkit.Domain.CustomerMapping.Matching;
 using SupportToolkit.Domain.MonitoringScope;
@@ -24,18 +25,30 @@ public class UsageReportTests
     private const string TenantA = "22222222-0000-4000-8000-00000000000a";
     private const string TenantB = "22222222-0000-4000-8000-00000000000b";
 
+    // Storage is written in GB as the portal shows it, the compared unit.
+    private const decimal Gib = StorageUnits.BytesPerGib;
+
     // ---------------------------------------------------------------
     // Units: the portal sample the metrics were confirmed against.
     // ---------------------------------------------------------------
 
     [Fact]
-    public void Bytes_AreComparedInDecimalGb_AndThePortalFigureIsBinary()
+    public void Bytes_AreComparedInThePortalsGb_AndDecimalGbIsForReference()
     {
         // Backup storage that the Acronis portal shows as 540.46 GB.
         var measurement = new UsageMeasurement(580_318_642_176m, null);
 
-        Assert.Equal(580.32m, Math.Round(measurement.Gb!.Value, 2));
-        Assert.Equal(540.46m, Math.Round(measurement.PortalGb!.Value, 2));
+        Assert.Equal(540.46m, Math.Round(measurement.Gb!.Value, 2));
+        Assert.Equal(580.32m, Math.Round(measurement.DecimalGb!.Value, 2));
+    }
+
+    [Fact]
+    public void TheDifference_IsAgainstThePortalsFigure_NotDecimalGb()
+    {
+        // The portal shows 275.95 GB (296.30 decimal GB); 266 GB is billed.
+        var total = new UsageMeasurement(275.95m * Gib, null);
+
+        Assert.Equal(-9.95m, Math.Round(266m - total.Gb!.Value, 2));
     }
 
     [Fact]
@@ -45,7 +58,7 @@ public class UsageReportTests
 
         Assert.False(unknown.IsKnown);
         Assert.Null(unknown.Gb);
-        Assert.Null(unknown.PortalGb);
+        Assert.Null(unknown.DecimalGb);
     }
 
     [Fact]
@@ -83,7 +96,7 @@ public class UsageReportTests
                     Line("S-1", 20000, 200m, 20m),
                     Line("S-1", 30000, 999m, 99m, item: "SOMETHING-ELSE")
                 ],
-                storage: Storage((TenantA, Figures(450e9m, 250e9m, 200e9m))),
+                storage: Storage((TenantA, Figures(450 * Gib, 250 * Gib, 200 * Gib))),
                 links: [("C-1", TenantA)]);
 
         var row = Assert.Single(report.Customers);
@@ -108,7 +121,7 @@ public class UsageReportTests
                     Line("S-1", 10000, 300m, 30m),
                     Line("S-1", 20000, 200m, 20m, omit: true)
                 ],
-                storage: Storage((TenantA, Figures(300e9m, 300e9m, 0m))),
+                storage: Storage((TenantA, Figures(300 * Gib, 300 * Gib, 0m))),
                 links: [("C-1", TenantA)]);
 
         var row = Assert.Single(report.Customers);
@@ -125,7 +138,7 @@ public class UsageReportTests
             Build(
                 headers: [Header("S-1", "C-1", status: "Suspended")],
                 lines: [Line("S-1", 10000, 300m, 30m)],
-                storage: Storage((TenantA, Figures(40e9m, 40e9m, 0m))),
+                storage: Storage((TenantA, Figures(40 * Gib, 40 * Gib, 0m))),
                 links: [("C-1", TenantA)]);
 
         Assert.Empty(report.Customers);
@@ -172,7 +185,7 @@ public class UsageReportTests
                     Line("S-1", 10000, 100m, 10m),
                     Line("S-404", 10000, 100m, 10m)
                 ],
-                storage: Storage((TenantA, Figures(100e9m, 100e9m, 0m))),
+                storage: Storage((TenantA, Figures(100 * Gib, 100 * Gib, 0m))),
                 links: [("C-1", TenantA)]);
 
         Assert.Equal(1, report.UnattributedLines);
@@ -192,8 +205,8 @@ public class UsageReportTests
                 headers: [Header("S-1", "C-1")],
                 lines: [Line("S-1", 10000, 150m, 15m)],
                 storage: Storage(
-                    (TenantA, Figures(100e9m, 100e9m, 0m)),
-                    (TenantB, Figures(50e9m, 20e9m, 30e9m))),
+                    (TenantA, Figures(100 * Gib, 100 * Gib, 0m)),
+                    (TenantB, Figures(50 * Gib, 20 * Gib, 30 * Gib))),
                 links: [("C-1", TenantA), ("C-1", TenantB)]);
 
         var row = Assert.Single(report.Customers);
@@ -267,7 +280,7 @@ public class UsageReportTests
             Build(
                 headers: [Header("S-1", "C-1")],
                 lines: [Line("S-1", 10000, 100m, 10m)],
-                storage: Storage((TenantA, Figures(100e9m, 100e9m, 0m))),
+                storage: Storage((TenantA, Figures(100 * Gib, 100 * Gib, 0m))),
                 links: [],
                 pending: [("C-1", TenantA)]);
 
@@ -285,7 +298,7 @@ public class UsageReportTests
             Build(
                 headers: [],
                 lines: [],
-                storage: Storage((TenantA, Figures(75e9m, 50e9m, 25e9m))),
+                storage: Storage((TenantA, Figures(75 * Gib, 50 * Gib, 25 * Gib))),
                 links: []);
 
         var row = Assert.Single(report.TenantsWithoutSubscription);
@@ -335,7 +348,7 @@ public class UsageReportTests
             Build(
                 headers: [Header("S-1", "C-1")],
                 lines: [Line("S-1", 10000, 240m, 24m)],
-                storage: Storage((TenantA, Figures(240e9m, 100e9m, 130e9m))),
+                storage: Storage((TenantA, Figures(240 * Gib, 100 * Gib, 130 * Gib))),
                 links: [("C-1", TenantA)]);
 
         var row = Assert.Single(report.Customers);
@@ -351,7 +364,7 @@ public class UsageReportTests
             Build(
                 [], [], Storage() with { Notices = ["A note from the storage source."] }, []);
 
-        Assert.Contains(report.Notices, notice => notice.Contains("decimal GB"));
+        Assert.Contains(report.Notices, notice => notice.Contains("1,073,741,824 bytes"));
         Assert.Contains("A note from the storage source.", report.Notices);
     }
 

@@ -30,8 +30,8 @@ public sealed record UsageReportInputs(
 ///    pending match is reported, not used.
 ///  - A customer's tenants are added up; any unknown tenant figure makes
 ///    the customer's figure unknown, never zero.
-///  - Billed quantity is compared with the total in decimal GB. Nothing
-///    is judged.
+///  - Billed quantity is compared with the total in binary GB, the unit
+///    the billed quantity is taken in. Nothing is judged.
 /// </summary>
 public static class UsageReportBuilder
 {
@@ -459,8 +459,8 @@ public static class UsageReportBuilder
     {
         var notices = new List<string>
         {
-            "Usage is compared in decimal GB (1 GB = 1,000,000,000 bytes), " +
-            "the unit the billed quantity is in."
+            "Usage is compared in binary GB (1 GB = 1,073,741,824 bytes), " +
+            "the unit the billed quantity is taken in."
         };
 
         if (inputs.Tenants.Notice is not null)
