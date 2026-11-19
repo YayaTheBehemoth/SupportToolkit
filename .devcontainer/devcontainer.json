@@ -1,0 +1,23 @@
+{
+  // Linux development for SupportToolkit, for GitHub Codespaces or a local
+  // dev container. Daily work runs against fixtures; secrets, when needed,
+  // are environment variables (see the README, "Secrets on Linux and in
+  // containers").
+  "name": "SupportToolkit",
+  "image": "mcr.microsoft.com/devcontainers/dotnet:10.0-noble",
+  "features": {
+    // Later vendor spikes run their containers with docker compose.
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "postCreateCommand": "dotnet restore SupportToolkit.slnx",
+  "hostRequirements": {
+    "cpus": 2
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-dotnettools.csdevkit"
+      ]
+    }
+  }
+}

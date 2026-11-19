@@ -94,7 +94,7 @@ Run any module with `--help` for its own usage text. Exit codes are listed per c
 
 ### Requirements
 
-- Windows
+- Windows, or Linux (see [Developing on Linux and in Codespaces](#developing-on-linux-and-in-codespaces))
 - .NET 10 SDK
 - Git
 
@@ -140,6 +140,25 @@ with:
 ```text
 SupportToolkit.exe
 ```
+
+### Developing on Linux and in Codespaces
+
+The repository has a dev container (`.devcontainer/devcontainer.json`): the .NET 10 SDK on Ubuntu, Docker inside the container, and the C# Dev Kit. It fits the default 2-core GitHub Codespace.
+
+1. On GitHub, open the repository's **Code** menu, then **Codespaces**, and create a codespace on your branch. The packages are restored when it is created.
+2. Run the tests and the CLI as on Windows, with forward slashes:
+
+   ```bash
+   dotnet test
+   dotnet run --project src/SupportToolkit -- --help
+   dotnet run --project src/SupportToolkit -- configure status
+   ```
+
+3. Daily work runs against fixtures, which need no secrets. When a connection does need one, set it as a Codespaces secret or an environment variable; see [Secrets on Linux and in containers](#secrets-on-linux-and-in-containers). `configure status` names the variables that are missing.
+4. `serve --no-browser` prints the link to open; Codespaces forwards the port. The Zendesk deletion sign-in redirects to `localhost` on the codespace, which completes only from VS Code desktop connected to the codespace (it forwards that port), not from a codespace opened in the browser.
+5. **Stop the codespace when you are done.** The free quota counts the time a codespace is running and the storage it keeps; a stopped codespace still uses storage until it is deleted.
+
+The Windows release (`scripts/publish-windows.cmd`) is built on Windows only.
 
 ---
 
