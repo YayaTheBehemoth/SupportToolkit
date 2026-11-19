@@ -18,13 +18,21 @@ This is a modular .NET 10/C# MSP automation CLI. Implementation and tests in thi
 
 **The user owns the entire Git workflow for this code repository.** Do not create/switch/delete branches, stage, commit, push, merge, tag, publish releases, open PRs, or modify remote GitHub unless the user explicitly requests that specific action. A request such as “fix this” or “implement this” authorizes neither commit nor push. Local inspection and reporting are fine. After local changes, show what changed, suggested tests, and let the user decide all Git operations.
 
+- **Ask, don't assume.** Claude Code may ask for one specific Git operation, giving the exact command and a one-line reason, and runs it only after an explicit yes for that operation. An approval covers that one operation only; it does not carry over to later operations or to another session.
+- Merge, rebase, force-push, tag, release, PRs, pushes to `main` and changes to `.github` happen only when the user requests them, never on Claude Code's own suggestion.
+
 SupportToolkitNotes has a separate sanitized documentation workflow; permission there never grants Git permission here.
 
-## Current snapshot (4 Nov 2026; verify before relying)
+## Current state
 
-- Released `main`: `v0.4.1`, which adds the provider-agnostic usage report (`usage-report`, web page `/usage`), the manual/automatic review mode, Zendesk archive warnings, Nordic-letter name matching, and moves all Backup Aggregator provider wiring into `Modules/BackupAggregator/Production/` (enforced by `LayeringTests`). `v0.4.0` added the local web UI (`serve`: Profile, Backup Aggregator and Zendesk bulk delete pages, with a Simple/Detailed view), `configure import` with double-click launchers in the zip, and settings that survive a save. `v0.3.0` added the Business Central monitoring scope; `v0.2.4` and `v0.2.3` are earlier baselines.
-- `feature/compliance-investigation`: fixture-driven compliance evidence and consolidated report; no production Graph authorization. It contains `main` as of `v0.4.0`.
-- Business Central entitlement and tenant scoping shipped in `v0.3.0`; its live validation was limited and read-only.
-- Zendesk ticket routing and the bulk delete (including real deletion) were tested only in a personal account or sandbox; company end-to-end integration needs separate authorized validation.
+- Derive the current state at the start of a session from Git (`git describe --tags`, `git branch -a`, recent `git log`) and from the code itself. Never trust versions, release contents or status written in any document, including this one.
+- For priorities and decisions, read the **newest** `Strategy Checkpoint - *.md` in SupportToolkitNotes, then `Architecture and Decisions.md` and `Roadmap.md`. If Notes aren't mounted locally, request the relevant files or use an authorized connector rather than assuming they are available.
 
-For current priorities and decisions consult SupportToolkitNotes, especially `Strategy Checkpoint - 2026-10-20.md`, `Architecture and Decisions.md`, and `Roadmap.md`. If Notes aren't mounted locally, request the relevant files or use an authorized connector rather than assuming they are available.
+## Collaboration
+
+- Challenge plans, handoffs and requests when the source or evidence points to something better. Propose the alternative with reasons and let the user decide. Agreed refinements replace the original plan; record them. Never deviate silently.
+
+## Keeping this file current
+
+- When a session changes a stable rule (layering, Git ownership, safety, workflow, platform support), propose an edit to this file at the end of the session.
+- Status, versions, priorities and direction never go in this file.
