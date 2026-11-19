@@ -98,7 +98,8 @@ public sealed partial class SupportToolkitConfigurationResolver
 
         var clientSecret =
             environmentClientSecret
-            ?? await _secretStore.GetSecretAsync(
+            ?? await ReadConnectionSecretAsync(
+                configuration,
                 SupportToolkitSecretKeys
                     .AcronisClientSecret(
                         connectionName

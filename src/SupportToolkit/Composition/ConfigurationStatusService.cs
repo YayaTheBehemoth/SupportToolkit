@@ -84,6 +84,10 @@ public sealed class ConfigurationStatusService
                 .ToArray(),
             RuntimeEnvironmentVariables.Obsolete
                 .Where(IsSet)
+                .ToArray(),
+            _secrets.Description,
+            SecretLocationClashes.Find(configuration, _secrets)
+                .Select(clash => clash.Describe())
                 .ToArray());
     }
 
@@ -467,11 +471,10 @@ public sealed class ConfigurationStatusService
                             Present(pair.Value.ClientId)),
                         new StatusDetail(
                             "Client secret",
-                            Present(
-                                await HasSecretAsync(
-                                    SupportToolkitSecretKeys
-                                        .AcronisClientSecret(pair.Key),
-                                    cancellationToken)))
+                            await SecretAsync(
+                                SupportToolkitSecretKeys
+                                    .AcronisClientSecret(pair.Key),
+                                cancellationToken))
                     ]));
         }
 
@@ -495,11 +498,10 @@ public sealed class ConfigurationStatusService
                             Present(connection.ClientId)),
                         new StatusDetail(
                             "Client secret",
-                            Present(
-                                await HasSecretAsync(
-                                    SupportToolkitSecretKeys
-                                        .ZendeskClientSecret(pair.Key),
-                                    cancellationToken))),
+                            await SecretAsync(
+                                SupportToolkitSecretKeys
+                                    .ZendeskClientSecret(pair.Key),
+                                cancellationToken)),
                         new StatusDetail(
                             "Submitter ID",
                             connection.SubmitterId?.ToString()
@@ -604,6 +606,16 @@ public sealed class ConfigurationStatusService
 
         return null;
     }
+
+    private async Task<string> SecretAsync(
+        string key,
+        CancellationToken cancellationToken) =>
+        SecretStatusText.Describe(
+            _secrets,
+            key,
+            await HasSecretAsync(key, cancellationToken),
+            "configured",
+            "not configured");
 
     private async Task<bool> HasSecretAsync(
         string key,

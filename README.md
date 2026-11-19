@@ -464,7 +464,7 @@ Both may point at the same Zendesk subdomain; they still use different OAuth cli
 
 ### Sign-in
 
-The deletion connection is a public OAuth client with PKCE (S256); no client secret exists. The sign-in opens your browser, listens on a free loopback port and sends `http://localhost:{port}` as the redirect URI (the OAuth client registers `http://localhost`; Zendesk ignores the port). It requests `read tickets:write`: `tickets:read` alone is not enough, because search and the signed-in user's identity need `read`. The token is kept in memory only and is gone when the program exits. If Zendesk reports no token lifetime, none is assumed; a rejected or expired token is not replaced silently and needs a new sign-in.
+The deletion connection is a public OAuth client with PKCE (S256); no client secret exists. The sign-in opens your browser (where none can be opened, such as in a container, the console and the web page show the sign-in link to open yourself), listens on a free loopback port and sends `http://localhost:{port}` as the redirect URI (the OAuth client registers `http://localhost`; Zendesk ignores the port). It requests `read tickets:write`: `tickets:read` alone is not enough, because search and the signed-in user's identity need `read`. The token is kept in memory only and is gone when the program exits. If Zendesk reports no token lifetime, none is assumed; a rejected or expired token is not replaced silently and needs a new sign-in.
 
 ### Preview
 
@@ -677,7 +677,7 @@ Portable Release builds use:
 
 The configuration file contains non-secret profile and connection metadata.
 
-Authentication secrets are stored separately through Windows Credential Manager.
+Authentication secrets are stored separately: in Windows Credential Manager on Windows, and read from environment variables on other systems (see [Secrets on Linux and in containers](#secrets-on-linux-and-in-containers)).
 
 The configuration path may be overridden with:
 
@@ -757,6 +757,22 @@ ZENDESK_CLIENT_SECRET
 Zendesk ticket destinations must still be configured through an active profile.
 
 A Zendesk subdomain override cannot silently redirect ticket submission to another instance while retaining the configured destination.
+
+### Secrets on Linux and in containers
+
+Outside Windows there is no Credential Manager, and SupportToolkit never writes a secret to disk in plain text. Each connection's client secret is read from an environment variable instead, for example a Codespaces secret:
+
+```text
+SUPPORTTOOLKIT_SECRET__<PROVIDER>__<CONNECTION>__<SECRET>
+```
+
+The parts come from the secret's key `provider:connection:secret`, in upper case, with every character other than A-Z and 0-9 written as `_`. For example, Zendesk connection `trial` reads `SUPPORTTOOLKIT_SECRET__ZENDESK__TRIAL__CLIENT_SECRET`, and Acronis connection `prod-eu` reads `SUPPORTTOOLKIT_SECRET__ACRONIS__PROD_EU__CLIENT_SECRET`.
+
+`configure profile` and `configure import` do not ask for a secret there; they name the variable to set. `configure status` shows where secrets come from and, for each connection, the variable and whether it is set (never its value).
+
+Because `-`, `_` and `.` all become `_`, two connections of one provider can map to the same variable (`prod-eu` and `prod_eu`). `configure status` reports such a clash, and the secret is refused until one connection is renamed, so one connection's secret is never sent to another.
+
+The `ACRONIS_*` and `ZENDESK_*` overrides above still apply first, on every system.
 
 ### Override precedence
 

@@ -3,7 +3,17 @@
 
 <p class="muted">
         Configuration file: <code>@Status.ConfigurationPath</code>
+        @if (Status.SecretStore is not null)
+        {
+            <br />
+            <text>Secrets: @Status.SecretStore</text>
+        }
 </p>
+
+@foreach (var clash in Status.SecretClashes ?? [])
+{
+    <div class="banner warn">@clash</div>
+}
 
     @if (Status.Runtime is not null)
     {

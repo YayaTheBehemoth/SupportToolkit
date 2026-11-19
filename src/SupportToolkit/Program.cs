@@ -19,7 +19,7 @@ var configurationStore =
         .CreateDefault();
 
 ISecretStore secretStore =
-    new WindowsCredentialStore();
+    SecretStoreComposition.Create();
 
 var configurationResolver =
     new SupportToolkitConfigurationResolver(

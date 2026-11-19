@@ -111,6 +111,33 @@ public sealed partial class SupportToolkitConfigurationResolver
             : configuredMode.Value;
     }
 
+    /// <summary>
+    /// A connection's secret from the secret store. A secret read from a
+    /// place another connection of the same provider also reads from is
+    /// refused: it would send one connection's secret to the other.
+    /// </summary>
+    private async Task<string?> ReadConnectionSecretAsync(
+        SupportToolkitConfiguration configuration,
+        string key,
+        CancellationToken cancellationToken)
+    {
+        var clash =
+            SecretLocationClashes.For(
+                configuration,
+                _secretStore,
+                key);
+
+        if (clash is not null)
+        {
+            throw new InvalidOperationException(
+                clash.Describe());
+        }
+
+        return await _secretStore.GetSecretAsync(
+            key,
+            cancellationToken);
+    }
+
     private string? ReadEnvironmentValue(
         string variableName)
     {

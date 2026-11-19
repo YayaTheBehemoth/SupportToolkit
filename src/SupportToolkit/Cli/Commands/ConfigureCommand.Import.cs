@@ -135,6 +135,23 @@ public sealed partial class ConfigureCommand
                 $"  {item.Provider} connection '{item.ConnectionName}'");
         }
 
+        if (!_secretStore.CanStoreSecrets)
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                "Secrets are not stored by SupportToolkit on this system. " +
+                "Set these environment variables instead (for example as " +
+                "Codespaces secrets):");
+
+            foreach (var item in missing)
+            {
+                Console.WriteLine(
+                    $"  {_secretStore.ExternalLocation(item.Key)}");
+            }
+
+            return 0;
+        }
+
         Console.WriteLine();
         Console.WriteLine(
             "Enter each one now. What you type is not shown. Press Enter " +

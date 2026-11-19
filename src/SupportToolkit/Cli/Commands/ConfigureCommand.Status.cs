@@ -25,6 +25,15 @@ public sealed partial class ConfigureCommand
         Console.WriteLine(
             $"Active profile:     {configuration.ActiveProfile}");
 
+        Console.WriteLine(
+            $"Secrets:            {_secretStore.Description}");
+
+        foreach (var clash in SecretLocationClashes.Find(configuration, _secretStore))
+        {
+            Console.WriteLine(
+                $"  WARNING: {clash.Describe()}");
+        }
+
         Console.WriteLine();
 
         await WriteEffectiveRuntimeAsync(configuration);
@@ -496,7 +505,12 @@ public sealed partial class ConfigureCommand
                         !string.IsNullOrWhiteSpace(pair.Value.ClientId))}");
 
                 Console.WriteLine(
-                    $"    Client secret: {DisplaySecretStatus(secretConfigured)}");
+                    $"    Client secret: {SecretStatusText.Describe(
+                        _secretStore,
+                        SupportToolkitSecretKeys.AcronisClientSecret(pair.Key),
+                        secretConfigured,
+                        "configured",
+                        "missing")}");
             }
         }
 
@@ -535,7 +549,12 @@ public sealed partial class ConfigureCommand
                         !string.IsNullOrWhiteSpace(connection.ClientId))}");
 
                 Console.WriteLine(
-                    $"    Client secret: {DisplaySecretStatus(secretConfigured)}");
+                    $"    Client secret: {SecretStatusText.Describe(
+                        _secretStore,
+                        SupportToolkitSecretKeys.ZendeskClientSecret(pair.Key),
+                        secretConfigured,
+                        "configured",
+                        "missing")}");
 
                 Console.WriteLine(
                     $"    Submitter ID:  {DisplayZendeskUserId(connection.SubmitterId)}");

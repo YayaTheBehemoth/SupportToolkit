@@ -12,7 +12,9 @@ public sealed record ConfigurationStatus(
     ActiveRuntimeStatus? Runtime,
     IReadOnlyList<SavedConnectionStatus> SavedConnections,
     IReadOnlyList<string> EnvironmentOverridesSet,
-    IReadOnlyList<string> ObsoleteEnvironmentVariablesSet)
+    IReadOnlyList<string> ObsoleteEnvironmentVariablesSet,
+    string? SecretStore = null,
+    IReadOnlyList<string>? SecretClashes = null)
 {
     public bool HasProfiles => Profiles.Count > 0;
 }
