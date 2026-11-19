@@ -56,6 +56,18 @@
             <span class="badge neutral">working</span>
         </header>
 
+        @if (web.SignInLink is { } link)
+        {
+            <div class="banner warn">
+                <strong>No browser window could be opened here.</strong>
+                <span>
+                    Open the Zendesk sign-in yourself:
+                    <a href="@link.AbsoluteUri" target="_blank" rel="noopener noreferrer">sign in to Zendesk</a>.
+                    This page carries on once you have signed in.
+                </span>
+            </div>
+        }
+
         @if (web.IsDeleting)
         {
             <progress max="100" value="@ProgressPercent(web.Session?.LatestProgress)"></progress>

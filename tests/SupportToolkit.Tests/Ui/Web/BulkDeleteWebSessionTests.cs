@@ -33,7 +33,7 @@ public class BulkDeleteWebSessionTests : IDisposable
         return new BulkDeleteWebSession(
             _ => Task.FromResult(
                 new BulkDeleteAvailability(true, "example", null)),
-            _ => Task.FromResult(
+            (_, _) => Task.FromResult(
                 new BulkDeleteConnection(
                     new BulkDeleteReviewSession(
                         "example",
@@ -78,6 +78,55 @@ public class BulkDeleteWebSessionTests : IDisposable
         Assert.Equal(BulkDeleteStage.Previewed, web.Session!.Stage);
         Assert.Equal(3, web.Session.SelectedCount);
         Assert.True(changes >= 4);
+    }
+
+    [Fact]
+    public async Task WhenNoBrowserOpens_TheSignInLinkIsShown_UntilTheNextAction()
+    {
+        var link = new Uri("https://example.zendesk.com/oauth/authorizations/new");
+        var signedIn = new TaskCompletionSource<DeletionOperator>();
+        var list = Closed(3).ToArray();
+
+        var web =
+            new BulkDeleteWebSession(
+                _ => Task.FromResult(
+                    new BulkDeleteAvailability(true, "example", null)),
+                (browserUnavailable, _) =>
+                {
+                    // The connection reports that no browser opened.
+                    browserUnavailable(link);
+
+                    return Task.FromResult(
+                        new BulkDeleteConnection(
+                            new BulkDeleteReviewSession(
+                                "example",
+                                _ => signedIn.Task,
+                                (_, _, _) => Task.FromResult(Preview(list)),
+                                Executor(new FakeDeleteApi(), _receipts),
+                                new FixedClock()),
+                            null));
+                });
+
+        Assert.True(web.StartSignIn());
+
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+
+        while (web.SignInLink is null)
+        {
+            Assert.True(DateTime.UtcNow < deadline, "The link was not shown.");
+            await Task.Delay(20);
+        }
+
+        // Still waiting for the operator to sign in with the link.
+        Assert.Equal(link, web.SignInLink);
+        Assert.NotNull(web.Busy);
+
+        signedIn.SetResult(Operator);
+        await WaitUntilIdle(web);
+
+        Assert.True(web.StartSearch(Criteria));
+        Assert.Null(web.SignInLink);
+        await WaitUntilIdle(web);
     }
 
     [Fact]

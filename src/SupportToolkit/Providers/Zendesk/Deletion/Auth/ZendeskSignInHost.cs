@@ -33,8 +33,28 @@ public interface IZendeskLoopbackReceiver : IDisposable
         CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Opens the sign-in page in the system browser.
+///
+/// Where no browser can be opened (a machine without a desktop, such as a
+/// container or a codespace), the link is handed to browserUnavailable so
+/// the operator can open it themselves; the sign-in keeps waiting for the
+/// redirect. Without that callback the failure is a sign-in error, never
+/// an unhandled crash.
+/// </summary>
 public sealed class SystemBrowserLauncher : IZendeskBrowserLauncher
 {
+    private readonly Action<Uri>? _browserUnavailable;
+    private readonly Action<ProcessStartInfo> _start;
+
+    public SystemBrowserLauncher(
+        Action<Uri>? browserUnavailable = null,
+        Action<ProcessStartInfo>? start = null)
+    {
+        _browserUnavailable = browserUnavailable;
+        _start = start ?? (info => Process.Start(info));
+    }
+
     public void Open(Uri url)
     {
         ArgumentNullException.ThrowIfNull(url);
@@ -45,11 +65,28 @@ public sealed class SystemBrowserLauncher : IZendeskBrowserLauncher
                 "Only an HTTPS sign-in page is opened.");
         }
 
-        Process.Start(
-            new ProcessStartInfo(url.AbsoluteUri)
+        try
+        {
+            _start(
+                new ProcessStartInfo(url.AbsoluteUri)
+                {
+                    UseShellExecute = true
+                });
+        }
+        catch (Exception exception)
+            when (exception is System.ComponentModel.Win32Exception
+                  or InvalidOperationException
+                  or PlatformNotSupportedException)
+        {
+            if (_browserUnavailable is null)
             {
-                UseShellExecute = true
-            });
+                throw new ZendeskAuthenticationException(
+                    "No browser could be opened for the Zendesk sign-in.",
+                    exception);
+            }
+
+            _browserUnavailable(url);
+        }
     }
 }
 

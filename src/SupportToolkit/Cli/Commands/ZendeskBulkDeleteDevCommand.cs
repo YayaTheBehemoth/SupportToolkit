@@ -249,6 +249,9 @@ public sealed class ZendeskBulkDeleteDevCommand
                 logger.DebugEnabled ? logger : null,
                 options.Mode == ZendeskBulkDeleteMode.Delete,
                 options.ReceiptDirectory,
+                link => output.WriteLine(
+                    "No browser could be opened here. Open this link in a " +
+                    "browser to sign in: " + link.AbsoluteUri),
                 cancellationToken);
 
         output.WriteLine(
