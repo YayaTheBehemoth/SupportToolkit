@@ -12,10 +12,13 @@ defaults.
 
 ```sh
 export DUPLICATI_LAB_SETTINGS_KEY=...   # any random value
-export DUPLICATI_LAB_PASSWORD_A=...     # web/API password of machine-a
-export DUPLICATI_LAB_PASSWORD_B=...     # web/API password of machine-b
+# The servers' web/API passwords, under the names SupportToolkit reads:
+export SUPPORTTOOLKIT_SECRET__DUPLICATI__LAB__PASSWORD_MACHINE_A=...
+export SUPPORTTOOLKIT_SECRET__DUPLICATI__LAB__PASSWORD_MACHINE_B=...
 docker compose -f lab/duplicati/compose.yml up -d
 ```
+
+Usually you start the whole lab with `lab/up.sh` instead (see `lab/README.md`).
 
 `machine-a` answers on `http://127.0.0.1:8201/`, `machine-b` on
 `http://127.0.0.1:8202/`. Both back up the synthetic files in `sample/` to

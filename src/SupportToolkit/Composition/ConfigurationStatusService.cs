@@ -87,7 +87,30 @@ public sealed class ConfigurationStatusService
             _secrets.Description,
             SecretLocationClashes.Find(configuration, _secrets, ProviderConnectionsComposition.All)
                 .Select(clash => clash.Describe())
-                .ToArray());
+                .ToArray(),
+            active is null
+                ? null
+                : ActiveSystems(active.Value.Profile));
+    }
+
+    /// <summary>
+    /// The systems a profile reads and writes, as the composition chooses
+    /// them; "none" for a capability the profile does not select.
+    /// </summary>
+    public static ActiveSystemsStatus ActiveSystems(SupportToolkitProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+
+        return new ActiveSystemsStatus(
+            BackupSelection.For(profile) is { } backup
+                ? BackupSystemsComposition.SystemName(backup)
+                : "none",
+            CommercialSelection.For(profile) is { } commercial
+                ? CommercialSystemsComposition.SystemName(commercial)
+                : "none",
+            TicketingSelection.For(profile) is { } ticketing
+                ? TicketingComposition.SystemName(ticketing)
+                : "none");
     }
 
     /// <summary>
@@ -678,7 +701,12 @@ public sealed class ConfigurationStatusService
             profile.BusinessCentralConnection,
             new Dictionary<string, SupportToolkitMode>(
                 profile.Modules,
-                StringComparer.OrdinalIgnoreCase));
+                StringComparer.OrdinalIgnoreCase))
+        {
+            Systems = ActiveSystems(profile),
+            Backup = BackupSelection.For(profile),
+            Commercial = CommercialSelection.For(profile)
+        };
 
     private static (string Name, SupportToolkitProfile Profile)?
         FindProfile(

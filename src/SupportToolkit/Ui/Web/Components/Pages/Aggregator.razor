@@ -24,7 +24,9 @@
     <strong>@(production ? "PRODUCTION: real customer data" : "FIXTURE: synthetic data only")</strong>
     <span>
         @(production
-            ? "This review reads live Acronis and Business Central data. Customer names appear on screen."
+            ? _systems is { } systems
+                ? $"This review reads live data from {systems.Backup} and {systems.Commercial}, and tickets go to {systems.Ticketing}. Customer names appear on screen."
+                : "This review reads live data. Customer names appear on screen."
             : "No external system is contacted.")
     </span>
 </div>
@@ -284,6 +286,7 @@
 
 @code {
     private ScopedReviewAvailability? _availability;
+    private ActiveSystemsStatus? _systems;
     private string _tab = "attention";
     private TicketDraft? _draft;
     private TicketNotReady? _notReady;
@@ -298,6 +301,8 @@
             session.Progress.Changed += OnChanged;
             _availability = await session.Review.GetAvailabilityAsync();
         }
+
+        _systems = (await State.Status.GetAsync()).ActiveSystems;
     }
 
     private void OnChanged() => _ = InvokeAsync(StateHasChanged);

@@ -74,7 +74,7 @@ Direct CLI commands are also available for scripting and development.
 | `SupportToolkit` | Interactive console (first run starts the configuration wizard). | Depends on the menu action chosen. |
 | `SupportToolkit --help` | Print usage. | None. |
 | `serve [--port <n>] [--no-browser]` | Open the local web UI. See [Web UI](#web-ui). | Listens on 127.0.0.1 only. What the pages do depends on the active profile's mode. |
-| `configure [status \| profile <name> \| profile delete <name> \| use <name> \| import [file]]` | Manage profiles, connections and credentials. `import` moves a settings file into place (see [Configuration storage](#configuration-storage)). | Local configuration and Windows Credential Manager only. |
+| `configure [status \| profile <name> \| profile delete <name> \| use <name> \| import [file] \| lab]` | Manage profiles, connections and credentials. `import` moves a settings file into place (see [Configuration storage](#configuration-storage)); `lab` adds a profile for the second-provider lab (see [lab/README.md](lab/README.md)). | Local configuration and Windows Credential Manager only. |
 | `backup-aggregator inventory-review <tenant> \| --all` | Consolidated Acronis inventory review. | Read-only in production mode. |
 | `backup-aggregator scoped-review` | Review only tenants entitled to monitoring in Business Central, plus the operator's own tenant. | Read-only Acronis and Business Central calls; interactive Business Central sign-in. |
 | `backup-aggregator ticket preview --scoped` / `ticket submit --scoped` | Ticket from a complete scoped review. | `submit` **writes to Zendesk.** |
@@ -161,7 +161,8 @@ The repository has a dev container (`.devcontainer/devcontainer.json`): the .NET
    - Open the printed link, replacing `127.0.0.1` with `localhost` if needed.
 
    The same holds on any Linux machine of your own: run `serve` there and reach it with `ssh -L 5050:127.0.0.1:5050 <machine>`. The Zendesk deletion sign-in also redirects to `localhost` on the machine running the toolkit, so it completes only when that port is forwarded the same way.
-5. **Stop the codespace when you are done.** The free quota counts the time a codespace is running and the storage it keeps; a stopped codespace still uses storage until it is deleted.
+5. **Second-provider lab.** `lab/up.sh` starts self-hosted stand-ins (osTicket, Duplicati, Dolibarr) with synthetic records, and `configure lab` adds a `lab` profile beside your own; switch with `configure use lab` and back with `configure use <your profile>`. The installed exe can use the lab too, through the same kind of same-port tunnel. See [lab/README.md](lab/README.md).
+6. **Stop the codespace when you are done.** The free quota counts the time a codespace is running and the storage it keeps; a stopped codespace still uses storage until it is deleted.
 
 The Windows release (`scripts/publish-windows.cmd`) is built on Windows only.
 

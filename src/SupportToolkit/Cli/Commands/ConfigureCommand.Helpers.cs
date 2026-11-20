@@ -1,3 +1,4 @@
+using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Secrets;
 
@@ -36,11 +37,15 @@ public sealed partial class ConfigureCommand
     private static bool RequiresAcronisConnection(
         SupportToolkitProfile profile)
     {
+        // Only a review that reads Acronis needs its connection; a profile
+        // whose backup setting selects another system does not.
         return GetConfiguredMode(
                    profile,
                    BackupAggregatorCommand
                )
-               == SupportToolkitMode.Production;
+               == SupportToolkitMode.Production
+               && BackupSystemsComposition.ReviewsAcronis(
+                   BackupSelection.For(profile));
     }
 
     private static string? FindProfileKey(

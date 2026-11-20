@@ -18,6 +18,10 @@
     @if (Status.Runtime is not null)
     {
         <h2>Active profile: @Status.ActiveProfile</h2>
+        @if (Status.ActiveSystems is { } systems)
+        {
+            <p class="muted">Systems: @systems</p>
+        }
 
         <div class="grid">
             <ConnectionCard Connection="Status.Runtime.Acronis" />

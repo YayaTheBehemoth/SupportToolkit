@@ -96,7 +96,8 @@ public sealed partial class ConfigureCommand
     /// connections need are asked for here, hidden as they are typed, and
     /// stored the same way the wizard stores them. Enter skips one.
     /// </summary>
-    private async Task<int> PromptForMissingSecretsAsync()
+    private async Task<int> PromptForMissingSecretsAsync(
+        Func<MissingSecret, bool>? only = null)
     {
         Console.WriteLine();
 
@@ -105,10 +106,12 @@ public sealed partial class ConfigureCommand
         try
         {
             missing =
-                await RequiredSecrets.FindMissingAsync(
+                (await RequiredSecrets.FindMissingAsync(
                     await _configurationStore.LoadAsync(),
                     _secretStore,
-                    ProviderConnectionsComposition.All);
+                    ProviderConnectionsComposition.All))
+                .Where(item => only?.Invoke(item) ?? true)
+                .ToArray();
         }
         catch (InvalidOperationException)
         {
@@ -134,7 +137,7 @@ public sealed partial class ConfigureCommand
         foreach (var item in missing)
         {
             Console.WriteLine(
-                $"  {item.Provider} connection '{item.ConnectionName}'");
+                $"  {item.Provider} connection '{item.ConnectionName}': {item.SecretName}");
         }
 
         if (!_secretStore.CanStoreSecrets)
@@ -210,7 +213,7 @@ public sealed partial class ConfigureCommand
             foreach (var item in skipped)
             {
                 Console.WriteLine(
-                    $"  {item.Provider} connection '{item.ConnectionName}'");
+                    $"  {item.Provider} connection '{item.ConnectionName}': {item.SecretName}");
             }
 
             Console.WriteLine(

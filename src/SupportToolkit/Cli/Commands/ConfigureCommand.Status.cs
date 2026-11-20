@@ -25,6 +25,12 @@ public sealed partial class ConfigureCommand
         Console.WriteLine(
             $"Active profile:     {configuration.ActiveProfile}");
 
+        if (FindProfileKey(configuration, configuration.ActiveProfile) is { } activeKey)
+        {
+            Console.WriteLine(
+                $"Systems:            {ConfigurationStatusService.ActiveSystems(configuration.Profiles[activeKey])}");
+        }
+
         Console.WriteLine(
             $"Secrets:            {_secretStore.Description}");
 
