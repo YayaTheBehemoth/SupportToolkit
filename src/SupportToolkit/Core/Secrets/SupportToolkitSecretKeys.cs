@@ -31,6 +31,16 @@ public static class SupportToolkitSecretKeys
         );
     }
 
+    public static string OsTicketApiKey(
+        string connectionName)
+    {
+        return Build(
+            "osticket",
+            connectionName,
+            "api-key"
+        );
+    }
+
     private static string Build(
         string provider,
         string connectionName,

@@ -93,16 +93,39 @@ public sealed partial class ConfigureCommand
             }
         }
 
+        /*
+         * A ticketing block that selects Zendesk becomes the Zendesk
+         * fields this wizard edits, so the two cannot disagree. One that
+         * selects another system is set in the configuration file and
+         * left as it is: the wizard does not configure that system yet.
+         */
+        var otherTicketing =
+            TicketingSelection.MoveZendeskBlockToZendeskFields(
+                profile
+            );
+
+        if (otherTicketing is not null)
+        {
+            Console.WriteLine(
+                $"Ticket submission: {otherTicketing.SystemName} " +
+                $"(connection {DisplayOptionalValue(otherTicketing.Connection)}, " +
+                $"destination {DisplayOptionalValue(otherTicketing.Destination)}), " +
+                "set in the configuration file. Edit it there."
+            );
+        }
+
         var zendeskSelected =
-            !string.IsNullOrWhiteSpace(
+            otherTicketing is null
+            && !string.IsNullOrWhiteSpace(
                 profile.ZendeskConnection
             );
 
-        if (zendeskSelected
+        if (otherTicketing is null
+            && (zendeskSelected
             || ReadConfirmation(
                 "Configure Zendesk ticket submission for this profile? [y/N]: ",
                 defaultValue: false
-            ))
+            )))
         {
             Console.WriteLine();
 

@@ -146,14 +146,16 @@ public sealed partial class SupportToolkitConfigurationResolver
     private string MissingSecretAdvice(
         string key,
         string profileName,
-        string environmentOverride)
+        string? environmentOverride = null)
     {
         var fix =
             _secretStore.CanStoreSecrets
                 ? $"Run SupportToolkit configure profile {profileName}"
                 : $"Set {_secretStore.ExternalLocation(key) ?? "it outside SupportToolkit"}";
 
-        return $"{fix} or provide {environmentOverride}.";
+        return environmentOverride is null
+            ? $"{fix}."
+            : $"{fix} or provide {environmentOverride}.";
     }
 
     private string? ReadEnvironmentValue(

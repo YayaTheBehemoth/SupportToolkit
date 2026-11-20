@@ -61,7 +61,7 @@ else
                     <th>Aggregator mode</th>
                     <th>Acronis</th>
                     <th>Business Central</th>
-                    <th>Zendesk ticketing</th>
+                    <th>Ticketing</th>
                     <th>Zendesk deletion</th>
                     <th></th>
                 </tr>
@@ -75,7 +75,7 @@ else
                         <td>@ModeText(profile)</td>
                         <td>@Dash(profile.AcronisConnection)</td>
                         <td>@Dash(profile.BusinessCentralConnection)</td>
-                        <td>@Dash(profile.ZendeskConnection)@(profile.ZendeskDestination is null ? "" : " → " + profile.ZendeskDestination)</td>
+                        <td>@TicketingText(profile.Ticketing)</td>
                         <td>@Dash(profile.ZendeskDeletionConnection)</td>
                         <td>
                             @if (!profile.IsActive)
@@ -157,6 +157,12 @@ else
 
     private static string Dash(string? value) =>
         string.IsNullOrWhiteSpace(value) ? "—" : value;
+
+    private static string TicketingText(TicketingSelection? ticketing) =>
+        ticketing is null
+            ? "—"
+            : $"{ticketing.SystemName}: {Dash(ticketing.Connection)}" +
+              (ticketing.Destination is null ? "" : " → " + ticketing.Destination);
 
     private static string ModeText(ProfileStatus profile) =>
         profile.Modules.TryGetValue("backup-aggregator", out var mode)

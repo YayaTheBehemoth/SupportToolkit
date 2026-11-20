@@ -171,7 +171,7 @@ public sealed partial class ConfigureCommand
                 value =
                     ConsoleSecretReader.ReadOptional(
                         $"  {item.Provider} '{item.ConnectionName}' " +
-                        "client secret: ");
+                        $"{item.SecretName}: ");
             }
             catch (InvalidOperationException)
             {

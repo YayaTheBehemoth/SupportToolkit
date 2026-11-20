@@ -60,3 +60,17 @@ public sealed record ResolvedZendeskConnection(
     long SubmitterId,
     long RequesterId
 );
+
+/// <summary>
+/// Fully resolved osTicket connection and ticket destination, validated
+/// locally before any osTicket request. TopicId is the help topic that
+/// routes the ticket.
+/// </summary>
+public sealed record ResolvedOsTicketConnection(
+    string ConnectionName,
+    string BaseUrl,
+    string ApiKey,
+    string RequesterName,
+    string RequesterEmail,
+    string DestinationName,
+    int TopicId);

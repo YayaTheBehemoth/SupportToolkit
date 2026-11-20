@@ -3,19 +3,21 @@ using SupportToolkit.Core.Secrets;
 namespace SupportToolkit.Core.Configuration;
 
 /// <summary>
-/// A client secret a connection needs that is not stored on this computer.
+/// A secret a connection needs that is not stored on this computer.
+/// SecretName says what it is ("client secret", "API key").
 /// </summary>
 public sealed record MissingSecret(
     string Provider,
     string ConnectionName,
-    string Key);
+    string Key,
+    string SecretName = "client secret");
 
 /// <summary>
 /// Which secrets a configuration needs that this computer does not have.
 ///
 /// Only connections that a profile actually uses count; a saved connection
-/// nothing refers to needs nothing. Only Acronis and Zendesk ticketing have
-/// a client secret. Business Central and Zendesk deletion sign in
+/// nothing refers to needs nothing. Acronis and Zendesk ticketing have a
+/// client secret, osTicket an API key. Business Central and Zendesk deletion sign in
 /// interactively and store none.
 ///
 /// It reports which secrets are missing and never reads a value out.
@@ -54,9 +56,12 @@ public static class RequiredSecrets
 
         var zendesk =
             configuration.Profiles.Values
-                .Select(profile => profile.ZendeskConnection)
-                .Where(name => !string.IsNullOrWhiteSpace(name))
-                .Select(name => name!)
+                .Select(TicketingSelection.For)
+                .Where(selection =>
+                    selection is not null
+                    && selection.Is(TicketingSelection.Providers.Zendesk)
+                    && !string.IsNullOrWhiteSpace(selection.Connection))
+                .Select(selection => selection!.Connection!.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Where(name => configuration.Connections.Zendesk.ContainsKey(name))
                 .Order(StringComparer.OrdinalIgnoreCase);
@@ -72,6 +77,30 @@ public static class RequiredSecrets
                 cancellationToken);
         }
 
+        var osTicket =
+            configuration.Profiles.Values
+                .Select(TicketingSelection.For)
+                .Where(selection =>
+                    selection is not null
+                    && selection.Is(TicketingSelection.Providers.OsTicket)
+                    && !string.IsNullOrWhiteSpace(selection.Connection))
+                .Select(selection => selection!.Connection!.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(name => configuration.Connections.OsTicket.ContainsKey(name))
+                .Order(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var name in osTicket)
+        {
+            await AddIfMissingAsync(
+                missing,
+                secrets,
+                "osTicket",
+                name,
+                SupportToolkitSecretKeys.OsTicketApiKey(name),
+                cancellationToken,
+                "API key");
+        }
+
         return missing;
     }
 
@@ -81,13 +110,15 @@ public static class RequiredSecrets
         string provider,
         string connectionName,
         string key,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string secretName = "client secret")
     {
         var value = await secrets.GetSecretAsync(key, cancellationToken);
 
         if (string.IsNullOrWhiteSpace(value))
         {
-            missing.Add(new MissingSecret(provider, connectionName, key));
+            missing.Add(
+                new MissingSecret(provider, connectionName, key, secretName));
         }
     }
 }

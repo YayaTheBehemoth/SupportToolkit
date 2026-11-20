@@ -23,8 +23,7 @@ public sealed record ProfileStatus(
     string Name,
     bool IsActive,
     string? AcronisConnection,
-    string? ZendeskConnection,
-    string? ZendeskDestination,
+    TicketingSelection? Ticketing,
     string? ZendeskDeletionConnection,
     string? BusinessCentralConnection,
     IReadOnlyDictionary<string, SupportToolkitMode> Modules);
@@ -35,7 +34,7 @@ public sealed record ProfileStatus(
 public sealed record ActiveRuntimeStatus(
     ModeStatus BackupAggregatorMode,
     ConnectionStatus Acronis,
-    ConnectionStatus ZendeskTicketing,
+    ConnectionStatus Ticketing,
     ConnectionStatus ZendeskDeletion,
     ConnectionStatus BusinessCentral,
     ReviewWaitStatus ReviewWait);

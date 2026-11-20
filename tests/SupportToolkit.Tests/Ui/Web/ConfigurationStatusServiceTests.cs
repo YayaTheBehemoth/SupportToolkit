@@ -32,7 +32,7 @@ public class ConfigurationStatusServiceTests
         Assert.Equal(SupportToolkitMode.Production, runtime.BackupAggregatorMode.Mode);
 
         Assert.Equal(ConnectionState.Valid, runtime.Acronis.State);
-        Assert.Equal(ConnectionState.Valid, runtime.ZendeskTicketing.State);
+        Assert.Equal(ConnectionState.Valid, runtime.Ticketing.State);
         Assert.Equal(ConnectionState.Valid, runtime.ZendeskDeletion.State);
         Assert.Equal(ConnectionState.Valid, runtime.BusinessCentral.State);
         Assert.True(runtime.ReviewWait.IsValid);
@@ -58,7 +58,7 @@ public class ConfigurationStatusServiceTests
         var (service, _, _) =
             Create(FullConfiguration(), FullSecrets());
 
-        var zendesk = (await service.GetAsync()).Runtime!.ZendeskTicketing;
+        var zendesk = (await service.GetAsync()).Runtime!.Ticketing;
 
         Assert.Equal("zd", zendesk.Alias);
         Assert.Contains(zendesk.Details, d => d.Label == "Instance" && d.Value == "https://example.zendesk.com");
@@ -111,7 +111,7 @@ public class ConfigurationStatusServiceTests
         Assert.Equal(ConnectionState.Invalid, runtime.Acronis.State);
         Assert.Contains("secret", runtime.Acronis.Reason, StringComparison.OrdinalIgnoreCase);
 
-        Assert.Equal(ConnectionState.Invalid, runtime.ZendeskTicketing.State);
+        Assert.Equal(ConnectionState.Invalid, runtime.Ticketing.State);
 
         // The connections that need no secret are unaffected.
         Assert.Equal(ConnectionState.Valid, runtime.ZendeskDeletion.State);

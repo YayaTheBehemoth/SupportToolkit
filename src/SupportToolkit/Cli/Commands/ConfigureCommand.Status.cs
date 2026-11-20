@@ -1,10 +1,10 @@
 
 using System.Globalization;
+using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Modules.UsageReport;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Providers.Acronis.Transport;
-using SupportToolkit.Providers.Zendesk.Transport;
 
 namespace SupportToolkit.Cli.Commands;
 
@@ -100,7 +100,7 @@ public sealed partial class ConfigureCommand
 
         Console.WriteLine();
 
-        await WriteEffectiveZendeskAsync(
+        await WriteEffectiveTicketingAsync(
             profile,
             resolver);
 
@@ -262,14 +262,22 @@ public sealed partial class ConfigureCommand
         }
     }
 
-    private static async Task WriteEffectiveZendeskAsync(
+    /// <summary>
+    /// Ticket submission through whichever system the profile selects,
+    /// resolved by the same code a submission uses. This validates the
+    /// selection, destination, routing and credential availability; it
+    /// does not authenticate or submit a ticket.
+    /// </summary>
+    private static async Task WriteEffectiveTicketingAsync(
         SupportToolkitProfile profile,
         SupportToolkitConfigurationResolver resolver)
     {
-        Console.WriteLine("Zendesk ticket submission");
+        var selection = TicketingSelection.For(profile);
 
-        if (string.IsNullOrWhiteSpace(profile.ZendeskConnection))
+        if (selection is null)
         {
+            Console.WriteLine("Ticket submission");
+
             Console.WriteLine(
                 "  Connection: not selected");
 
@@ -279,51 +287,31 @@ public sealed partial class ConfigureCommand
             return;
         }
 
-        Console.WriteLine(
-            $"  Connection alias: {profile.ZendeskConnection}");
+        Console.WriteLine($"{selection.SystemName} ticket submission");
 
         Console.WriteLine(
-            $"  Destination alias: {DisplayOptionalValue(profile.ZendeskDestination)}");
+            $"  Connection alias: {DisplayOptionalValue(selection.Connection)}");
+
+        Console.WriteLine(
+            $"  Destination alias: {DisplayOptionalValue(selection.Destination)}");
 
         try
         {
-            /*
-             * Reuse the actual runtime configuration resolver.
-             *
-             * This validates:
-             * - The active profile's connection reference.
-             * - The selected destination and group ID.
-             * - The Zendesk instance override restriction.
-             * - Credential availability.
-             *
-             * This does not authenticate or submit a ticket.
-             */
-            var resolved =
-                await resolver.GetZendeskConnectionAsync();
+            var target =
+                await TicketingComposition.ResolveTargetAsync(resolver);
 
-            var options =
-                ZendeskOptions.Create(
-                    resolved.Subdomain,
-                    resolved.ClientId,
-                    resolved.ClientSecret);
-
-            Console.WriteLine(
-                $"  Instance: {options.BaseUri.GetLeftPart(UriPartial.Authority)}");
-
-            Console.WriteLine(
-                $"  Destination: {resolved.DestinationName}");
-
-            Console.WriteLine(
-                $"  Group ID: {resolved.GroupId}");
-
-            Console.WriteLine(
-                $"  Submitter user ID: {resolved.SubmitterId}");
-
-            Console.WriteLine(
-                $"  Requester user ID: {resolved.RequesterId}");
+            foreach (var detail in target.Details)
+            {
+                Console.WriteLine($"  {detail.Label}: {detail.Value}");
+            }
 
             Console.WriteLine(
                 "  Configuration: valid locally");
+
+            if (target.Destination.Caveat is { } caveat)
+            {
+                Console.WriteLine($"  Note: {caveat}");
+            }
         }
         catch (InvalidOperationException exception)
         {
@@ -445,13 +433,15 @@ public sealed partial class ConfigureCommand
                 $"    Acronis connection:  " +
                 $"{DisplayOptionalValue(profile.AcronisConnection)}");
 
-            Console.WriteLine(
-                $"    Zendesk connection:  " +
-                $"{DisplayOptionalValue(profile.ZendeskConnection)}");
+            var ticketing = TicketingSelection.For(profile);
 
             Console.WriteLine(
-                $"    Zendesk destination: " +
-                $"{DisplayOptionalValue(profile.ZendeskDestination)}");
+                $"    Ticketing:           " +
+                (ticketing is null
+                    ? DisplayOptionalValue(null)
+                    : $"{ticketing.SystemName}, connection " +
+                      $"{DisplayOptionalValue(ticketing.Connection)}, " +
+                      $"destination {DisplayOptionalValue(ticketing.Destination)}"));
 
             Console.WriteLine(
                 $"    Zendesk deletion:    " +

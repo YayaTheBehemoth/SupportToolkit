@@ -1,0 +1,46 @@
+# osTicket lab: contract discovery only. Daily development uses the
+# recorded fixtures in the tests, never this instance.
+#
+# Passwords have no defaults: set them in the environment (for example as
+# Codespaces secrets) before `docker compose up`. See README.md.
+name: supporttoolkit-lab-osticket
+
+services:
+  osticket:
+    image: devinsolutions/osticket:1.17.5
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MYSQL_HOST: db
+      MYSQL_DATABASE: osticket
+      MYSQL_USER: osticket
+      MYSQL_PASSWORD: ${OSTICKET_LAB_DB_PASSWORD:?set OSTICKET_LAB_DB_PASSWORD}
+      INSTALL_SECRET: ${OSTICKET_LAB_INSTALL_SECRET:?set OSTICKET_LAB_INSTALL_SECRET}
+      INSTALL_NAME: SupportToolkit lab
+      INSTALL_URL: http://localhost:8080/
+      INSTALL_EMAIL: helpdesk@example.invalid
+      ADMIN_USERNAME: labadmin
+      ADMIN_EMAIL: admin@example.invalid
+      ADMIN_PASSWORD: ${OSTICKET_LAB_ADMIN_PASSWORD:?set OSTICKET_LAB_ADMIN_PASSWORD}
+      # No mail leaves the lab: the SMTP host does not exist.
+      SMTP_HOST: smtp.invalid
+    ports:
+      - "127.0.0.1:8080:80"
+
+  db:
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: osticket
+      MARIADB_USER: osticket
+      MARIADB_PASSWORD: ${OSTICKET_LAB_DB_PASSWORD:?set OSTICKET_LAB_DB_PASSWORD}
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      retries: 30
+    volumes:
+      - db:/var/lib/mysql
+
+volumes:
+  db:

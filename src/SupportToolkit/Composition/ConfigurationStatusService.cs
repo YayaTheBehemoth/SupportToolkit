@@ -3,7 +3,6 @@ using SupportToolkit.Core.Secrets;
 using SupportToolkit.Providers.Acronis.Transport;
 using SupportToolkit.Providers.BusinessCentral.Transport;
 using SupportToolkit.Providers.Zendesk.Deletion;
-using SupportToolkit.Providers.Zendesk.Transport;
 
 namespace SupportToolkit.Composition;
 
@@ -141,7 +140,7 @@ public sealed class ConfigurationStatusService
                 profile,
                 mode.Mode == SupportToolkitMode.Production,
                 cancellationToken),
-            await GetZendeskTicketingAsync(profile, cancellationToken),
+            await GetTicketingAsync(profile, cancellationToken),
             await GetZendeskDeletionAsync(profile, cancellationToken),
             await GetBusinessCentralAsync(profile, cancellationToken),
             await GetReviewWaitAsync(cancellationToken));
@@ -241,16 +240,20 @@ public sealed class ConfigurationStatusService
         }
     }
 
-    private async Task<ConnectionStatus> GetZendeskTicketingAsync(
+    /// <summary>
+    /// Ticket submission through whichever system the profile selects,
+    /// resolved as a submission would resolve it, without calling it.
+    /// </summary>
+    private async Task<ConnectionStatus> GetTicketingAsync(
         SupportToolkitProfile profile,
         CancellationToken cancellationToken)
     {
-        const string Name = "Zendesk ticket submission";
+        var selection = TicketingSelection.For(profile);
 
-        if (string.IsNullOrWhiteSpace(profile.ZendeskConnection))
+        if (selection is null)
         {
             return new ConnectionStatus(
-                Name,
+                "Ticket submission",
                 ConnectionState.NotSelected,
                 null,
                 "Submission is unavailable until a connection and " +
@@ -258,48 +261,33 @@ public sealed class ConfigurationStatusService
                 []);
         }
 
+        var name = $"{selection.SystemName} ticket submission";
+
         try
         {
-            var resolved =
-                await _resolver.GetZendeskConnectionAsync(
+            var target =
+                await TicketingComposition.ResolveTargetAsync(
+                    _resolver,
                     cancellationToken);
 
-            var options =
-                ZendeskOptions.Create(
-                    resolved.Subdomain,
-                    resolved.ClientId,
-                    resolved.ClientSecret);
-
             return new ConnectionStatus(
-                Name,
+                name,
                 ConnectionState.Valid,
-                profile.ZendeskConnection,
-                null,
-                [
-                    new StatusDetail(
-                        "Instance",
-                        options.BaseUri.GetLeftPart(UriPartial.Authority)),
-                    new StatusDetail("Destination", resolved.DestinationName),
-                    new StatusDetail("Group ID", resolved.GroupId.ToString()),
-                    new StatusDetail(
-                        "Submitter user ID",
-                        resolved.SubmitterId.ToString()),
-                    new StatusDetail(
-                        "Requester user ID",
-                        resolved.RequesterId.ToString())
-                ]);
+                selection.Connection,
+                target.Destination.Caveat,
+                target.Details);
         }
         catch (InvalidOperationException exception)
         {
             return new ConnectionStatus(
-                Name,
+                name,
                 ConnectionState.Invalid,
-                profile.ZendeskConnection,
+                selection.Connection,
                 exception.Message,
                 [
                     new StatusDetail(
                         "Destination",
-                        profile.ZendeskDestination ?? "(none)")
+                        selection.Destination ?? "(none)")
                 ]);
         }
     }
@@ -575,8 +563,7 @@ public sealed class ConfigurationStatusService
             name,
             isActive,
             profile.AcronisConnection,
-            profile.ZendeskConnection,
-            profile.ZendeskDestination,
+            TicketingSelection.For(profile),
             profile.ZendeskDeletionConnection,
             profile.BusinessCentralConnection,
             new Dictionary<string, SupportToolkitMode>(

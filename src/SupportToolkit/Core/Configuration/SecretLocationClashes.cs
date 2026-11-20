@@ -44,6 +44,12 @@ public static class SecretLocationClashes
                     configuration.Connections.Zendesk.Keys,
                     SupportToolkitSecretKeys.ZendeskClientSecret,
                     secrets))
+            .Concat(
+                Find(
+                    "osTicket",
+                    configuration.Connections.OsTicket.Keys,
+                    SupportToolkitSecretKeys.OsTicketApiKey,
+                    secrets))
             .ToArray();
     }
 

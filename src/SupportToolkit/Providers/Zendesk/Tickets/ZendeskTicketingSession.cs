@@ -15,7 +15,7 @@ namespace SupportToolkit.Providers.Zendesk.Tickets;
 /// the session is created.
 /// </summary>
 public sealed class ZendeskTicketingSession
-    : IDisposable
+    : ITicketingSession
 {
     private readonly HttpClient _httpClient;
 

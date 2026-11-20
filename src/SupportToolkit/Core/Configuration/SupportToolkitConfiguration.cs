@@ -48,6 +48,15 @@ public sealed class SupportToolkitConnections : ConfigurationNode
     } = new();
 
     /// <summary>
+    /// osTicket connections used for ticket submission.
+    /// </summary>
+    public Dictionary<string, OsTicketConnectionConfiguration> OsTicket
+    {
+        get;
+        set;
+    } = new();
+
+    /// <summary>
     /// Zendesk connections used for interactive ticket deletion.
     ///
     /// Deliberately separate from Zendesk (ticket creation): a different
@@ -68,12 +77,19 @@ public sealed class SupportToolkitConnections : ConfigurationNode
 /// Module modes control operational data sources.
 /// Connection references select reusable external connections.
 ///
-/// ZendeskDestination selects an explicitly configured group within
-/// the profile's Zendesk connection.
+/// Ticketing selects which ticketing system, connection and destination
+/// tickets go to. Without it, the older ZendeskConnection and
+/// ZendeskDestination pair still selects Zendesk (see TicketingSelection).
 /// </summary>
 public sealed class SupportToolkitProfile : ConfigurationNode
 {
     public string? AcronisConnection { get; set; }
+
+    /// <summary>
+    /// Where this profile's tickets go. Takes precedence over
+    /// ZendeskConnection and ZendeskDestination when set.
+    /// </summary>
+    public TicketingSelectionConfiguration? Ticketing { get; set; }
 
     public string? ZendeskConnection { get; set; }
 
@@ -271,4 +287,54 @@ public sealed class ZendeskDeletionConnectionConfiguration : ConfigurationNode
 public sealed class ZendeskDestinationConfiguration : ConfigurationNode
 {
     public long GroupId { get; set; }
+}
+
+/// <summary>
+/// A profile's ticketing system, connection and destination, by name.
+/// Provider is a ticketing system name such as "zendesk" or "osticket"
+/// (TicketingSelection.Providers).
+/// </summary>
+public sealed class TicketingSelectionConfiguration : ConfigurationNode
+{
+    public string? Provider { get; set; }
+
+    public string? Connection { get; set; }
+
+    public string? Destination { get; set; }
+}
+
+/// <summary>
+/// Non-secret osTicket connection metadata.
+///
+/// BaseUrl is the helpdesk root (the folder holding api/ and scp/).
+/// RequesterName and RequesterEmail identify who tickets are opened for;
+/// osTicket creates that user on first use. The API key is a secret and
+/// lives in ISecretStore.
+/// </summary>
+public sealed class OsTicketConnectionConfiguration : ConfigurationNode
+{
+    public string BaseUrl { get; set; } =
+        string.Empty;
+
+    public string RequesterName { get; set; } =
+        string.Empty;
+
+    public string RequesterEmail { get; set; } =
+        string.Empty;
+
+    public Dictionary<string, OsTicketDestinationConfiguration> Destinations
+    {
+        get;
+        set;
+    } = new();
+}
+
+/// <summary>
+/// A named ticket destination within one osTicket instance: a help topic.
+/// osTicket accepts an unknown topic without error (the ticket lands in
+/// the default department), so a positive ID is all that can be checked.
+/// </summary>
+public sealed class OsTicketDestinationConfiguration : ConfigurationNode
+{
+    public int TopicId { get; set; }
 }

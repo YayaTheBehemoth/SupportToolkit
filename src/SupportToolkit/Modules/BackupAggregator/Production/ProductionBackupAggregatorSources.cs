@@ -193,35 +193,3 @@ public sealed class ProductionScopedReviewSources : IScopedReviewSources
             serviceItemNumbers);
     }
 }
-
-/// <summary>
-/// Tickets go to the configured Zendesk destination.
-/// </summary>
-public sealed class ZendeskBackupTicketSink : IBackupTicketSink
-{
-    private readonly SupportToolkitConfigurationResolver _configurationResolver;
-
-    public ZendeskBackupTicketSink(
-        SupportToolkitConfigurationResolver configurationResolver)
-    {
-        _configurationResolver =
-            configurationResolver
-            ?? throw new ArgumentNullException(nameof(configurationResolver));
-    }
-
-    public Task<TicketDestinationPreview> GetDestinationAsync(
-        CancellationToken cancellationToken) =>
-        BackupAggregatorProduction.GetTicketDestinationAsync(
-            _configurationResolver,
-            cancellationToken);
-
-    public Task<CreatedTicket> SubmitAsync(
-        TicketDraft draft,
-        TicketDestinationPreview? confirmedDestination,
-        CancellationToken cancellationToken) =>
-        BackupAggregatorProduction.SubmitTicketDraftAsync(
-            _configurationResolver,
-            draft,
-            confirmedDestination,
-            cancellationToken);
-}
