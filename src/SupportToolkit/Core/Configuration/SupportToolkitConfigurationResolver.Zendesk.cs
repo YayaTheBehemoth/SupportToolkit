@@ -186,9 +186,12 @@ public sealed partial class SupportToolkitConfigurationResolver
         {
             throw new InvalidOperationException(
                 $"Zendesk client secret for connection " +
-                $"'{connectionName}' is not configured. Run " +
-                $"SupportToolkit configure profile {active.Name} " +
-                "or provide ZENDESK_CLIENT_SECRET."
+                $"'{connectionName}' is not configured. " +
+                MissingSecretAdvice(
+                    SupportToolkitSecretKeys
+                        .ZendeskClientSecret(connectionName),
+                    active.Name,
+                    "ZENDESK_CLIENT_SECRET")
             );
         }
 

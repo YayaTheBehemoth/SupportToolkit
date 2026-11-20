@@ -180,6 +180,55 @@ public class EnvironmentSecretStoreTests
         Assert.Equal(Value, connection.ClientSecret);
     }
 
+    // ---------------------------------------------------------------
+    // A missing secret: the advice fits the store.
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public async Task AMissingSecret_NamesTheVariable_NotTheWizard()
+    {
+        var resolver =
+            new SupportToolkitConfigurationResolver(
+                new MemoryStore(FullConfiguration()),
+                Store([]),
+                _ => null);
+
+        var acronis =
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => resolver.GetAcronisConnectionAsync());
+
+        var zendesk =
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => resolver.GetZendeskConnectionAsync());
+
+        Assert.Contains(
+            "Set SUPPORTTOOLKIT_SECRET__ACRONIS__ACR__CLIENT_SECRET or provide ACRONIS_CLIENT_SECRET.",
+            acronis.Message);
+        Assert.Contains(
+            "Set SUPPORTTOOLKIT_SECRET__ZENDESK__ZD__CLIENT_SECRET or provide ZENDESK_CLIENT_SECRET.",
+            zendesk.Message);
+        Assert.DoesNotContain("configure profile", acronis.Message);
+        Assert.DoesNotContain("configure profile", zendesk.Message);
+    }
+
+    [Fact]
+    public async Task AMissingSecret_InAStoreThatKeepsSecrets_PointsToTheWizard()
+    {
+        var resolver =
+            new SupportToolkitConfigurationResolver(
+                new MemoryStore(FullConfiguration()),
+                new MemorySecrets([]),
+                _ => null);
+
+        var acronis =
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => resolver.GetAcronisConnectionAsync());
+
+        Assert.Contains(
+            "Run SupportToolkit configure profile work or provide ACRONIS_CLIENT_SECRET.",
+            acronis.Message);
+    }
+
     [Fact]
     public async Task Status_NamesTheStore_AndTheVariables_NeverAValue()
     {

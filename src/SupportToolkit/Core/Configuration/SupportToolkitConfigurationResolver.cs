@@ -138,6 +138,24 @@ public sealed partial class SupportToolkitConfigurationResolver
             cancellationToken);
     }
 
+    /// <summary>
+    /// What to do about a missing connection secret. The wizard can only
+    /// help where the secret store keeps secrets; elsewhere the secret is
+    /// set outside SupportToolkit, so the message names where.
+    /// </summary>
+    private string MissingSecretAdvice(
+        string key,
+        string profileName,
+        string environmentOverride)
+    {
+        var fix =
+            _secretStore.CanStoreSecrets
+                ? $"Run SupportToolkit configure profile {profileName}"
+                : $"Set {_secretStore.ExternalLocation(key) ?? "it outside SupportToolkit"}";
+
+        return $"{fix} or provide {environmentOverride}.";
+    }
+
     private string? ReadEnvironmentValue(
         string variableName)
     {
