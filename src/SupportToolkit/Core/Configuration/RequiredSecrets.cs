@@ -99,14 +99,17 @@ public static class RequiredSecrets
 
             foreach (var name in inUse)
             {
-                await AddIfMissingAsync(
-                    missing,
-                    secrets,
-                    provider.ProviderName,
-                    name,
-                    provider.GetSecretKey(name),
-                    cancellationToken,
-                    provider.SecretName);
+                foreach (var secret in provider.GetSecrets(configuration, name))
+                {
+                    await AddIfMissingAsync(
+                        missing,
+                        secrets,
+                        provider.ProviderName,
+                        name,
+                        secret.Key,
+                        cancellationToken,
+                        secret.Label);
+                }
             }
         }
 

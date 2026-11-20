@@ -1,4 +1,5 @@
 using SupportToolkit.Core.Configuration;
+using SupportToolkit.Providers.Duplicati.Configuration;
 using SupportToolkit.Providers.OsTicket.Configuration;
 
 namespace SupportToolkit.Composition;
@@ -12,6 +13,7 @@ public static class ProviderConnectionsComposition
 {
     public static IReadOnlyList<IProviderConnections> All { get; } =
     [
-        OsTicketConnections.Instance
+        OsTicketConnections.Instance,
+        DuplicatiConnections.Instance
     ];
 }

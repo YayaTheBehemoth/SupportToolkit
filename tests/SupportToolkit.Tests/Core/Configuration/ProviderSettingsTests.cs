@@ -175,7 +175,7 @@ public class ProviderSettingsTests
             new MemorySecrets(
                 new Dictionary<string, string>
                 {
-                    [OsTicketConnections.Instance.GetSecretKey("lab")] = "EXAMPLE-KEY-8e1f"
+                    [OsTicketConnections.ApiKey("lab").Key] = "EXAMPLE-KEY-8e1f"
                 });
 
         var (service, _, _) = Create(configuration, secrets);

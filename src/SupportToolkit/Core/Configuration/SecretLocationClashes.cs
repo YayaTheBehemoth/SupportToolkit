@@ -64,12 +64,21 @@ public static class SecretLocationClashes
     {
         ArgumentNullException.ThrowIfNull(provider);
 
-        return Find(
+        return provider.GetSavedConnectionNames(configuration)
+            .SelectMany(name => provider.GetSecrets(configuration, name))
+            .Select(secret => (Secret: secret, Location: secrets.ExternalLocation(secret.Key)))
+            .Where(item => item.Location is not null)
+            .GroupBy(item => item.Location!, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group => new SecretLocationClash(
                 provider.ProviderName,
-                provider.GetSavedConnectionNames(configuration),
-                provider.GetSecretKey,
-                secrets)
-            .Select(clash => clash with { SecretName = provider.SecretName });
+                group.Key,
+                group
+                    .Select(item => item.Secret.Owner)
+                    .Order(StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
+                group.First().Secret.Kind))
+            .OrderBy(clash => clash.Location, StringComparer.Ordinal);
     }
 
     /// <summary>

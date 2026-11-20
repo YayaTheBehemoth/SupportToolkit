@@ -92,11 +92,21 @@ public sealed partial class ConfigureCommand
 
         Console.WriteLine();
 
+        var backup = BackupSelection.For(profile);
+
         await WriteEffectiveAcronisAsync(
             profile,
             resolver,
-            aggregatorMode == SupportToolkitMode.Production
+            (aggregatorMode == SupportToolkitMode.Production
+             && BackupSystemsComposition.ReviewsAcronis(backup))
             || usageReportMode == SupportToolkitMode.Production);
+
+        if (!BackupSystemsComposition.ReviewsAcronis(backup))
+        {
+            Console.WriteLine();
+
+            await WriteEffectiveBackupSystemAsync(backup!, resolver);
+        }
 
         Console.WriteLine();
 
@@ -324,6 +334,37 @@ public sealed partial class ConfigureCommand
             Console.WriteLine(
                 "  Ticket submission will be unavailable " +
                 "until the configuration is corrected.");
+        }
+    }
+
+    /// <summary>
+    /// The backup system the review reads, when it is not Acronis.
+    /// Resolved by the same code a review uses; nothing is called.
+    /// </summary>
+    private static async Task WriteEffectiveBackupSystemAsync(
+        BackupSelection selection,
+        SupportToolkitConfigurationResolver resolver)
+    {
+        Console.WriteLine(
+            $"{BackupSystemsComposition.SystemName(selection)} backup review");
+
+        Console.WriteLine(
+            $"  Connection alias: {DisplayOptionalValue(selection.Connection)}");
+
+        try
+        {
+            foreach (var detail in
+                     await BackupSystemsComposition.DescribeAsync(resolver, selection))
+            {
+                Console.WriteLine($"  {detail.Label}: {detail.Value}");
+            }
+
+            Console.WriteLine("  Configuration: valid locally");
+        }
+        catch (InvalidOperationException exception)
+        {
+            Console.WriteLine("  Configuration: incomplete or invalid");
+            Console.WriteLine($"  Reason: {exception.Message}");
         }
     }
 

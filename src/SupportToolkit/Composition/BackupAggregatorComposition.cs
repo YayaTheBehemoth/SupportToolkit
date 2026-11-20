@@ -41,9 +41,12 @@ public static class BackupAggregatorComposition
                 configurationResolver,
                 new FixtureBackupAggregatorSources(),
                 new ProductionBackupAggregatorSources(
-                    configurationResolver,
-                    progress,
-                    runMode)),
+                    cancellationToken =>
+                        BackupSystemsComposition.CreateRuntimeAsync(
+                            configurationResolver,
+                            runMode,
+                            progress,
+                            cancellationToken))),
             TicketSink(configurationResolver));
     }
 
@@ -78,7 +81,13 @@ public static class BackupAggregatorComposition
                     configurationResolver,
                     identitySource,
                     evidenceSourceFactory,
-                    inventoryRuntimeFactory,
+                    inventoryRuntimeFactory
+                    ?? (cancellationToken =>
+                        BackupSystemsComposition.CreateRuntimeAsync(
+                            configurationResolver,
+                            runMode,
+                            progress,
+                            cancellationToken)),
                     mappingRepository,
                     nameSourceFactory,
                     progress,

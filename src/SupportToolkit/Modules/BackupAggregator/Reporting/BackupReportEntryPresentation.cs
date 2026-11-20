@@ -8,6 +8,11 @@ public static class BackupReportEntryPresentation
     public static string GetDisplayStatus(
         BackupReportEntry entry)
     {
+        if (!string.IsNullOrWhiteSpace(entry.DisplayStatus))
+        {
+            return entry.DisplayStatus;
+        }
+
         var state =
             entry.ResourceState;
 
@@ -123,6 +128,11 @@ public static class BackupReportEntryPresentation
     public static string GetUnclassifiedReason(
         BackupReportEntry entry)
     {
+        if (!string.IsNullOrWhiteSpace(entry.UnclassifiedReason))
+        {
+            return entry.UnclassifiedReason;
+        }
+
         if (string.IsNullOrWhiteSpace(entry.ResourceName)
             || entry.ResourceName.StartsWith(
                 "<unknown ",

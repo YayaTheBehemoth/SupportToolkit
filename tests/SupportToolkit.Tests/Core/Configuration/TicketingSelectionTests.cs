@@ -55,7 +55,7 @@ public class TicketingSelectionTests
     private static MemorySecrets OsTicketSecrets() =>
         new(new Dictionary<string, string>
         {
-            [OsTicketConnections.Instance.GetSecretKey("lab")] = ApiKey,
+            [OsTicketConnections.ApiKey("lab").Key] = ApiKey,
             [SupportToolkitSecretKeys.ZendeskClientSecret("zd")] = ZendeskSecret
         });
 

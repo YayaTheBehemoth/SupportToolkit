@@ -22,6 +22,10 @@
         <div class="grid">
             <ConnectionCard Connection="Status.Runtime.Acronis" />
             <ConnectionCard Connection="Status.Runtime.BusinessCentral" />
+            @if (Status.Runtime.BackupSystem is { } backupSystem)
+            {
+                <ConnectionCard Connection="backupSystem" />
+            }
             <ConnectionCard Connection="Status.Runtime.Ticketing" />
             <ConnectionCard Connection="Status.Runtime.ZendeskDeletion" />
 

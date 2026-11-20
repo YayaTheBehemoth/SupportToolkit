@@ -93,8 +93,14 @@ internal sealed class TenantInventoryReviewService
 
         return new TenantReviewResult(
             tenantReport,
-            microsoft365Resources.Count,
-            deviceResources.Count
+            [
+                new ResourceCount(
+                    "Microsoft 365 resources",
+                    microsoft365Resources.Count),
+                new ResourceCount(
+                    "Device resources",
+                    deviceResources.Count)
+            ]
         );
     }
 

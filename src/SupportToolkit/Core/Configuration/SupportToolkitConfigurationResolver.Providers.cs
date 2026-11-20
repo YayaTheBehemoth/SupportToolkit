@@ -47,20 +47,30 @@ public sealed partial class SupportToolkitConfigurationResolver
             (await GetActiveConfigurationAsync(cancellationToken)).Profile);
 
     /// <summary>
-    /// A provider connection's secret, or null when none is set. Refused
-    /// when another connection of the same provider reads its secret from
-    /// the same place: it would send one connection's secret to the other.
+    /// The active profile's backup selection, read the same way as every
+    /// resolution reads it. Null when the profile selects no backup system.
+    /// </summary>
+    public async Task<BackupSelection?> GetBackupSelectionAsync(
+        CancellationToken cancellationToken = default) =>
+        BackupSelection.For(
+            (await GetActiveConfigurationAsync(cancellationToken)).Profile);
+
+    /// <summary>
+    /// A provider secret, or null when none is set. Refused when another
+    /// secret of the same provider is read from the same place: it would
+    /// send one connection's or server's secret to another.
     /// </summary>
     public async Task<string?> ReadProviderSecretAsync(
         SupportToolkitConfiguration configuration,
         IProviderConnections provider,
-        string connectionName,
+        ProviderSecret secret,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(provider);
+        ArgumentNullException.ThrowIfNull(secret);
 
-        var key = provider.GetSecretKey(connectionName);
+        var key = secret.Key;
         var location = _secretStore.ExternalLocation(key);
 
         if (location is not null)
@@ -86,15 +96,15 @@ public sealed partial class SupportToolkitConfigurationResolver
     public string DescribeMissingSecret(
         IProviderConnections provider,
         string connectionName,
+        ProviderSecret secret,
         string profileName)
     {
         ArgumentNullException.ThrowIfNull(provider);
+        ArgumentNullException.ThrowIfNull(secret);
 
         return
-            $"{provider.ProviderName} {provider.SecretName} for connection " +
+            $"{provider.ProviderName} {secret.Label} for connection " +
             $"'{connectionName}' is not configured. " +
-            MissingSecretAdvice(
-                provider.GetSecretKey(connectionName),
-                profileName);
+            MissingSecretAdvice(secret.Key, profileName);
     }
 }

@@ -24,10 +24,18 @@ public sealed class OsTicketConnections : IProviderConnections
 
     public string ProviderName => "osTicket";
 
-    public string SecretName => "API key";
+    /// <summary>The connection's one secret, its API key.</summary>
+    public static ProviderSecret ApiKey(string connectionName) =>
+        new(
+            SupportToolkitSecretKeys.For(ProviderKey, connectionName, "api-key"),
+            "API key",
+            connectionName,
+            "API key");
 
-    public string GetSecretKey(string connectionName) =>
-        SupportToolkitSecretKeys.For(ProviderKey, connectionName, "api-key");
+    public IReadOnlyList<ProviderSecret> GetSecrets(
+        SupportToolkitConfiguration configuration,
+        string connectionName) =>
+        [ApiKey(connectionName)];
 
     public static IReadOnlyDictionary<string, OsTicketConnectionConfiguration> Read(
         SupportToolkitConfiguration configuration) =>
@@ -140,17 +148,19 @@ public sealed class OsTicketConnections : IProviderConnections
         var requesterName = Require(connection.RequesterName, connectionName, "requesterName");
         var requesterEmail = Require(connection.RequesterEmail, connectionName, "requesterEmail");
 
+        var secret = ApiKey(connectionName);
+
         var apiKey =
             await resolver.ReadProviderSecretAsync(
                 active.Configuration,
                 this,
-                connectionName,
+                secret,
                 cancellationToken);
 
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             throw new InvalidOperationException(
-                resolver.DescribeMissingSecret(this, connectionName, profileName));
+                resolver.DescribeMissingSecret(this, connectionName, secret, profileName));
         }
 
         return new ResolvedOsTicketConnection(

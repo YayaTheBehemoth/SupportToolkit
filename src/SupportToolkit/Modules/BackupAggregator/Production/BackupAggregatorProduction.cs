@@ -19,6 +19,25 @@ namespace SupportToolkit.Modules.BackupAggregator.Production;
 /// </summary>
 public static class BackupAggregatorProduction
 {
+    /// <summary>
+    /// The Acronis review as a runtime any production source can use.
+    /// </summary>
+    public static async Task<ScopedInventoryRuntime> CreateRuntimeAsync(
+        SupportToolkitConfigurationResolver configurationResolver,
+        ReviewRunMode runMode,
+        Action<string>? progress,
+        CancellationToken cancellationToken)
+    {
+        var session =
+            await CreateSessionAsync(
+                configurationResolver,
+                runMode,
+                progress,
+                cancellationToken);
+
+        return new ScopedInventoryRuntime(session.ReviewService, session);
+    }
+
     public static async Task<BackupAggregatorProductionSession> CreateSessionAsync(
         SupportToolkitConfigurationResolver configurationResolver,
         ReviewRunMode runMode,
@@ -111,16 +130,11 @@ public sealed class ScopedReviewProductionSources
         CreateInventoryRuntimeAsync(
             CancellationToken cancellationToken)
     {
-        var session =
-            await BackupAggregatorProduction.CreateSessionAsync(
-                _configurationResolver,
-                _runMode,
-                _progress,
-                cancellationToken);
-
-        return new ScopedInventoryRuntime(
-            session.ReviewService,
-            session);
+        return await BackupAggregatorProduction.CreateRuntimeAsync(
+            _configurationResolver,
+            _runMode,
+            _progress,
+            cancellationToken);
     }
 
     private Task<BusinessCentralProviderBundle>

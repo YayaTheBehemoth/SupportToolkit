@@ -1,0 +1,41 @@
+# Duplicati lab: contract discovery only. Daily development uses the
+# recorded fixtures in the tests, never these instances.
+#
+# Two servers stand in for two customer machines, because one Duplicati
+# server backs up one machine. Passwords have no defaults: set them in the
+# environment (for example as Codespaces secrets). See README.md.
+name: supporttoolkit-lab-duplicati
+
+x-duplicati: &duplicati
+  image: duplicati/duplicati:2.4.1.0
+  environment: &environment
+    # Lab only: lets the API be reached through the published port.
+    DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES: "*"
+    SETTINGS_ENCRYPTION_KEY: ${DUPLICATI_LAB_SETTINGS_KEY:?set DUPLICATI_LAB_SETTINGS_KEY}
+
+services:
+  machine-a:
+    <<: *duplicati
+    environment:
+      <<: *environment
+      DUPLICATI__WEBSERVICE_PASSWORD: ${DUPLICATI_LAB_PASSWORD_A:?set DUPLICATI_LAB_PASSWORD_A}
+    ports:
+      - "127.0.0.1:8201:8200"
+    volumes:
+      - data-a:/data
+      - ./sample:/source:ro
+
+  machine-b:
+    <<: *duplicati
+    environment:
+      <<: *environment
+      DUPLICATI__WEBSERVICE_PASSWORD: ${DUPLICATI_LAB_PASSWORD_B:?set DUPLICATI_LAB_PASSWORD_B}
+    ports:
+      - "127.0.0.1:8202:8200"
+    volumes:
+      - data-b:/data
+      - ./sample:/source:ro
+
+volumes:
+  data-a:
+  data-b:

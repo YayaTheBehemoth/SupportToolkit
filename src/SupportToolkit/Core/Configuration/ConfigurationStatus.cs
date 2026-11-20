@@ -38,7 +38,8 @@ public sealed record ActiveRuntimeStatus(
     ConnectionStatus Ticketing,
     ConnectionStatus ZendeskDeletion,
     ConnectionStatus BusinessCentral,
-    ReviewWaitStatus ReviewWait);
+    ReviewWaitStatus ReviewWait,
+    ConnectionStatus? BackupSystem = null);
 
 /// <summary>
 /// Mode is null when the configuration is invalid (Problem says why).

@@ -80,6 +80,13 @@ public sealed class SupportToolkitProfile : ConfigurationNode
     public string? AcronisConnection { get; set; }
 
     /// <summary>
+    /// Which backup system the Backup Aggregator reviews. Takes
+    /// precedence over AcronisConnection for that review when set;
+    /// AcronisConnection still serves everything else that reads Acronis.
+    /// </summary>
+    public BackupSelectionConfiguration? Backup { get; set; }
+
+    /// <summary>
     /// Where this profile's tickets go. Takes precedence over
     /// ZendeskConnection and ZendeskDestination when set.
     /// </summary>
@@ -295,4 +302,16 @@ public sealed class TicketingSelectionConfiguration : ConfigurationNode
     public string? Connection { get; set; }
 
     public string? Destination { get; set; }
+}
+
+/// <summary>
+/// A profile's backup system and connection, by name. Provider is a backup
+/// system name, such as "acronis"; the systems are registered in
+/// Composition/.
+/// </summary>
+public sealed class BackupSelectionConfiguration : ConfigurationNode
+{
+    public string? Provider { get; set; }
+
+    public string? Connection { get; set; }
 }

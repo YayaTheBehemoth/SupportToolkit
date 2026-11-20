@@ -23,6 +23,19 @@ public sealed class BackupReportEntry
 
     public string? ResourceState { get; init; }
 
+    /// <summary>
+    /// The status operators see, when the backup system's adapter states
+    /// it. Unset, it is derived from ResourceState and LastResult, which
+    /// carry Acronis's own state names.
+    /// </summary>
+    public string? DisplayStatus { get; init; }
+
+    /// <summary>
+    /// Why an Unknown entry could not be classified, when the adapter
+    /// knows. Unset, it is derived like DisplayStatus.
+    /// </summary>
+    public string? UnclassifiedReason { get; init; }
+
     public bool IsInProgress =>
         BackupResourceStates.IsInProgress(ResourceState);
 }

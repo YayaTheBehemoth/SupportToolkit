@@ -138,12 +138,54 @@ public sealed class ConfigurationStatusService
             mode,
             await GetAcronisAsync(
                 profile,
-                mode.Mode == SupportToolkitMode.Production,
+                mode.Mode == SupportToolkitMode.Production
+                && BackupSystemsComposition.ReviewsAcronis(BackupSelection.For(profile)),
                 cancellationToken),
             await GetTicketingAsync(profile, cancellationToken),
             await GetZendeskDeletionAsync(profile, cancellationToken),
             await GetBusinessCentralAsync(profile, cancellationToken),
-            await GetReviewWaitAsync(cancellationToken));
+            await GetReviewWaitAsync(cancellationToken),
+            await GetBackupSystemAsync(profile, cancellationToken));
+    }
+
+    /// <summary>
+    /// The backup system the review reads, when it is not Acronis (which
+    /// has its own section). Resolved locally; nothing is called.
+    /// </summary>
+    private async Task<ConnectionStatus?> GetBackupSystemAsync(
+        SupportToolkitProfile profile,
+        CancellationToken cancellationToken)
+    {
+        var selection = BackupSelection.For(profile);
+
+        if (BackupSystemsComposition.ReviewsAcronis(selection))
+        {
+            return null;
+        }
+
+        var name = $"{BackupSystemsComposition.SystemName(selection!)} backup review";
+
+        try
+        {
+            return new ConnectionStatus(
+                name,
+                ConnectionState.Valid,
+                selection!.Connection,
+                null,
+                await BackupSystemsComposition.DescribeAsync(
+                    _resolver,
+                    selection,
+                    cancellationToken));
+        }
+        catch (InvalidOperationException exception)
+        {
+            return new ConnectionStatus(
+                name,
+                ConnectionState.Invalid,
+                selection!.Connection,
+                exception.Message,
+                []);
+        }
     }
 
     private async Task<ModeStatus> GetModeAsync(
@@ -559,17 +601,21 @@ public sealed class ConfigurationStatusService
             foreach (var name in provider.GetSavedConnectionNames(configuration)
                          .Order(StringComparer.OrdinalIgnoreCase))
             {
+                var details = new List<StatusDetail>();
+
+                foreach (var secret in provider.GetSecrets(configuration, name))
+                {
+                    details.Add(
+                        new StatusDetail(
+                            Capitalize(secret.Label),
+                            await SecretAsync(secret.Key, cancellationToken)));
+                }
+
                 saved.Add(
                     new SavedConnectionStatus(
                         provider.ProviderName,
                         name,
-                        [
-                            new StatusDetail(
-                                Capitalize(provider.SecretName),
-                                await SecretAsync(
-                                    provider.GetSecretKey(name),
-                                    cancellationToken))
-                        ]));
+                        details));
             }
         }
 
