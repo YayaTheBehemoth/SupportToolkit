@@ -128,6 +128,34 @@ public sealed partial class ConfigureCommand
 
         Console.WriteLine();
 
+        var commercial = CommercialSelection.For(profile);
+
+        if (!CommercialSystemsComposition.ReadsBusinessCentral(commercial))
+        {
+            Console.WriteLine(
+                $"{CommercialSystemsComposition.SystemName(commercial!)} monitoring scope");
+
+            Console.WriteLine(
+                $"  Connection alias: {DisplayOptionalValue(commercial!.Connection)}");
+
+            try
+            {
+                foreach (var detail in await CommercialSystemsComposition.DescribeAsync(resolver))
+                {
+                    Console.WriteLine($"  {detail.Label}: {detail.Value}");
+                }
+
+                Console.WriteLine("  Configuration: valid locally");
+            }
+            catch (InvalidOperationException exception)
+            {
+                Console.WriteLine("  Configuration: incomplete or invalid");
+                Console.WriteLine($"  Reason: {exception.Message}");
+            }
+
+            Console.WriteLine();
+        }
+
         await WriteEffectiveReviewWaitAsync(resolver);
 
         Console.WriteLine();

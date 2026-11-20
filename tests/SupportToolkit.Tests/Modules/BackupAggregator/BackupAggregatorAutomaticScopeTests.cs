@@ -442,7 +442,7 @@ public class BackupAggregatorAutomaticScopeTests
         Assert.Contains("SCOPE", draft.Body);
         Assert.Contains(
             "Monitored tenants only: 1 entitled customer tenant(s) by " +
-            "Business Central entitlement, plus the operator's own tenant.",
+            "subscription entitlement, plus the operator's own tenant.",
             draft.Body);
         Assert.Contains("Tenants reviewed: 2/2", draft.Body);
     }

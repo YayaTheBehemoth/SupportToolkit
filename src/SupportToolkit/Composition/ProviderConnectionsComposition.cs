@@ -1,4 +1,5 @@
 using SupportToolkit.Core.Configuration;
+using SupportToolkit.Providers.Dolibarr.Configuration;
 using SupportToolkit.Providers.Duplicati.Configuration;
 using SupportToolkit.Providers.OsTicket.Configuration;
 
@@ -14,6 +15,7 @@ public static class ProviderConnectionsComposition
     public static IReadOnlyList<IProviderConnections> All { get; } =
     [
         OsTicketConnections.Instance,
-        DuplicatiConnections.Instance
+        DuplicatiConnections.Instance,
+        DolibarrConnections.Instance
     ];
 }

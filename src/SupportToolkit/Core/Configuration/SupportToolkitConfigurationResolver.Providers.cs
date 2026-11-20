@@ -56,6 +56,15 @@ public sealed partial class SupportToolkitConfigurationResolver
             (await GetActiveConfigurationAsync(cancellationToken)).Profile);
 
     /// <summary>
+    /// The active profile's commercial selection, read the same way as
+    /// every resolution reads it. Null when the profile selects none.
+    /// </summary>
+    public async Task<CommercialSelection?> GetCommercialSelectionAsync(
+        CancellationToken cancellationToken = default) =>
+        CommercialSelection.For(
+            (await GetActiveConfigurationAsync(cancellationToken)).Profile);
+
+    /// <summary>
     /// A provider secret, or null when none is set. Refused when another
     /// secret of the same provider is read from the same place: it would
     /// send one connection's or server's secret to another.

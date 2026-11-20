@@ -80,6 +80,14 @@ public sealed class SupportToolkitProfile : ConfigurationNode
     public string? AcronisConnection { get; set; }
 
     /// <summary>
+    /// Which commercial system supplies monitoring entitlement and
+    /// customer names. Takes precedence over BusinessCentralConnection for
+    /// that when set; BusinessCentralConnection still serves everything
+    /// else that reads Business Central (the usage report).
+    /// </summary>
+    public CommercialSelectionConfiguration? Commercial { get; set; }
+
+    /// <summary>
     /// Which backup system the Backup Aggregator reviews. Takes
     /// precedence over AcronisConnection for that review when set;
     /// AcronisConnection still serves everything else that reads Acronis.
@@ -310,6 +318,18 @@ public sealed class TicketingSelectionConfiguration : ConfigurationNode
 /// Composition/.
 /// </summary>
 public sealed class BackupSelectionConfiguration : ConfigurationNode
+{
+    public string? Provider { get; set; }
+
+    public string? Connection { get; set; }
+}
+
+/// <summary>
+/// A profile's commercial system and connection, by name. Provider is a
+/// commercial system name, such as "businesscentral"; the systems are
+/// registered in Composition/.
+/// </summary>
+public sealed class CommercialSelectionConfiguration : ConfigurationNode
 {
     public string? Provider { get; set; }
 

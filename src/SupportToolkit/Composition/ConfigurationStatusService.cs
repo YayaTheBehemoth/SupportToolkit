@@ -145,7 +145,45 @@ public sealed class ConfigurationStatusService
             await GetZendeskDeletionAsync(profile, cancellationToken),
             await GetBusinessCentralAsync(profile, cancellationToken),
             await GetReviewWaitAsync(cancellationToken),
-            await GetBackupSystemAsync(profile, cancellationToken));
+            await GetBackupSystemAsync(profile, cancellationToken),
+            await GetCommercialSystemAsync(profile, cancellationToken));
+    }
+
+    /// <summary>
+    /// The commercial system the monitoring scope reads, when it is not
+    /// Business Central (which has its own section). Resolved locally.
+    /// </summary>
+    private async Task<ConnectionStatus?> GetCommercialSystemAsync(
+        SupportToolkitProfile profile,
+        CancellationToken cancellationToken)
+    {
+        var selection = CommercialSelection.For(profile);
+
+        if (CommercialSystemsComposition.ReadsBusinessCentral(selection))
+        {
+            return null;
+        }
+
+        var name = $"{CommercialSystemsComposition.SystemName(selection!)} monitoring scope";
+
+        try
+        {
+            return new ConnectionStatus(
+                name,
+                ConnectionState.Valid,
+                selection!.Connection,
+                null,
+                await CommercialSystemsComposition.DescribeAsync(_resolver, cancellationToken));
+        }
+        catch (InvalidOperationException exception)
+        {
+            return new ConnectionStatus(
+                name,
+                ConnectionState.Invalid,
+                selection!.Connection,
+                exception.Message,
+                []);
+        }
     }
 
     /// <summary>
@@ -399,8 +437,10 @@ public sealed class ConfigurationStatusService
                 Name,
                 ConnectionState.NotSelected,
                 null,
-                "The monitoring scope is unavailable until a " +
-                "connection is configured.",
+                CommercialSelection.For(profile) is null
+                    ? "The monitoring scope is unavailable until a " +
+                      "connection is configured."
+                    : null,
                 []);
         }
 

@@ -73,6 +73,12 @@ public static class BackupAggregatorComposition
     {
         ArgumentNullException.ThrowIfNull(configurationResolver);
 
+        var commercial =
+            CommercialSystemsComposition.ForWorkflow(
+                configurationResolver,
+                runMode,
+                progress);
+
         return new BackupAggregatorScopedWorkflow(
             new ModeSelectedScopedSources(
                 configurationResolver,
@@ -80,7 +86,7 @@ public static class BackupAggregatorComposition
                 new ProductionScopedReviewSources(
                     configurationResolver,
                     identitySource,
-                    evidenceSourceFactory,
+                    evidenceSourceFactory ?? commercial.Evidence,
                     inventoryRuntimeFactory
                     ?? (cancellationToken =>
                         BackupSystemsComposition.CreateRuntimeAsync(
@@ -89,7 +95,7 @@ public static class BackupAggregatorComposition
                             progress,
                             cancellationToken)),
                     mappingRepository,
-                    nameSourceFactory,
+                    nameSourceFactory ?? commercial.Names,
                     progress,
                     runMode)));
     }

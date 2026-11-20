@@ -124,8 +124,9 @@ public sealed class ProductionScopedReviewSources : IScopedReviewSources
                 : new ScopedReviewAvailability(
                     mode,
                     false,
-                    "The monitored review needs a Business Central " +
-                    "connection in the active profile.");
+                    "The monitored review needs a commercial system in " +
+                    "the active profile: a Business Central connection, " +
+                    "or the profile's commercial setting.");
         }
         catch (InvalidOperationException exception)
         {

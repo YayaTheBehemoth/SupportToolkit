@@ -22,6 +22,10 @@
         <div class="grid">
             <ConnectionCard Connection="Status.Runtime.Acronis" />
             <ConnectionCard Connection="Status.Runtime.BusinessCentral" />
+            @if (Status.Runtime.CommercialSystem is { } commercialSystem)
+            {
+                <ConnectionCard Connection="commercialSystem" />
+            }
             @if (Status.Runtime.BackupSystem is { } backupSystem)
             {
                 <ConnectionCard Connection="backupSystem" />
