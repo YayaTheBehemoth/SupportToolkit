@@ -155,7 +155,12 @@ The repository has a dev container (`.devcontainer/devcontainer.json`): the .NET
    ```
 
 3. Daily work runs against fixtures, which need no secrets. When a connection does need one, set it as a Codespaces secret or an environment variable; see [Secrets on Linux and in containers](#secrets-on-linux-and-in-containers). `configure status` names the variables that are missing.
-4. `serve --no-browser` prints the link to open; Codespaces forwards the port. The Zendesk deletion sign-in redirects to `localhost` on the codespace, which completes only from VS Code desktop connected to the codespace (it forwards that port), not from a codespace opened in the browser.
+4. The web UI accepts requests addressed to `127.0.0.1` or `localhost` on its own port only (a guard against other web pages reaching it), so a codespace's public forwarding address (`*.app.github.dev`) is refused. Reach it through a tunnel that keeps it on `localhost` with the **same port number**:
+   - In the codespace: `dotnet run --project src/SupportToolkit -- serve --port 5050 --no-browser`
+   - On your computer: VS Code desktop connected to the codespace forwards the port to `localhost`; check under **Ports** that it is local port 5050. Without VS Code: `gh codespace ports forward 5050:5050`.
+   - Open the printed link, replacing `127.0.0.1` with `localhost` if needed.
+
+   The same holds on any Linux machine of your own: run `serve` there and reach it with `ssh -L 5050:127.0.0.1:5050 <machine>`. The Zendesk deletion sign-in also redirects to `localhost` on the machine running the toolkit, so it completes only when that port is forwarded the same way.
 5. **Stop the codespace when you are done.** The free quota counts the time a codespace is running and the storage it keeps; a stopped codespace still uses storage until it is deleted.
 
 The Windows release (`scripts/publish-windows.cmd`) is built on Windows only.
