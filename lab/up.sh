@@ -4,10 +4,17 @@
 # you own (Codespaces secrets). Safe to run again: existing records are
 # kept, keys are reset to the variables' values.
 #
-#   lab/up.sh              start and provision
-#   lab/up.sh --generate   print random values for any variable not set,
-#                          to save as Codespaces secrets (lab use only)
+#   lab/up.sh                 start and provision
+#   lab/up.sh --generate      print random values for any variable not set,
+#                             to save as Codespaces secrets (lab use only)
+#   lab/up.sh --if-configured as above, but only when every variable is set;
+#                             otherwise a one-line note (the dev container
+#                             runs this on every codespace start)
+#   lab/up.sh --reset         delete the lab's containers and data, after
+#                             confirmation; needed after changing the
+#                             database passwords
 #
+# Data lives in lab/*/.data (git-ignored), so it survives a rebuild.
 # Then: SupportToolkit configure lab   and   SupportToolkit configure use lab
 set -euo pipefail
 
@@ -49,7 +56,34 @@ if [[ "${1:-}" == "--generate" ]]; then
   exit 0
 fi
 
+if [[ "${1:-}" == "--reset" ]]; then
+  echo "This deletes the lab's containers and all their data (synthetic records,"
+  echo "backup jobs, tickets). Your settings and secrets are not touched."
+  read -r -p "Type 'reset' to continue: " answer
+  [[ "$answer" == "reset" ]] || { echo "Nothing deleted."; exit 1; }
+  # The compose files require the variables even to stop; placeholders
+  # suffice for that, so a reset works after the secrets are lost.
+  for name in "${infra[@]}" "${app[@]}"; do
+    export "$name=${!name:-unused}"
+  done
+  for vendor in osticket duplicati dolibarr; do
+    docker compose -f "$vendor/compose.yml" down --remove-orphans 2>/dev/null || true
+    if [[ -d "$vendor/.data" ]]; then
+      # Written by the containers' own users; removed the same way.
+      docker run --rm -v "$PWD/$vendor/.data:/data" --entrypoint sh mariadb:11.4 \
+        -c 'rm -rf /data/* /data/.[!.]* 2>/dev/null; true'
+      rmdir "$vendor/.data" 2>/dev/null || true
+    fi
+  done
+  echo "Lab deleted. Run lab/up.sh to start it again."
+  exit 0
+fi
+
 if (( ${#missing[@]} > 0 )); then
+  if [[ "${1:-}" == "--if-configured" ]]; then
+    echo "Second-provider lab not started: its variables are not set (see lab/README.md)."
+    exit 0
+  fi
   echo "Set these first (as Codespaces secrets), or run: lab/up.sh --generate" >&2
   printf '  %s\n' "${missing[@]}" >&2
   exit 1
@@ -71,6 +105,12 @@ wait_for() { # url, accepted status codes regex
   echo "Timed out waiting for $1" >&2
   exit 1
 }
+
+# In a codespace, Docker may still be starting when this runs.
+for _ in $(seq 1 60); do
+  docker info > /dev/null 2>&1 && break
+  sleep 2
+done
 
 echo "== Starting containers"
 for vendor in osticket duplicati dolibarr; do

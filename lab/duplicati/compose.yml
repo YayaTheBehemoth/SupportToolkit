@@ -5,9 +5,13 @@
 # server backs up one machine. Passwords have no defaults: set them in the
 # environment (for example as Codespaces secrets). See README.md.
 name: supporttoolkit-lab-duplicati
+# Data lives in ./.data (git-ignored) in the workspace, so it survives a
+# codespace rebuild; restart: unless-stopped brings the containers back
+# after a codespace restart.
 
 x-duplicati: &duplicati
   image: duplicati/duplicati:2.4.1.0
+  restart: unless-stopped
   environment: &environment
     # Lab only: lets the API be reached through the published port.
     DUPLICATI__WEBSERVICE_ALLOWED_HOSTNAMES: "*"
@@ -22,7 +26,7 @@ services:
     ports:
       - "127.0.0.1:8201:8200"
     volumes:
-      - data-a:/data
+      - ./.data/machine-a:/data
       - ./sample:/source:ro
 
   machine-b:
@@ -33,9 +37,6 @@ services:
     ports:
       - "127.0.0.1:8202:8200"
     volumes:
-      - data-b:/data
+      - ./.data/machine-b:/data
       - ./sample:/source:ro
 
-volumes:
-  data-a:
-  data-b:

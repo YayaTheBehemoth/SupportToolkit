@@ -6,10 +6,14 @@
   "name": "SupportToolkit",
   "image": "mcr.microsoft.com/devcontainers/dotnet:10.0-noble",
   "features": {
-    // Later vendor spikes run their containers with docker compose.
+    // The second-provider lab (lab/) runs its containers with docker compose.
     "ghcr.io/devcontainers/features/docker-in-docker:2": {}
   },
   "postCreateCommand": "dotnet restore SupportToolkit.slnx",
+  // Starts the second-provider lab on every codespace start, only when its
+  // variables are set as Codespaces secrets (lab/README.md); otherwise it
+  // prints one line and does nothing.
+  "postStartCommand": "bash lab/up.sh --if-configured",
   "hostRequirements": {
     "cpus": 2
   },

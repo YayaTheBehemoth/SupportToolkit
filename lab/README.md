@@ -33,6 +33,24 @@ starts the three systems, seeds their synthetic records (customers,
 contracts, backup jobs) and sets the keys SupportToolkit uses. It is safe to
 run again: existing records are kept and the keys are reset to your values.
 
+### It persists
+
+- **Secrets** are Codespaces secrets, so they outlive every codespace.
+- **Containers** restart on their own when the codespace restarts
+  (`restart: unless-stopped`), and the dev container runs
+  `lab/up.sh --if-configured` on every start, which also recreates them
+  after a rebuild. Without the variables it prints one line and does nothing.
+- **Data** lives in `lab/*/.data/` in the workspace (git-ignored), which a
+  rebuild keeps: records, backup jobs and tickets are still there.
+
+To start over, or after changing a database password (the stored data is
+tied to it):
+
+```sh
+lab/up.sh --reset   # asks first; deletes the lab's containers and data only
+lab/up.sh
+```
+
 The four keys SupportToolkit itself needs use the names SupportToolkit reads,
 so in the codespace nothing more is needed:
 
