@@ -7,6 +7,7 @@ This is a modular .NET 10/C# MSP automation CLI. Implementation and tests in thi
 - Inspect the relevant module/provider/core implementation and tests before suggesting or making changes.
 - Prefer focused, minimal local edits and fixture-driven regression tests. Preserve existing functionality and module boundaries.
 - Use `dotnet test` for relevant checks and `dotnet run --project src/SupportToolkit -- <command>` for CLI development.
+- The project builds and tests on Windows and Linux (the dev container in `.devcontainer/` is the Linux reference). Windows-only code, such as the Windows Credential Manager secret store, is selected in `Composition/`; keep anything else platform-neutral.
 - Treat synthetic Graph and Business Central providers as development evidence, not production API validation, authorization or completeness.
 - Preserve explicit unknown/failed/incomplete reporting; never turn missing or contradictory data into a success assertion.
 - Treat external integrations as read-only unless a particular write is explicitly authorized. Do not run real production API calls or create tickets as part of a coding task without approval.
