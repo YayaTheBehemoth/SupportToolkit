@@ -31,6 +31,7 @@ The key goes in the `DOLAPIKEY` header.
 |---|---|
 | `GET /contracts?limit=N&page=P&sortfield=t.rowid` | Contracts with their lines; `page` starts at 0; a page past the end is `[]` with `200` |
 | `GET /thirdparties?mode=1&limit=N&page=P` | Customers: `id`, `name`, `code_client`, `status` |
+| `GET /thirdparties` with no customers | **`404`** `{"error": {"code": 404, "message": "Not Found: No third parties found"}}`, not `[]`: an empty result, not a failure |
 | Wrong or missing key | `401` with a JSON error and a `debug` block (not to be logged) |
 
 **Contracts and lines.**

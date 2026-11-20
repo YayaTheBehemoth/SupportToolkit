@@ -89,6 +89,29 @@ public sealed class DolibarrApiClient
             $"Dolibarr kept returning {resource} past {MaximumPages} pages.");
     }
 
+    private static async Task<bool> IsEmptyResultAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var document =
+                JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+
+            return document.RootElement.TryGetProperty("error", out var error)
+                && error.TryGetProperty("code", out var code)
+                && code.ValueKind == JsonValueKind.Number
+                && code.GetInt32() == 404
+                && error.TryGetProperty("message", out var message)
+                && message.GetString() is { } text
+                && text.StartsWith("Not Found: No ", StringComparison.Ordinal);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
     private async Task<IReadOnlyList<T>> GetPageAsync<T>(
         string path,
         CancellationToken cancellationToken)
@@ -130,6 +153,15 @@ public sealed class DolibarrApiClient
                     $"Dolibarr refused the API key (HTTP {(int)response.StatusCode}). " +
                     "The key is wrong, or its user is disabled or lacks read " +
                     "permission on contracts and customers.");
+            }
+
+            // Some resources (third parties) answer an empty result with
+            // 404 "Not Found: No ... found" instead of []. Only that exact
+            // answer means empty; any other 404 is a failure.
+            if (response.StatusCode == HttpStatusCode.NotFound
+                && await IsEmptyResultAsync(response, cancellationToken))
+            {
+                return [];
             }
 
             if (response.StatusCode != HttpStatusCode.OK)

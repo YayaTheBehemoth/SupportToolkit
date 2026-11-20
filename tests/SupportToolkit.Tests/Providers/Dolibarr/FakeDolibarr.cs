@@ -70,6 +70,15 @@ internal sealed class FakeDolibarr : HttpMessageHandler
                 .Select(item => (JsonNode)item.DeepClone())
                 .ToArray());
 
+        // As the lab showed: an empty third-party page is a 404, while an
+        // empty contract page is [].
+        if (items.Count == 0 && ReferenceEquals(source, Customers))
+        {
+            return Task.FromResult(Json(
+                """{"error":{"code":404,"message":"Not Found: No third parties found"},"debug":{"source":"x"}}""",
+                HttpStatusCode.NotFound));
+        }
+
         return Task.FromResult(Json(items.ToJsonString()));
     }
 

@@ -246,6 +246,27 @@ public class DolibarrCommercialSourcesTests
     }
 
     [Fact]
+    public async Task NoCustomersAtAll_IsAnEmptyList_NotAFailure()
+    {
+        var dolibarr = new FakeDolibarr();
+        dolibarr.Contracts.Add(Contract("1", "CT-1", "1", "1", Line("1", "EXAMPLE-MONITORING", "4")));
+
+        var evidence = await EvidenceAsync(dolibarr);
+
+        Assert.Null(Assert.Single(evidence.Headers).CustomerNumber);
+    }
+
+    [Fact]
+    public async Task AnyOther404_IsAFailure()
+    {
+        var error =
+            await Assert.ThrowsAsync<DolibarrApiException>(
+                () => EvidenceAsync(new FakeDolibarr { FailWith = HttpStatusCode.NotFound }));
+
+        Assert.Contains("HTTP 404", error.Message);
+    }
+
+    [Fact]
     public async Task AServerError_FailsTheEvidence_WithoutTheBody()
     {
         var error =

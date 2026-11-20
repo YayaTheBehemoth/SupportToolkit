@@ -164,7 +164,8 @@ dauth=(-H "DOLAPIKEY: $SUPPORTTOOLKIT_SECRET__DOLIBARR__LAB__API_KEY"
 post() { curl -s -X POST "$api/$1" "${dauth[@]}" -d "$2"; }
 put() { curl -s -o /dev/null -X PUT "$api/$1" "${dauth[@]}" -d "$2"; }
 
-if [[ "$(curl -s "$api/thirdparties?limit=1" "${dauth[@]}" | jq 'length')" != "0" ]]; then
+# An empty list is 404 "No third parties found", not [].
+if [[ "$(curl -s "$api/thirdparties?limit=1" "${dauth[@]}" | jq 'if type == "array" then length else 0 end')" != "0" ]]; then
   echo "Records exist, kept."
 else
   start=$(date -d 2026-01-01 +%s)
