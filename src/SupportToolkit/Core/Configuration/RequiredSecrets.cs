@@ -17,18 +17,31 @@ public sealed record MissingSecret(
 ///
 /// Only connections that a profile actually uses count; a saved connection
 /// nothing refers to needs nothing. Acronis and Zendesk ticketing have a
-/// client secret, osTicket an API key. Business Central and Zendesk deletion sign in
+/// client secret; a provider that owns its settings names its own. Business Central and Zendesk deletion sign in
 /// interactively and store none.
 ///
 /// It reports which secrets are missing and never reads a value out.
 /// </summary>
 public static class RequiredSecrets
 {
+    public static Task<IReadOnlyList<MissingSecret>> FindMissingAsync(
+        SupportToolkitConfiguration configuration,
+        ISecretStore secrets,
+        CancellationToken cancellationToken = default) =>
+        FindMissingAsync(configuration, secrets, [], cancellationToken);
+
+    /// <param name="providers">
+    /// Providers that own their connection settings (registered in
+    /// Composition/), checked after the built-in ones.
+    /// </param>
     public static async Task<IReadOnlyList<MissingSecret>> FindMissingAsync(
         SupportToolkitConfiguration configuration,
         ISecretStore secrets,
+        IEnumerable<IProviderConnections> providers,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(providers);
+
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(secrets);
 
@@ -77,28 +90,24 @@ public static class RequiredSecrets
                 cancellationToken);
         }
 
-        var osTicket =
-            configuration.Profiles.Values
-                .Select(TicketingSelection.For)
-                .Where(selection =>
-                    selection is not null
-                    && selection.Is(TicketingSelection.Providers.OsTicket)
-                    && !string.IsNullOrWhiteSpace(selection.Connection))
-                .Select(selection => selection!.Connection!.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Where(name => configuration.Connections.OsTicket.ContainsKey(name))
-                .Order(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var name in osTicket)
+        foreach (var provider in providers)
         {
-            await AddIfMissingAsync(
-                missing,
-                secrets,
-                "osTicket",
-                name,
-                SupportToolkitSecretKeys.OsTicketApiKey(name),
-                cancellationToken,
-                "API key");
+            var inUse =
+                provider.GetConnectionsInUse(configuration)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Order(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var name in inUse)
+            {
+                await AddIfMissingAsync(
+                    missing,
+                    secrets,
+                    provider.ProviderName,
+                    name,
+                    provider.GetSecretKey(name),
+                    cancellationToken,
+                    provider.SecretName);
+            }
         }
 
         return missing;

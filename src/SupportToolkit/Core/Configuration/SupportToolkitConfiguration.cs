@@ -25,6 +25,9 @@ public sealed class SupportToolkitConfiguration : ConfigurationNode
 
 /// <summary>
 /// Named external connections available to profiles.
+///
+/// A provider that owns its settings keeps them in its own section here,
+/// which this type does not name (see ProviderSettings).
 /// </summary>
 public sealed class SupportToolkitConnections : ConfigurationNode
 {
@@ -42,15 +45,6 @@ public sealed class SupportToolkitConnections : ConfigurationNode
 
     public Dictionary<string, BusinessCentralConnectionConfiguration>
         BusinessCentral
-    {
-        get;
-        set;
-    } = new();
-
-    /// <summary>
-    /// osTicket connections used for ticket submission.
-    /// </summary>
-    public Dictionary<string, OsTicketConnectionConfiguration> OsTicket
     {
         get;
         set;
@@ -291,8 +285,8 @@ public sealed class ZendeskDestinationConfiguration : ConfigurationNode
 
 /// <summary>
 /// A profile's ticketing system, connection and destination, by name.
-/// Provider is a ticketing system name such as "zendesk" or "osticket"
-/// (TicketingSelection.Providers).
+/// Provider is a ticketing system name, such as "zendesk"; the systems
+/// are registered in Composition/.
 /// </summary>
 public sealed class TicketingSelectionConfiguration : ConfigurationNode
 {
@@ -301,40 +295,4 @@ public sealed class TicketingSelectionConfiguration : ConfigurationNode
     public string? Connection { get; set; }
 
     public string? Destination { get; set; }
-}
-
-/// <summary>
-/// Non-secret osTicket connection metadata.
-///
-/// BaseUrl is the helpdesk root (the folder holding api/ and scp/).
-/// RequesterName and RequesterEmail identify who tickets are opened for;
-/// osTicket creates that user on first use. The API key is a secret and
-/// lives in ISecretStore.
-/// </summary>
-public sealed class OsTicketConnectionConfiguration : ConfigurationNode
-{
-    public string BaseUrl { get; set; } =
-        string.Empty;
-
-    public string RequesterName { get; set; } =
-        string.Empty;
-
-    public string RequesterEmail { get; set; } =
-        string.Empty;
-
-    public Dictionary<string, OsTicketDestinationConfiguration> Destinations
-    {
-        get;
-        set;
-    } = new();
-}
-
-/// <summary>
-/// A named ticket destination within one osTicket instance: a help topic.
-/// osTicket accepts an unknown topic without error (the ticket lands in
-/// the default department), so a positive ID is all that can be checked.
-/// </summary>
-public sealed class OsTicketDestinationConfiguration : ConfigurationNode
-{
-    public int TopicId { get; set; }
 }

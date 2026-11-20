@@ -28,7 +28,7 @@ public sealed partial class ConfigureCommand
         Console.WriteLine(
             $"Secrets:            {_secretStore.Description}");
 
-        foreach (var clash in SecretLocationClashes.Find(configuration, _secretStore))
+        foreach (var clash in SecretLocationClashes.Find(configuration, _secretStore, ProviderConnectionsComposition.All))
         {
             Console.WriteLine(
                 $"  WARNING: {clash.Describe()}");
@@ -287,7 +287,7 @@ public sealed partial class ConfigureCommand
             return;
         }
 
-        Console.WriteLine($"{selection.SystemName} ticket submission");
+        Console.WriteLine($"{TicketingComposition.SystemName(selection)} ticket submission");
 
         Console.WriteLine(
             $"  Connection alias: {DisplayOptionalValue(selection.Connection)}");
@@ -439,7 +439,7 @@ public sealed partial class ConfigureCommand
                 $"    Ticketing:           " +
                 (ticketing is null
                     ? DisplayOptionalValue(null)
-                    : $"{ticketing.SystemName}, connection " +
+                    : $"{TicketingComposition.SystemName(ticketing)}, connection " +
                       $"{DisplayOptionalValue(ticketing.Connection)}, " +
                       $"destination {DisplayOptionalValue(ticketing.Destination)}"));
 

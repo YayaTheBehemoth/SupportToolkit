@@ -5,6 +5,7 @@ using SupportToolkit.Core.Secrets;
 using SupportToolkit.Core.Ticketing;
 using SupportToolkit.Core.Ticketing.Models;
 using SupportToolkit.Modules.BackupAggregator.Ticketing;
+using SupportToolkit.Providers.OsTicket.Configuration;
 using static SupportToolkit.Tests.Ui.Web.StatusTestSupport;
 
 namespace SupportToolkit.Tests.Core.Configuration;
@@ -22,17 +23,22 @@ public class TicketingSelectionTests
     {
         var configuration = FullConfiguration();
 
-        configuration.Connections.OsTicket["lab"] =
-            new OsTicketConnectionConfiguration
+        OsTicketConnections.Write(
+            configuration,
+            new Dictionary<string, OsTicketConnectionConfiguration>
             {
-                BaseUrl = "https://helpdesk.example.com/support/",
-                RequesterName = "Example Requester",
-                RequesterEmail = "requester@example.com",
-                Destinations =
-                {
-                    ["backups"] = new OsTicketDestinationConfiguration { TopicId = 10 }
-                }
-            };
+                ["lab"] =
+                    new()
+                    {
+                        BaseUrl = "https://helpdesk.example.com/support/",
+                        RequesterName = "Example Requester",
+                        RequesterEmail = "requester@example.com",
+                        Destinations =
+                        {
+                            ["backups"] = new OsTicketDestinationConfiguration { TopicId = 10 }
+                        }
+                    }
+            });
 
         // The Zendesk fields stay set: the block must win over them.
         configuration.Profiles["work"].Ticketing =
@@ -49,9 +55,23 @@ public class TicketingSelectionTests
     private static MemorySecrets OsTicketSecrets() =>
         new(new Dictionary<string, string>
         {
-            [SupportToolkitSecretKeys.OsTicketApiKey("lab")] = ApiKey,
+            [OsTicketConnections.Instance.GetSecretKey("lab")] = ApiKey,
             [SupportToolkitSecretKeys.ZendeskClientSecret("zd")] = ZendeskSecret
         });
+
+    /// <summary>Edits the "lab" osTicket connection in place.</summary>
+    private static void Lab(
+        SupportToolkitConfiguration configuration,
+        Action<OsTicketConnectionConfiguration> edit)
+    {
+        var connections =
+            new Dictionary<string, OsTicketConnectionConfiguration>(
+                OsTicketConnections.Read(configuration));
+
+        edit(connections["lab"]);
+
+        OsTicketConnections.Write(configuration, connections);
+    }
 
     // ---------------------------------------------------------------
     // Reading the selection
@@ -63,7 +83,7 @@ public class TicketingSelectionTests
         var selection = TicketingSelection.For(FullConfiguration().Profiles["work"]);
 
         Assert.Equal(new TicketingSelection("zendesk", "zd", "dev"), selection);
-        Assert.Equal("Zendesk", selection!.SystemName);
+        Assert.Equal("Zendesk", TicketingComposition.SystemName(selection!));
     }
 
     [Fact]
@@ -72,7 +92,7 @@ public class TicketingSelectionTests
         var selection = TicketingSelection.For(OsTicketConfiguration().Profiles["work"]);
 
         Assert.Equal(new TicketingSelection("osticket", "lab", "backups"), selection);
-        Assert.Equal("osTicket", selection!.SystemName);
+        Assert.Equal("osTicket", TicketingComposition.SystemName(selection!));
     }
 
     [Fact]
@@ -135,7 +155,7 @@ public class TicketingSelectionTests
                 TicketingSelection.For(loaded.Profiles["work"]));
             Assert.Equal(
                 10,
-                loaded.Connections.OsTicket["lab"].Destinations["backups"].TopicId);
+                OsTicketConnections.Read(loaded)["lab"].Destinations["backups"].TopicId);
         }
         finally
         {
@@ -202,11 +222,11 @@ public class TicketingSelectionTests
             { c => c.Profiles["work"].Ticketing!.Connection = "missing", "does not exist" },
             { c => c.Profiles["work"].Ticketing!.Destination = null, "does not select" },
             { c => c.Profiles["work"].Ticketing!.Destination = "missing", "does not exist on connection" },
-            { c => c.Connections.OsTicket["lab"].Destinations["backups"].TopicId = 0, "positive topicId" },
-            { c => c.Connections.OsTicket["lab"].BaseUrl = "", "baseUrl" },
-            { c => c.Connections.OsTicket["lab"].BaseUrl = "http://helpdesk.example.com/", "HTTPS" },
-            { c => c.Connections.OsTicket["lab"].RequesterEmail = "", "requesterEmail" },
-            { c => c.Connections.OsTicket["lab"].RequesterEmail = "nobody", "requesterEmail" },
+            { c => Lab(c, lab => lab.Destinations["backups"].TopicId = 0), "positive topicId" },
+            { c => Lab(c, lab => lab.BaseUrl = ""), "baseUrl" },
+            { c => Lab(c, lab => lab.BaseUrl = "http://helpdesk.example.com/"), "HTTPS" },
+            { c => Lab(c, lab => lab.RequesterEmail = ""), "requesterEmail" },
+            { c => Lab(c, lab => lab.RequesterEmail = "nobody"), "requesterEmail" },
             { c => c.Profiles["work"].Ticketing!.Provider = "", "names no provider" },
             { c => c.Profiles["work"].Ticketing!.Provider = "jira", "'jira'" }
         };
@@ -273,7 +293,8 @@ public class TicketingSelectionTests
         var configuration = OsTicketConfiguration();
 
         var missing =
-            await RequiredSecrets.FindMissingAsync(configuration, FullSecrets());
+            await RequiredSecrets.FindMissingAsync(
+                configuration, FullSecrets(), ProviderConnectionsComposition.All);
 
         var item = Assert.Single(missing, m => m.Provider == "osTicket");
         Assert.Equal("lab", item.ConnectionName);
@@ -285,7 +306,8 @@ public class TicketingSelectionTests
         configuration.Profiles["work"].Ticketing = null;
 
         Assert.DoesNotContain(
-            await RequiredSecrets.FindMissingAsync(configuration, FullSecrets()),
+            await RequiredSecrets.FindMissingAsync(
+                configuration, FullSecrets(), ProviderConnectionsComposition.All),
             m => m.Provider == "osTicket");
     }
 
@@ -293,16 +315,53 @@ public class TicketingSelectionTests
     public void OsTicketConnections_ThatShareAVariable_AreAClash()
     {
         var configuration = OsTicketConfiguration();
-        configuration.Connections.OsTicket["lab_eu"] = new();
-        configuration.Connections.OsTicket["lab-eu"] = new();
+        OsTicketConnections.Write(
+            configuration,
+            new Dictionary<string, OsTicketConnectionConfiguration>(
+                OsTicketConnections.Read(configuration))
+            {
+                ["lab_eu"] = new(),
+                ["lab-eu"] = new()
+            });
 
         var clash =
             Assert.Single(
                 SecretLocationClashes.Find(
                     configuration,
-                    new EnvironmentSecretStore(_ => null)));
+                    new EnvironmentSecretStore(_ => null),
+                    ProviderConnectionsComposition.All));
 
         Assert.Equal("osTicket", clash.Provider);
+    }
+
+    [Fact]
+    public async Task AClashingKey_IsRefused_NeverSentForTheOtherConnection()
+    {
+        var configuration = OsTicketConfiguration();
+
+        Lab(configuration, _ => { });
+        var connections =
+            new Dictionary<string, OsTicketConnectionConfiguration>(
+                OsTicketConnections.Read(configuration));
+        connections["lab-eu"] = connections["lab"];
+        connections["lab_eu"] = new();
+        OsTicketConnections.Write(configuration, connections);
+        configuration.Profiles["work"].Ticketing!.Connection = "lab-eu";
+
+        var resolver =
+            new SupportToolkitConfigurationResolver(
+                new MemoryStore(configuration),
+                new EnvironmentSecretStore(name =>
+                    name == "SUPPORTTOOLKIT_SECRET__OSTICKET__LAB_EU__API_KEY" ? ApiKey : null),
+                _ => null);
+
+        var error =
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => TicketingComposition.ResolveTargetAsync(resolver));
+
+        Assert.Contains("'lab-eu' and 'lab_eu'", error.Message);
+        Assert.Contains("API key", error.Message);
+        Assert.DoesNotContain(ApiKey, error.Message);
     }
 
     [Fact]

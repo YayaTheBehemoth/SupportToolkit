@@ -1,3 +1,4 @@
+using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Secrets;
 
@@ -106,7 +107,8 @@ public sealed partial class ConfigureCommand
             missing =
                 await RequiredSecrets.FindMissingAsync(
                     await _configurationStore.LoadAsync(),
-                    _secretStore);
+                    _secretStore,
+                    ProviderConnectionsComposition.All);
         }
         catch (InvalidOperationException)
         {

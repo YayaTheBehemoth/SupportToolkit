@@ -424,6 +424,13 @@ public sealed class JsonSupportToolkitConfigurationStore
         );
     }
 
+    /// <summary>
+    /// The file's JSON conventions, for settings read outside the store
+    /// (ProviderSettings), so they read exactly as the store writes them.
+    /// </summary>
+    internal static JsonSerializerOptions SerializerOptions { get; } =
+        CreateSerializerOptions();
+
     private static JsonSerializerOptions
         CreateSerializerOptions()
     {

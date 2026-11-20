@@ -85,7 +85,7 @@ public sealed class ConfigurationStatusService
                 .Where(IsSet)
                 .ToArray(),
             _secrets.Description,
-            SecretLocationClashes.Find(configuration, _secrets)
+            SecretLocationClashes.Find(configuration, _secrets, ProviderConnectionsComposition.All)
                 .Select(clash => clash.Describe())
                 .ToArray());
     }
@@ -261,7 +261,7 @@ public sealed class ConfigurationStatusService
                 []);
         }
 
-        var name = $"{selection.SystemName} ticket submission";
+        var name = $"{TicketingComposition.SystemName(selection)} ticket submission";
 
         try
         {
@@ -552,6 +552,27 @@ public sealed class ConfigurationStatusService
                     ]));
         }
 
+        // Providers that own their settings: name and secret only, since
+        // the other settings are theirs.
+        foreach (var provider in ProviderConnectionsComposition.All)
+        {
+            foreach (var name in provider.GetSavedConnectionNames(configuration)
+                         .Order(StringComparer.OrdinalIgnoreCase))
+            {
+                saved.Add(
+                    new SavedConnectionStatus(
+                        provider.ProviderName,
+                        name,
+                        [
+                            new StatusDetail(
+                                Capitalize(provider.SecretName),
+                                await SecretAsync(
+                                    provider.GetSecretKey(name),
+                                    cancellationToken))
+                        ]));
+            }
+        }
+
         return saved;
     }
 
@@ -564,6 +585,9 @@ public sealed class ConfigurationStatusService
             isActive,
             profile.AcronisConnection,
             TicketingSelection.For(profile),
+            TicketingSelection.For(profile) is { } ticketing
+                ? TicketingComposition.SystemName(ticketing)
+                : null,
             profile.ZendeskDeletionConnection,
             profile.BusinessCentralConnection,
             new Dictionary<string, SupportToolkitMode>(
@@ -636,4 +660,7 @@ public sealed class ConfigurationStatusService
     private static string Text(
         string? value) =>
         string.IsNullOrWhiteSpace(value) ? "not configured" : value;
+
+    private static string Capitalize(string text) =>
+        text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
 }

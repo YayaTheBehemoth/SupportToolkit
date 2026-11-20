@@ -9,12 +9,13 @@ namespace SupportToolkit.Core.Configuration;
 public sealed record SecretLocationClash(
     string Provider,
     string Location,
-    IReadOnlyList<string> ConnectionNames)
+    IReadOnlyList<string> ConnectionNames,
+    string SecretName = "client secret")
 {
     public string Describe() =>
         $"{Provider} connections " +
         string.Join(" and ", ConnectionNames.Select(name => $"'{name}'")) +
-        $" read their client secret from the same place ({Location}). " +
+        $" read their {SecretName} from the same place ({Location}). " +
         "Rename one of them.";
 }
 
@@ -25,9 +26,14 @@ public sealed record SecretLocationClash(
 /// </summary>
 public static class SecretLocationClashes
 {
+    /// <param name="providers">
+    /// Providers that own their connection settings (registered in
+    /// Composition/), checked as well as the built-in ones.
+    /// </param>
     public static IReadOnlyList<SecretLocationClash> Find(
         SupportToolkitConfiguration configuration,
-        ISecretStore secrets)
+        ISecretStore secrets,
+        IEnumerable<IProviderConnections>? providers = null)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(secrets);
@@ -45,12 +51,25 @@ public static class SecretLocationClashes
                     SupportToolkitSecretKeys.ZendeskClientSecret,
                     secrets))
             .Concat(
-                Find(
-                    "osTicket",
-                    configuration.Connections.OsTicket.Keys,
-                    SupportToolkitSecretKeys.OsTicketApiKey,
-                    secrets))
+                (providers ?? [])
+                    .SelectMany(provider => For(configuration, secrets, provider)))
             .ToArray();
+    }
+
+    /// <summary>The clashes among one provider's saved connections.</summary>
+    public static IEnumerable<SecretLocationClash> For(
+        SupportToolkitConfiguration configuration,
+        ISecretStore secrets,
+        IProviderConnections provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+
+        return Find(
+                provider.ProviderName,
+                provider.GetSavedConnectionNames(configuration),
+                provider.GetSecretKey,
+                secrets)
+            .Select(clash => clash with { SecretName = provider.SecretName });
     }
 
     /// <summary>

@@ -75,7 +75,7 @@ else
                         <td>@ModeText(profile)</td>
                         <td>@Dash(profile.AcronisConnection)</td>
                         <td>@Dash(profile.BusinessCentralConnection)</td>
-                        <td>@TicketingText(profile.Ticketing)</td>
+                        <td>@TicketingText(profile)</td>
                         <td>@Dash(profile.ZendeskDeletionConnection)</td>
                         <td>
                             @if (!profile.IsActive)
@@ -158,10 +158,10 @@ else
     private static string Dash(string? value) =>
         string.IsNullOrWhiteSpace(value) ? "—" : value;
 
-    private static string TicketingText(TicketingSelection? ticketing) =>
-        ticketing is null
+    private static string TicketingText(ProfileStatus profile) =>
+        profile.Ticketing is not { } ticketing
             ? "—"
-            : $"{ticketing.SystemName}: {Dash(ticketing.Connection)}" +
+            : $"{profile.TicketingSystem}: {Dash(ticketing.Connection)}" +
               (ticketing.Destination is null ? "" : " → " + ticketing.Destination);
 
     private static string ModeText(ProfileStatus profile) =>

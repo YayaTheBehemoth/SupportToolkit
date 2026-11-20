@@ -31,13 +31,23 @@ public static class SupportToolkitSecretKeys
         );
     }
 
-    public static string OsTicketApiKey(
-        string connectionName)
+    /// <summary>
+    /// The key of a secret of a provider that owns its settings
+    /// (IProviderConnections): provider:connection:secret, with the
+    /// connection name normalized like every other.
+    /// </summary>
+    public static string For(
+        string provider,
+        string connectionName,
+        string secretName)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(provider);
+        ArgumentException.ThrowIfNullOrWhiteSpace(secretName);
+
         return Build(
-            "osticket",
+            provider.Trim().ToLowerInvariant(),
             connectionName,
-            "api-key"
+            secretName.Trim().ToLowerInvariant()
         );
     }
 

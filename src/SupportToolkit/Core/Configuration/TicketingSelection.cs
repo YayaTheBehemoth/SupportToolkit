@@ -14,12 +14,14 @@ public sealed record TicketingSelection(
     string? Connection,
     string? Destination)
 {
-    /// <summary>Ticketing system names a profile can select.</summary>
+    /// <summary>
+    /// The ticketing system names Core itself needs: Zendesk, which the
+    /// older profile fields select. The others are registered in
+    /// Composition/.
+    /// </summary>
     public static class Providers
     {
         public const string Zendesk = "zendesk";
-
-        public const string OsTicket = "osticket";
     }
 
     /// <summary>
@@ -79,19 +81,6 @@ public sealed record TicketingSelection(
 
         return null;
     }
-
-    /// <summary>
-    /// The ticketing system's own name for display ("osTicket"), or the
-    /// configured value when SupportToolkit does not know it.
-    /// </summary>
-    public string SystemName =>
-        Provider switch
-        {
-            Providers.Zendesk => "Zendesk",
-            Providers.OsTicket => "osTicket",
-            "" => "Ticketing",
-            _ => Provider
-        };
 
     public bool Is(string provider) =>
         string.Equals(Provider, provider, StringComparison.Ordinal);

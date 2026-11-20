@@ -2,6 +2,7 @@ using System.Globalization;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Logging;
 using SupportToolkit.Core.Ticketing;
+using SupportToolkit.Providers.OsTicket.Configuration;
 using SupportToolkit.Providers.OsTicket.Transport;
 
 namespace SupportToolkit.Providers.OsTicket.Tickets;
@@ -53,7 +54,9 @@ public sealed class OsTicketTicketingTarget : ITicketingTarget
         ArgumentNullException.ThrowIfNull(resolver);
 
         var connection =
-            await resolver.GetOsTicketConnectionAsync(cancellationToken);
+            await OsTicketConnections.Instance.ResolveAsync(
+                resolver,
+                cancellationToken);
 
         OsTicketRequester requester;
 

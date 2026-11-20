@@ -24,6 +24,7 @@ public sealed record ProfileStatus(
     bool IsActive,
     string? AcronisConnection,
     TicketingSelection? Ticketing,
+    string? TicketingSystem,
     string? ZendeskDeletionConnection,
     string? BusinessCentralConnection,
     IReadOnlyDictionary<string, SupportToolkitMode> Modules);

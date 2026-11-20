@@ -1,3 +1,4 @@
+using SupportToolkit.Composition;
 
 using SupportToolkit.Core.Configuration;
 
@@ -107,7 +108,7 @@ public sealed partial class ConfigureCommand
         if (otherTicketing is not null)
         {
             Console.WriteLine(
-                $"Ticket submission: {otherTicketing.SystemName} " +
+                $"Ticket submission: {TicketingComposition.SystemName(otherTicketing)} " +
                 $"(connection {DisplayOptionalValue(otherTicketing.Connection)}, " +
                 $"destination {DisplayOptionalValue(otherTicketing.Destination)}), " +
                 "set in the configuration file. Edit it there."
