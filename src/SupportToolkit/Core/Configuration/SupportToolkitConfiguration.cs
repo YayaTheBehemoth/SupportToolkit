@@ -25,6 +25,9 @@ public sealed class SupportToolkitConfiguration : ConfigurationNode
 
 /// <summary>
 /// Named external connections available to profiles.
+///
+/// A provider that owns its settings keeps them in its own section here,
+/// which this type does not name (see ProviderSettings).
 /// </summary>
 public sealed class SupportToolkitConnections : ConfigurationNode
 {
@@ -68,12 +71,34 @@ public sealed class SupportToolkitConnections : ConfigurationNode
 /// Module modes control operational data sources.
 /// Connection references select reusable external connections.
 ///
-/// ZendeskDestination selects an explicitly configured group within
-/// the profile's Zendesk connection.
+/// Ticketing selects which ticketing system, connection and destination
+/// tickets go to. Without it, the older ZendeskConnection and
+/// ZendeskDestination pair still selects Zendesk (see TicketingSelection).
 /// </summary>
 public sealed class SupportToolkitProfile : ConfigurationNode
 {
     public string? AcronisConnection { get; set; }
+
+    /// <summary>
+    /// Which commercial system supplies monitoring entitlement and
+    /// customer names. Takes precedence over BusinessCentralConnection for
+    /// that when set; BusinessCentralConnection still serves everything
+    /// else that reads Business Central (the usage report).
+    /// </summary>
+    public CommercialSelectionConfiguration? Commercial { get; set; }
+
+    /// <summary>
+    /// Which backup system the Backup Aggregator reviews. Takes
+    /// precedence over AcronisConnection for that review when set;
+    /// AcronisConnection still serves everything else that reads Acronis.
+    /// </summary>
+    public BackupSelectionConfiguration? Backup { get; set; }
+
+    /// <summary>
+    /// Where this profile's tickets go. Takes precedence over
+    /// ZendeskConnection and ZendeskDestination when set.
+    /// </summary>
+    public TicketingSelectionConfiguration? Ticketing { get; set; }
 
     public string? ZendeskConnection { get; set; }
 
@@ -271,4 +296,42 @@ public sealed class ZendeskDeletionConnectionConfiguration : ConfigurationNode
 public sealed class ZendeskDestinationConfiguration : ConfigurationNode
 {
     public long GroupId { get; set; }
+}
+
+/// <summary>
+/// A profile's ticketing system, connection and destination, by name.
+/// Provider is a ticketing system name, such as "zendesk"; the systems
+/// are registered in Composition/.
+/// </summary>
+public sealed class TicketingSelectionConfiguration : ConfigurationNode
+{
+    public string? Provider { get; set; }
+
+    public string? Connection { get; set; }
+
+    public string? Destination { get; set; }
+}
+
+/// <summary>
+/// A profile's backup system and connection, by name. Provider is a backup
+/// system name, such as "acronis"; the systems are registered in
+/// Composition/.
+/// </summary>
+public sealed class BackupSelectionConfiguration : ConfigurationNode
+{
+    public string? Provider { get; set; }
+
+    public string? Connection { get; set; }
+}
+
+/// <summary>
+/// A profile's commercial system and connection, by name. Provider is a
+/// commercial system name, such as "businesscentral"; the systems are
+/// registered in Composition/.
+/// </summary>
+public sealed class CommercialSelectionConfiguration : ConfigurationNode
+{
+    public string? Provider { get; set; }
+
+    public string? Connection { get; set; }
 }

@@ -23,4 +23,22 @@ public interface ISecretStore
         string key,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// False when this store only reads secrets that are set elsewhere,
+    /// such as environment variables; callers must then not ask for a
+    /// secret to store.
+    /// </summary>
+    bool CanStoreSecrets => true;
+
+    /// <summary>What the secrets are kept in, for status output.</summary>
+    string Description => "the secret store of this computer";
+
+    /// <summary>
+    /// Where a secret is set instead of stored (an environment variable's
+    /// name), or null when the store keeps secrets itself.
+    /// </summary>
+    string? ExternalLocation(
+        string key) =>
+        null;
 }

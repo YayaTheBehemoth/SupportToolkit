@@ -24,7 +24,9 @@
     <strong>@(production ? "PRODUCTION: real customer data" : "FIXTURE: synthetic data only")</strong>
     <span>
         @(production
-            ? "This review reads live Acronis and Business Central data. Customer names appear on screen."
+            ? _systems is { } systems
+                ? $"This review reads live data from {systems.Backup} and {systems.Commercial}, and tickets go to {systems.Ticketing}. Customer names appear on screen."
+                : "This review reads live data. Customer names appear on screen."
             : "No external system is contacted.")
     </span>
 </div>
@@ -230,13 +232,18 @@
         <section class="card confirm">
             <header><h3>Confirm ticket</h3></header>
             <dl>
-                <dt>Zendesk instance</dt><dd>@plan.Destination.InstanceHost</dd>
+                <dt>@plan.Destination.SystemName instance</dt><dd>@plan.Destination.InstanceHost</dd>
                 <dt>Destination</dt><dd>@plan.Destination.DestinationName</dd>
                 @if (State.View.IsDetailed)
                 {
-                    <dt>Group ID</dt><dd>@plan.Destination.GroupId</dd>
+                    <dt>@plan.Destination.RoutingLabel</dt><dd>@plan.Destination.RoutingId</dd>
                 }
             </dl>
+
+            @if (plan.Destination.Caveat is { } caveat)
+            {
+                <p class="banner warn">@caveat</p>
+            }
 
             <h3 class="tenant">@plan.Draft.Subject</h3>
             <pre class="log">@plan.Draft.Body</pre>
@@ -259,7 +266,7 @@
         <div class="banner bad">
             <strong>The ticket was not confirmed created.</strong>
             <span>@session.SubmitError</span>
-            <span>Check Zendesk before trying again.</span>
+            <span>Check the ticketing system for the ticket before trying again.</span>
         </div>
     }
 
@@ -271,7 +278,7 @@
             <strong>Ticket @created.Id @CreatedNote(created)</strong>
             @if (link is not null && link.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             {
-                <a href="@link" target="_blank" rel="noopener noreferrer">Open in Zendesk</a>
+                <a href="@link" target="_blank" rel="noopener noreferrer">Open the ticket</a>
             }
         </div>
     }
@@ -279,6 +286,7 @@
 
 @code {
     private ScopedReviewAvailability? _availability;
+    private ActiveSystemsStatus? _systems;
     private string _tab = "attention";
     private TicketDraft? _draft;
     private TicketNotReady? _notReady;
@@ -293,6 +301,8 @@
             session.Progress.Changed += OnChanged;
             _availability = await session.Review.GetAvailabilityAsync();
         }
+
+        _systems = (await State.Status.GetAsync()).ActiveSystems;
     }
 
     private void OnChanged() => _ = InvokeAsync(StateHasChanged);
@@ -346,7 +356,7 @@
         {
             true => "already existed (this was a repeat, nothing new was created)",
             false => "created",
-            null => "reported by Zendesk (it did not say whether it was new)"
+            null => "reported by the ticketing system (it did not say whether it was new)"
         };
 
     private static string NotReadyTitle(TicketNotReadyKind kind) =>
@@ -354,7 +364,7 @@
         {
             TicketNotReadyKind.NoReview => "Run a review first.",
             TicketNotReadyKind.ReviewIncomplete => "A ticket cannot be created from this review.",
-            _ => "The Zendesk destination is not ready."
+            _ => "The ticket destination is not ready."
         };
 
     public void Dispose()

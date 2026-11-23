@@ -10,80 +10,56 @@ using SupportToolkit.Modules.BackupAggregator.Ticketing;
 namespace SupportToolkit.Modules.BackupAggregator.Production;
 
 /// <summary>
-/// Production mode for the all-tenant review: Acronis, read-only, through
-/// the active profile's connection. A session is opened per review.
+/// The all-tenant review against the backup system the profile selects.
+/// Which system that is, is decided by the runtime factory the host
+/// supplies; this class only runs the review and releases the runtime.
 /// </summary>
 public sealed class ProductionBackupAggregatorSources : IBackupAggregatorSources
 {
-    private readonly SupportToolkitConfigurationResolver _configurationResolver;
-    private readonly Action<string>? _progress;
-    private readonly ReviewRunMode _runMode;
+    private readonly Func<CancellationToken, Task<ScopedInventoryRuntime>> _runtimeFactory;
 
     public ProductionBackupAggregatorSources(
-        SupportToolkitConfigurationResolver configurationResolver,
-        Action<string>? progress,
-        ReviewRunMode runMode)
+        Func<CancellationToken, Task<ScopedInventoryRuntime>> runtimeFactory)
     {
-        _configurationResolver =
-            configurationResolver
-            ?? throw new ArgumentNullException(nameof(configurationResolver));
-
-        _progress = progress;
-        _runMode = runMode;
+        _runtimeFactory =
+            runtimeFactory
+            ?? throw new ArgumentNullException(nameof(runtimeFactory));
     }
 
     public Task<SupportToolkitMode> GetModeAsync(
         CancellationToken cancellationToken) =>
         Task.FromResult(SupportToolkitMode.Production);
 
-    public async Task<AggregatedBackupReport> ReviewAllTenantsAsync(
-        CancellationToken cancellationToken)
-    {
-        using var session =
-            await CreateSessionAsync(
-                cancellationToken
-            );
-
-        return await session.ReviewService
-            .ReviewAllTenantsAsync(
-                cancellationToken
-            );
-    }
-
-    public async Task<AggregatedBackupReport> ReviewTenantAsync(
-        string tenantName,
-        CancellationToken cancellationToken)
-    {
-        using var session =
-            await CreateSessionAsync(
-                cancellationToken
-            );
-
-        return await session.ReviewService
-            .ReviewTenantAsync(
-                tenantName,
-                cancellationToken
-            );
-    }
-
-    private Task<BackupAggregatorProductionSession>
-        CreateSessionAsync(
-            CancellationToken cancellationToken) =>
-        BackupAggregatorProduction.CreateSessionAsync(
-            _configurationResolver,
-            _runMode,
-            _progress,
+    public Task<AggregatedBackupReport> ReviewAllTenantsAsync(
+        CancellationToken cancellationToken) =>
+        WithRuntimeAsync(
+            (service, token) => service.ReviewAllTenantsAsync(token),
             cancellationToken);
+
+    public Task<AggregatedBackupReport> ReviewTenantAsync(
+        string tenantName,
+        CancellationToken cancellationToken) =>
+        WithRuntimeAsync(
+            (service, token) => service.ReviewTenantAsync(tenantName, token),
+            cancellationToken);
+
+    private async Task<AggregatedBackupReport> WithRuntimeAsync(
+        Func<BackupInventoryReviewService, CancellationToken, Task<AggregatedBackupReport>> review,
+        CancellationToken cancellationToken)
+    {
+        var runtime = await _runtimeFactory(cancellationToken);
+
+        try
+        {
+            return await review(runtime.ReviewService, cancellationToken);
+        }
+        finally
+        {
+            runtime.Lifetime?.Dispose();
+        }
+    }
 }
 
-/// <summary>
-/// Production mode for the monitored review: the profile's items and
-/// exclusions, Business Central evidence and names, and the Acronis
-/// review session. Any source can be replaced (tests, other hosts).
-///
-/// Order is deliberate: local configuration is read before any sign-in
-/// or API request, so a missing setting fails with no external activity.
-/// </summary>
 public sealed class ProductionScopedReviewSources : IScopedReviewSources
 {
     private readonly SupportToolkitConfigurationResolver _configurationResolver;
@@ -148,8 +124,9 @@ public sealed class ProductionScopedReviewSources : IScopedReviewSources
                 : new ScopedReviewAvailability(
                     mode,
                     false,
-                    "The monitored review needs a Business Central " +
-                    "connection in the active profile.");
+                    "The monitored review needs a commercial system in " +
+                    "the active profile: a Business Central connection, " +
+                    "or the profile's commercial setting.");
         }
         catch (InvalidOperationException exception)
         {
@@ -192,36 +169,4 @@ public sealed class ProductionScopedReviewSources : IScopedReviewSources
             _mappingRepository,
             serviceItemNumbers);
     }
-}
-
-/// <summary>
-/// Tickets go to the configured Zendesk destination.
-/// </summary>
-public sealed class ZendeskBackupTicketSink : IBackupTicketSink
-{
-    private readonly SupportToolkitConfigurationResolver _configurationResolver;
-
-    public ZendeskBackupTicketSink(
-        SupportToolkitConfigurationResolver configurationResolver)
-    {
-        _configurationResolver =
-            configurationResolver
-            ?? throw new ArgumentNullException(nameof(configurationResolver));
-    }
-
-    public Task<TicketDestinationPreview> GetDestinationAsync(
-        CancellationToken cancellationToken) =>
-        BackupAggregatorProduction.GetTicketDestinationAsync(
-            _configurationResolver,
-            cancellationToken);
-
-    public Task<CreatedTicket> SubmitAsync(
-        TicketDraft draft,
-        TicketDestinationPreview? confirmedDestination,
-        CancellationToken cancellationToken) =>
-        BackupAggregatorProduction.SubmitTicketDraftAsync(
-            _configurationResolver,
-            draft,
-            confirmedDestination,
-            cancellationToken);
 }

@@ -1,4 +1,22 @@
 {
 	"version": "2.0.0",
-	"tasks": []
+	"tasks": [
+		{
+			// The web UI on the port the dev container forwards. Open the link
+			// it prints (replace 127.0.0.1 with localhost if needed).
+			"label": "SupportToolkit: web UI (5050)",
+			"type": "process",
+			"command": "dotnet",
+			"args": ["run", "--project", "src/SupportToolkit", "--", "serve", "--port", "5050", "--no-browser"],
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Lab: addresses and logins",
+			"type": "process",
+			"command": "bash",
+			"args": ["lab/up.sh", "--links"],
+			"problemMatcher": []
+		}
+	]
 }

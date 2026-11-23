@@ -27,7 +27,7 @@ public sealed class ZendeskHostFixture : IAsyncLifetime
         static BulkDeleteWebSession Web(BulkDeleteAvailability availability) =>
             new(
                 _ => Task.FromResult(availability),
-                _ => throw new InvalidOperationException(
+                (_, _) => throw new InvalidOperationException(
                     "Not expected: nothing signs in during these tests."));
 
         Available =

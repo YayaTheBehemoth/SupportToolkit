@@ -3,16 +3,38 @@
 
 <p class="muted">
         Configuration file: <code>@Status.ConfigurationPath</code>
+        @if (Status.SecretStore is not null)
+        {
+            <br />
+            <text>Secrets: @Status.SecretStore</text>
+        }
 </p>
+
+@foreach (var clash in Status.SecretClashes ?? [])
+{
+    <div class="banner warn">@clash</div>
+}
 
     @if (Status.Runtime is not null)
     {
         <h2>Active profile: @Status.ActiveProfile</h2>
+        @if (Status.ActiveSystems is { } systems)
+        {
+            <p class="muted">Systems: @systems</p>
+        }
 
         <div class="grid">
             <ConnectionCard Connection="Status.Runtime.Acronis" />
             <ConnectionCard Connection="Status.Runtime.BusinessCentral" />
-            <ConnectionCard Connection="Status.Runtime.ZendeskTicketing" />
+            @if (Status.Runtime.CommercialSystem is { } commercialSystem)
+            {
+                <ConnectionCard Connection="commercialSystem" />
+            }
+            @if (Status.Runtime.BackupSystem is { } backupSystem)
+            {
+                <ConnectionCard Connection="backupSystem" />
+            }
+            <ConnectionCard Connection="Status.Runtime.Ticketing" />
             <ConnectionCard Connection="Status.Runtime.ZendeskDeletion" />
 
             <section class="card">

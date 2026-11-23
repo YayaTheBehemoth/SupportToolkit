@@ -101,10 +101,10 @@ public sealed partial class SupportToolkitConfigurationResolver
             return false;
         }
 
-        return !string.IsNullOrWhiteSpace(
-            GetRequiredActiveProfile(configuration)
-                .Profile.BusinessCentralConnection
-        );
+        // Any commercial system: Business Central through its own field,
+        // or another through the profile's commercial setting.
+        return CommercialSelection.For(
+            GetRequiredActiveProfile(configuration).Profile) is not null;
     }
 
     /// <summary>

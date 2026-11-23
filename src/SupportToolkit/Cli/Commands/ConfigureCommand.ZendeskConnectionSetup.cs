@@ -207,6 +207,11 @@ public sealed partial class ConfigureCommand
             $"Client secret: {DisplaySecretStatus(secretConfigured)}"
         );
 
+        if (ExplainSecretSetElsewhere(secretKey))
+        {
+            return null;
+        }
+
         var updateSecret =
             isNewConnection
             || !secretConfigured

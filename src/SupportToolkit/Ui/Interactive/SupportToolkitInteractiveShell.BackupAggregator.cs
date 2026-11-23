@@ -303,9 +303,15 @@ public sealed partial class SupportToolkitInteractiveShell
         Console.WriteLine("Confirm ticket submission");
         Console.WriteLine("-------------------------");
         Console.WriteLine();
-        Console.WriteLine($"Zendesk instance: https://{destination.InstanceHost}");
+        Console.WriteLine($"{destination.SystemName} instance: https://{destination.InstanceHost}");
         Console.WriteLine($"Destination alias: {destination.DestinationName}");
-        Console.WriteLine($"Zendesk group ID: {destination.GroupId}");
+        Console.WriteLine($"{destination.RoutingLabel}: {destination.RoutingId}");
+
+        if (destination.Caveat is { } caveat)
+        {
+            Console.WriteLine($"Note: {caveat}");
+        }
+
         Console.WriteLine(
             $"Review: {review.TenantCount}/" +
             $"{review.TenantsAttempted} monitored tenants, " +

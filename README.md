@@ -74,7 +74,7 @@ Direct CLI commands are also available for scripting and development.
 | `SupportToolkit` | Interactive console (first run starts the configuration wizard). | Depends on the menu action chosen. |
 | `SupportToolkit --help` | Print usage. | None. |
 | `serve [--port <n>] [--no-browser]` | Open the local web UI. See [Web UI](#web-ui). | Listens on 127.0.0.1 only. What the pages do depends on the active profile's mode. |
-| `configure [status \| profile <name> \| profile delete <name> \| use <name> \| import [file]]` | Manage profiles, connections and credentials. `import` moves a settings file into place (see [Configuration storage](#configuration-storage)). | Local configuration and Windows Credential Manager only. |
+| `configure [status \| profile <name> \| profile delete <name> \| use <name> \| import [file] \| lab]` | Manage profiles, connections and credentials. `import` moves a settings file into place (see [Configuration storage](#configuration-storage)); `lab` adds a profile for the second-provider lab (see [lab/README.md](lab/README.md)). | Local configuration and Windows Credential Manager only. |
 | `backup-aggregator inventory-review <tenant> \| --all` | Consolidated Acronis inventory review. | Read-only in production mode. |
 | `backup-aggregator scoped-review` | Review only tenants entitled to monitoring in Business Central, plus the operator's own tenant. | Read-only Acronis and Business Central calls; interactive Business Central sign-in. |
 | `backup-aggregator ticket preview --scoped` / `ticket submit --scoped` | Ticket from a complete scoped review. | `submit` **writes to Zendesk.** |
@@ -94,7 +94,7 @@ Run any module with `--help` for its own usage text. Exit codes are listed per c
 
 ### Requirements
 
-- Windows
+- Windows, or Linux (see [Developing on Linux and in Codespaces](#developing-on-linux-and-in-codespaces))
 - .NET 10 SDK
 - Git
 
@@ -140,6 +140,31 @@ with:
 ```text
 SupportToolkit.exe
 ```
+
+### Developing on Linux and in Codespaces
+
+The repository has a dev container (`.devcontainer/devcontainer.json`): the .NET 10 SDK on Ubuntu, Docker inside the container, and the C# Dev Kit. It fits the default 2-core GitHub Codespace.
+
+1. On GitHub, open the repository's **Code** menu, then **Codespaces**, and create a codespace on your branch. The packages are restored when it is created.
+2. Run the tests and the CLI as on Windows, with forward slashes:
+
+   ```bash
+   dotnet test
+   dotnet run --project src/SupportToolkit -- --help
+   dotnet run --project src/SupportToolkit -- configure status
+   ```
+
+3. Daily work runs against fixtures, which need no secrets. When a connection does need one, set it as a Codespaces secret or an environment variable; see [Secrets on Linux and in containers](#secrets-on-linux-and-in-containers). `configure status` names the variables that are missing.
+4. The web UI accepts requests addressed to `127.0.0.1` or `localhost` on its own port only (a guard against other web pages reaching it), so a codespace's public forwarding address (`*.app.github.dev`) is refused. Reach it through a tunnel that keeps it on `localhost` with the **same port number**:
+   - In the codespace: run the VS Code task **SupportToolkit: web UI (5050)**, or `dotnet run --project src/SupportToolkit -- serve --port 5050 --no-browser`.
+   - On your computer: VS Code desktop connected to the codespace forwards 5050 (and the lab's ports) on its own, keeping the numbers; the dev container asks for that, so a clash is reported instead of renumbered. Without VS Code: `gh codespace ports forward 5050:5050`. Keep the ports private.
+   - Open the printed link, replacing `127.0.0.1` with `localhost` if needed.
+
+   The same holds on any Linux machine of your own: run `serve` there and reach it with `ssh -L 5050:127.0.0.1:5050 <machine>`. The Zendesk deletion sign-in also redirects to `localhost` on the machine running the toolkit, so it completes only when that port is forwarded the same way.
+5. **Second-provider lab.** `lab/up.sh` starts self-hosted stand-ins (osTicket, Duplicati, Dolibarr) with synthetic records, and `configure lab` adds a `lab` profile beside your own; switch with `configure use lab` and back with `configure use <your profile>`. `lab/up.sh --links` prints the addresses, logins and commands. The installed exe can use the lab too, through the same kind of same-port tunnel. See [lab/README.md](lab/README.md).
+6. **Stop the codespace when you are done.** The free quota counts the time a codespace is running and the storage it keeps; a stopped codespace still uses storage until it is deleted.
+
+The Windows release (`scripts/publish-windows.cmd`) is built on Windows only.
 
 ---
 
@@ -464,7 +489,7 @@ Both may point at the same Zendesk subdomain; they still use different OAuth cli
 
 ### Sign-in
 
-The deletion connection is a public OAuth client with PKCE (S256); no client secret exists. The sign-in opens your browser, listens on a free loopback port and sends `http://localhost:{port}` as the redirect URI (the OAuth client registers `http://localhost`; Zendesk ignores the port). It requests `read tickets:write`: `tickets:read` alone is not enough, because search and the signed-in user's identity need `read`. The token is kept in memory only and is gone when the program exits. If Zendesk reports no token lifetime, none is assumed; a rejected or expired token is not replaced silently and needs a new sign-in.
+The deletion connection is a public OAuth client with PKCE (S256); no client secret exists. The sign-in opens your browser (where none can be opened, such as in a container, the console and the web page show the sign-in link to open yourself), listens on a free loopback port and sends `http://localhost:{port}` as the redirect URI (the OAuth client registers `http://localhost`; Zendesk ignores the port). It requests `read tickets:write`: `tickets:read` alone is not enough, because search and the signed-in user's identity need `read`. The token is kept in memory only and is gone when the program exits. If Zendesk reports no token lifetime, none is assumed; a rejected or expired token is not replaced silently and needs a new sign-in.
 
 ### Preview
 
@@ -677,7 +702,7 @@ Portable Release builds use:
 
 The configuration file contains non-secret profile and connection metadata.
 
-Authentication secrets are stored separately through Windows Credential Manager.
+Authentication secrets are stored separately: in Windows Credential Manager on Windows, and read from environment variables on other systems (see [Secrets on Linux and in containers](#secrets-on-linux-and-in-containers)).
 
 The configuration path may be overridden with:
 
@@ -757,6 +782,22 @@ ZENDESK_CLIENT_SECRET
 Zendesk ticket destinations must still be configured through an active profile.
 
 A Zendesk subdomain override cannot silently redirect ticket submission to another instance while retaining the configured destination.
+
+### Secrets on Linux and in containers
+
+Outside Windows there is no Credential Manager, and SupportToolkit never writes a secret to disk in plain text. Each connection's client secret is read from an environment variable instead, for example a Codespaces secret:
+
+```text
+SUPPORTTOOLKIT_SECRET__<PROVIDER>__<CONNECTION>__<SECRET>
+```
+
+The parts come from the secret's key `provider:connection:secret`, in upper case, with every character other than A-Z and 0-9 written as `_`. For example, Zendesk connection `trial` reads `SUPPORTTOOLKIT_SECRET__ZENDESK__TRIAL__CLIENT_SECRET`, and Acronis connection `prod-eu` reads `SUPPORTTOOLKIT_SECRET__ACRONIS__PROD_EU__CLIENT_SECRET`.
+
+`configure profile` and `configure import` do not ask for a secret there; they name the variable to set. `configure status` shows where secrets come from and, for each connection, the variable and whether it is set (never its value).
+
+Because `-`, `_` and `.` all become `_`, two connections of one provider can map to the same variable (`prod-eu` and `prod_eu`). `configure status` reports such a clash, and the secret is refused until one connection is renamed, so one connection's secret is never sent to another.
+
+The `ACRONIS_*` and `ZENDESK_*` overrides above still apply first, on every system.
 
 ### Override precedence
 

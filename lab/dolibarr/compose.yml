@@ -1,0 +1,51 @@
+# Dolibarr lab: contract discovery only. Daily development uses the
+# recorded fixtures in the tests, never this instance.
+#
+# Passwords have no defaults: set them in the environment (for example as
+# Codespaces secrets) before `docker compose up`. See README.md.
+name: supporttoolkit-lab-dolibarr
+# Data lives in ./.data (git-ignored) in the workspace, so it survives a
+# codespace rebuild; restart: unless-stopped brings the containers back
+# after a codespace restart.
+
+services:
+  dolibarr:
+    image: dolibarr/dolibarr:23.0.4
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DOLI_DB_HOST: db
+      DOLI_DB_NAME: dolidb
+      DOLI_DB_USER: dolibarr
+      DOLI_DB_PASSWORD: ${DOLIBARR_LAB_DB_PASSWORD:?set DOLIBARR_LAB_DB_PASSWORD}
+      DOLI_ADMIN_LOGIN: labadmin
+      DOLI_ADMIN_PASSWORD: ${DOLIBARR_LAB_ADMIN_PASSWORD:?set DOLIBARR_LAB_ADMIN_PASSWORD}
+      DOLI_URL_ROOT: http://localhost:8090
+      DOLI_COMPANY_NAME: SupportToolkit lab
+      # The API, customers (third parties), contracts and products/services.
+      DOLI_ENABLE_MODULES: Api,Societe,Contrat,Product,Service
+      DOLI_INIT_DEMO: "0"
+    ports:
+      - "127.0.0.1:8090:80"
+    volumes:
+      - ./.data/documents:/var/www/documents
+
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: dolidb
+      MARIADB_USER: dolibarr
+      MARIADB_PASSWORD: ${DOLIBARR_LAB_DB_PASSWORD:?set DOLIBARR_LAB_DB_PASSWORD}
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"
+    healthcheck:
+      # Signs in as the application user: the workspace folder makes the
+      # image's own health-check credentials file world-writable, which the
+      # client then ignores.
+      test: ["CMD-SHELL", "mariadb -u\"$$MARIADB_USER\" -p\"$$MARIADB_PASSWORD\" -e 'SELECT 1' > /dev/null"]
+      interval: 5s
+      retries: 30
+    volumes:
+      - ./.data/db:/var/lib/mysql

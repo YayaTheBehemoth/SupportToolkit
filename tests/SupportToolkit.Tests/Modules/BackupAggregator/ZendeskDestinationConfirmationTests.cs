@@ -19,7 +19,10 @@ public class ZendeskDestinationConfirmationTests
 
         Assert.Equal("fixture-trial.zendesk.com", destination.InstanceHost);
         Assert.Equal("dev", destination.DestinationName);
-        Assert.Equal(12345, destination.GroupId);
+        Assert.Equal("Zendesk", destination.SystemName);
+        Assert.Equal("Group ID", destination.RoutingLabel);
+        Assert.Equal("12345", destination.RoutingId);
+        Assert.Null(destination.Caveat);
     }
 
     [Fact]
@@ -28,7 +31,7 @@ public class ZendeskDestinationConfirmationTests
         var workflow = CreateWorkflow();
         var report = new BackupAggregatorFixtureFactory().BuildReport();
         var staleDestination = new TicketDestinationPreview(
-            "different.zendesk.com", "dev", 12345);
+            "Zendesk", "different.zendesk.com", "dev", "Group ID", "12345");
 
         var stalePlan = new TicketSubmissionPlan(
             new BackupReviewTicketDraftFactory().Create(report),
@@ -45,18 +48,31 @@ public class ZendeskDestinationConfirmationTests
     [Fact]
     public void SameDestination_MatchesCaseInsensitivelyButNotDifferentGroups()
     {
-        var first = new TicketDestinationPreview(
-            "fixture-trial.zendesk.com", "dev", 12345);
+        var first = Zendesk(
+            "fixture-trial.zendesk.com", "dev", "12345");
 
-        Assert.True(first.IsSameAs(new TicketDestinationPreview(
-            "FIXTURE-TRIAL.ZENDESK.COM", "DEV", 12345)));
+        Assert.True(first.IsSameAs(Zendesk(
+            "FIXTURE-TRIAL.ZENDESK.COM", "DEV", "12345")));
 
-        Assert.False(first.IsSameAs(new TicketDestinationPreview(
-            "fixture-trial.zendesk.com", "dev", 54321)));
+        Assert.False(first.IsSameAs(Zendesk(
+            "fixture-trial.zendesk.com", "dev", "54321")));
 
-        Assert.False(first.IsSameAs(new TicketDestinationPreview(
-            "fixture-trial.zendesk.com", "operations", 12345)));
+        Assert.False(first.IsSameAs(Zendesk(
+            "fixture-trial.zendesk.com", "operations", "12345")));
     }
+
+    [Fact]
+    public void SameHostAndRouting_InAnotherSystem_IsNotTheSameDestination()
+    {
+        var zendesk = Zendesk("helpdesk.example.com", "dev", "10");
+
+        Assert.False(zendesk.IsSameAs(new TicketDestinationPreview(
+            "osTicket", "helpdesk.example.com", "dev", "Help topic ID", "10")));
+    }
+
+    private static TicketDestinationPreview Zendesk(
+        string host, string destination, string groupId) =>
+        new("Zendesk", host, destination, "Group ID", groupId);
 
     [Fact]
     public async Task MissingDestination_RejectsDuringPreflight()

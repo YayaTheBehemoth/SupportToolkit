@@ -1,10 +1,10 @@
 
 using System.Globalization;
+using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Modules.UsageReport;
 using SupportToolkit.Core.Secrets;
 using SupportToolkit.Providers.Acronis.Transport;
-using SupportToolkit.Providers.Zendesk.Transport;
 
 namespace SupportToolkit.Cli.Commands;
 
@@ -24,6 +24,21 @@ public sealed partial class ConfigureCommand
 
         Console.WriteLine(
             $"Active profile:     {configuration.ActiveProfile}");
+
+        if (FindProfileKey(configuration, configuration.ActiveProfile) is { } activeKey)
+        {
+            Console.WriteLine(
+                $"Systems:            {ConfigurationStatusService.ActiveSystems(configuration.Profiles[activeKey])}");
+        }
+
+        Console.WriteLine(
+            $"Secrets:            {_secretStore.Description}");
+
+        foreach (var clash in SecretLocationClashes.Find(configuration, _secretStore, ProviderConnectionsComposition.All))
+        {
+            Console.WriteLine(
+                $"  WARNING: {clash.Describe()}");
+        }
 
         Console.WriteLine();
 
@@ -83,15 +98,25 @@ public sealed partial class ConfigureCommand
 
         Console.WriteLine();
 
+        var backup = BackupSelection.For(profile);
+
         await WriteEffectiveAcronisAsync(
             profile,
             resolver,
-            aggregatorMode == SupportToolkitMode.Production
+            (aggregatorMode == SupportToolkitMode.Production
+             && BackupSystemsComposition.ReviewsAcronis(backup))
             || usageReportMode == SupportToolkitMode.Production);
+
+        if (!BackupSystemsComposition.ReviewsAcronis(backup))
+        {
+            Console.WriteLine();
+
+            await WriteEffectiveBackupSystemAsync(backup!, resolver);
+        }
 
         Console.WriteLine();
 
-        await WriteEffectiveZendeskAsync(
+        await WriteEffectiveTicketingAsync(
             profile,
             resolver);
 
@@ -108,6 +133,34 @@ public sealed partial class ConfigureCommand
             resolver);
 
         Console.WriteLine();
+
+        var commercial = CommercialSelection.For(profile);
+
+        if (!CommercialSystemsComposition.ReadsBusinessCentral(commercial))
+        {
+            Console.WriteLine(
+                $"{CommercialSystemsComposition.SystemName(commercial!)} monitoring scope");
+
+            Console.WriteLine(
+                $"  Connection alias: {DisplayOptionalValue(commercial!.Connection)}");
+
+            try
+            {
+                foreach (var detail in await CommercialSystemsComposition.DescribeAsync(resolver))
+                {
+                    Console.WriteLine($"  {detail.Label}: {detail.Value}");
+                }
+
+                Console.WriteLine("  Configuration: valid locally");
+            }
+            catch (InvalidOperationException exception)
+            {
+                Console.WriteLine("  Configuration: incomplete or invalid");
+                Console.WriteLine($"  Reason: {exception.Message}");
+            }
+
+            Console.WriteLine();
+        }
 
         await WriteEffectiveReviewWaitAsync(resolver);
 
@@ -253,14 +306,22 @@ public sealed partial class ConfigureCommand
         }
     }
 
-    private static async Task WriteEffectiveZendeskAsync(
+    /// <summary>
+    /// Ticket submission through whichever system the profile selects,
+    /// resolved by the same code a submission uses. This validates the
+    /// selection, destination, routing and credential availability; it
+    /// does not authenticate or submit a ticket.
+    /// </summary>
+    private static async Task WriteEffectiveTicketingAsync(
         SupportToolkitProfile profile,
         SupportToolkitConfigurationResolver resolver)
     {
-        Console.WriteLine("Zendesk ticket submission");
+        var selection = TicketingSelection.For(profile);
 
-        if (string.IsNullOrWhiteSpace(profile.ZendeskConnection))
+        if (selection is null)
         {
+            Console.WriteLine("Ticket submission");
+
             Console.WriteLine(
                 "  Connection: not selected");
 
@@ -270,51 +331,31 @@ public sealed partial class ConfigureCommand
             return;
         }
 
-        Console.WriteLine(
-            $"  Connection alias: {profile.ZendeskConnection}");
+        Console.WriteLine($"{TicketingComposition.SystemName(selection)} ticket submission");
 
         Console.WriteLine(
-            $"  Destination alias: {DisplayOptionalValue(profile.ZendeskDestination)}");
+            $"  Connection alias: {DisplayOptionalValue(selection.Connection)}");
+
+        Console.WriteLine(
+            $"  Destination alias: {DisplayOptionalValue(selection.Destination)}");
 
         try
         {
-            /*
-             * Reuse the actual runtime configuration resolver.
-             *
-             * This validates:
-             * - The active profile's connection reference.
-             * - The selected destination and group ID.
-             * - The Zendesk instance override restriction.
-             * - Credential availability.
-             *
-             * This does not authenticate or submit a ticket.
-             */
-            var resolved =
-                await resolver.GetZendeskConnectionAsync();
+            var target =
+                await TicketingComposition.ResolveTargetAsync(resolver);
 
-            var options =
-                ZendeskOptions.Create(
-                    resolved.Subdomain,
-                    resolved.ClientId,
-                    resolved.ClientSecret);
-
-            Console.WriteLine(
-                $"  Instance: {options.BaseUri.GetLeftPart(UriPartial.Authority)}");
-
-            Console.WriteLine(
-                $"  Destination: {resolved.DestinationName}");
-
-            Console.WriteLine(
-                $"  Group ID: {resolved.GroupId}");
-
-            Console.WriteLine(
-                $"  Submitter user ID: {resolved.SubmitterId}");
-
-            Console.WriteLine(
-                $"  Requester user ID: {resolved.RequesterId}");
+            foreach (var detail in target.Details)
+            {
+                Console.WriteLine($"  {detail.Label}: {detail.Value}");
+            }
 
             Console.WriteLine(
                 "  Configuration: valid locally");
+
+            if (target.Destination.Caveat is { } caveat)
+            {
+                Console.WriteLine($"  Note: {caveat}");
+            }
         }
         catch (InvalidOperationException exception)
         {
@@ -327,6 +368,37 @@ public sealed partial class ConfigureCommand
             Console.WriteLine(
                 "  Ticket submission will be unavailable " +
                 "until the configuration is corrected.");
+        }
+    }
+
+    /// <summary>
+    /// The backup system the review reads, when it is not Acronis.
+    /// Resolved by the same code a review uses; nothing is called.
+    /// </summary>
+    private static async Task WriteEffectiveBackupSystemAsync(
+        BackupSelection selection,
+        SupportToolkitConfigurationResolver resolver)
+    {
+        Console.WriteLine(
+            $"{BackupSystemsComposition.SystemName(selection)} backup review");
+
+        Console.WriteLine(
+            $"  Connection alias: {DisplayOptionalValue(selection.Connection)}");
+
+        try
+        {
+            foreach (var detail in
+                     await BackupSystemsComposition.DescribeAsync(resolver, selection))
+            {
+                Console.WriteLine($"  {detail.Label}: {detail.Value}");
+            }
+
+            Console.WriteLine("  Configuration: valid locally");
+        }
+        catch (InvalidOperationException exception)
+        {
+            Console.WriteLine("  Configuration: incomplete or invalid");
+            Console.WriteLine($"  Reason: {exception.Message}");
         }
     }
 
@@ -436,13 +508,15 @@ public sealed partial class ConfigureCommand
                 $"    Acronis connection:  " +
                 $"{DisplayOptionalValue(profile.AcronisConnection)}");
 
-            Console.WriteLine(
-                $"    Zendesk connection:  " +
-                $"{DisplayOptionalValue(profile.ZendeskConnection)}");
+            var ticketing = TicketingSelection.For(profile);
 
             Console.WriteLine(
-                $"    Zendesk destination: " +
-                $"{DisplayOptionalValue(profile.ZendeskDestination)}");
+                $"    Ticketing:           " +
+                (ticketing is null
+                    ? DisplayOptionalValue(null)
+                    : $"{TicketingComposition.SystemName(ticketing)}, connection " +
+                      $"{DisplayOptionalValue(ticketing.Connection)}, " +
+                      $"destination {DisplayOptionalValue(ticketing.Destination)}"));
 
             Console.WriteLine(
                 $"    Zendesk deletion:    " +
@@ -496,7 +570,12 @@ public sealed partial class ConfigureCommand
                         !string.IsNullOrWhiteSpace(pair.Value.ClientId))}");
 
                 Console.WriteLine(
-                    $"    Client secret: {DisplaySecretStatus(secretConfigured)}");
+                    $"    Client secret: {SecretStatusText.Describe(
+                        _secretStore,
+                        SupportToolkitSecretKeys.AcronisClientSecret(pair.Key),
+                        secretConfigured,
+                        "configured",
+                        "missing")}");
             }
         }
 
@@ -535,7 +614,12 @@ public sealed partial class ConfigureCommand
                         !string.IsNullOrWhiteSpace(connection.ClientId))}");
 
                 Console.WriteLine(
-                    $"    Client secret: {DisplaySecretStatus(secretConfigured)}");
+                    $"    Client secret: {SecretStatusText.Describe(
+                        _secretStore,
+                        SupportToolkitSecretKeys.ZendeskClientSecret(pair.Key),
+                        secretConfigured,
+                        "configured",
+                        "missing")}");
 
                 Console.WriteLine(
                     $"    Submitter ID:  {DisplayZendeskUserId(connection.SubmitterId)}");

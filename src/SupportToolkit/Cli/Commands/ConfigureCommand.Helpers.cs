@@ -1,3 +1,4 @@
+using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Secrets;
 
@@ -36,11 +37,15 @@ public sealed partial class ConfigureCommand
     private static bool RequiresAcronisConnection(
         SupportToolkitProfile profile)
     {
+        // Only a review that reads Acronis needs its connection; a profile
+        // whose backup setting selects another system does not.
         return GetConfiguredMode(
                    profile,
                    BackupAggregatorCommand
                )
-               == SupportToolkitMode.Production;
+               == SupportToolkitMode.Production
+               && BackupSystemsComposition.ReviewsAcronis(
+                   BackupSelection.For(profile));
     }
 
     private static string? FindProfileKey(
@@ -343,6 +348,27 @@ public sealed partial class ConfigureCommand
                 $"{label} is required."
             );
         }
+    }
+
+    /// <summary>
+    /// When this system's secret store cannot keep secrets, says where to
+    /// set this one instead and returns true: nothing is asked for, so no
+    /// secret is typed only to be refused.
+    /// </summary>
+    private bool ExplainSecretSetElsewhere(
+        string key)
+    {
+        if (_secretStore.CanStoreSecrets)
+        {
+            return false;
+        }
+
+        Console.WriteLine(
+            "Client secret: not stored by SupportToolkit on this system. " +
+            $"Set {_secretStore.ExternalLocation(key) ?? "it outside SupportToolkit"} " +
+            "instead (for example as a Codespaces secret).");
+
+        return true;
     }
 
     private static string ReadSecret(

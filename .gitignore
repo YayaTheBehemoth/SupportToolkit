@@ -482,3 +482,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Second-provider lab data (lab/up.sh); synthetic, kept across codespace rebuilds
+lab/*/.data/

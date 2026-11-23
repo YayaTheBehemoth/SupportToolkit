@@ -69,11 +69,16 @@ public sealed class ZendeskBulkDeleteSession : IDisposable
     /// Builds the session for a resolved deletion connection. Nothing is
     /// sent and nobody is signed in until the workflow asks.
     /// </summary>
+    /// <param name="browserUnavailable">
+    /// Receives the sign-in link when no browser can be opened, so the
+    /// interface can show it.
+    /// </param>
     public static ZendeskBulkDeleteSession Create(
         ResolvedZendeskDeletionConnection connection,
         OperationalLogger? logger = null,
         bool enableDeletion = false,
-        string? receiptDirectory = null)
+        string? receiptDirectory = null,
+        Action<Uri>? browserUnavailable = null)
     {
         ArgumentNullException.ThrowIfNull(connection);
 
@@ -97,7 +102,7 @@ public sealed class ZendeskBulkDeleteSession : IDisposable
             new ZendeskPkceTokenSource(
                 signInClient,
                 options,
-                new SystemBrowserLauncher(),
+                new SystemBrowserLauncher(browserUnavailable),
                 () => ZendeskLoopbackReceiver.Start(),
                 logger: logger);
 

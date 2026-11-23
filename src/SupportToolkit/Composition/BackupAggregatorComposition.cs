@@ -7,6 +7,7 @@ using SupportToolkit.Modules.BackupAggregator.Models;
 using SupportToolkit.Modules.BackupAggregator.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.Production;
 using SupportToolkit.Modules.BackupAggregator.Services;
+using SupportToolkit.Modules.BackupAggregator.Ticketing;
 
 namespace SupportToolkit.Composition;
 
@@ -14,8 +15,8 @@ namespace SupportToolkit.Composition;
 /// Builds the Backup Aggregator workflows for a host. The mode
 /// (environment variable, then profile, then the fixture default) is read
 /// on every call, so a profile switched while the program runs takes
-/// effect on the next review. Tickets always go to the configured
-/// Zendesk destination, whatever the review's mode.
+/// effect on the next review. Tickets always go to the ticket destination
+/// the profile selects (TicketingComposition), whatever the review's mode.
 /// </summary>
 public static class BackupAggregatorComposition
 {
@@ -40,11 +41,13 @@ public static class BackupAggregatorComposition
                 configurationResolver,
                 new FixtureBackupAggregatorSources(),
                 new ProductionBackupAggregatorSources(
-                    configurationResolver,
-                    progress,
-                    runMode)),
-            new ZendeskBackupTicketSink(
-                configurationResolver));
+                    cancellationToken =>
+                        BackupSystemsComposition.CreateRuntimeAsync(
+                            configurationResolver,
+                            runMode,
+                            progress,
+                            cancellationToken))),
+            TicketSink(configurationResolver));
     }
 
     /// <summary>
@@ -70,6 +73,12 @@ public static class BackupAggregatorComposition
     {
         ArgumentNullException.ThrowIfNull(configurationResolver);
 
+        var commercial =
+            CommercialSystemsComposition.ForWorkflow(
+                configurationResolver,
+                runMode,
+                progress);
+
         return new BackupAggregatorScopedWorkflow(
             new ModeSelectedScopedSources(
                 configurationResolver,
@@ -77,10 +86,16 @@ public static class BackupAggregatorComposition
                 new ProductionScopedReviewSources(
                     configurationResolver,
                     identitySource,
-                    evidenceSourceFactory,
-                    inventoryRuntimeFactory,
+                    evidenceSourceFactory ?? commercial.Evidence,
+                    inventoryRuntimeFactory
+                    ?? (cancellationToken =>
+                        BackupSystemsComposition.CreateRuntimeAsync(
+                            configurationResolver,
+                            runMode,
+                            progress,
+                            cancellationToken)),
                     mappingRepository,
-                    nameSourceFactory,
+                    nameSourceFactory ?? commercial.Names,
                     progress,
                     runMode)));
     }
@@ -142,5 +157,21 @@ public static class BackupAggregatorComposition
             await ModeAsync(resolver, cancellationToken) == SupportToolkitMode.Fixture
                 ? fixture
                 : production;
+    }
+
+    /// <summary>
+    /// Where review tickets go: the profile's ticketing system, chosen
+    /// again for every ticket.
+    /// </summary>
+    public static IBackupTicketSink TicketSink(
+        SupportToolkitConfigurationResolver configurationResolver)
+    {
+        ArgumentNullException.ThrowIfNull(configurationResolver);
+
+        return new TicketingTargetSink(
+            cancellationToken =>
+                TicketingComposition.ResolveTargetAsync(
+                    configurationResolver,
+                    cancellationToken));
     }
 }

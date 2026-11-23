@@ -344,7 +344,7 @@ public sealed class BackupAggregatorModule
             "as the inventory review.");
 
         Console.WriteLine(
-            "Ticket submission requires a configured Zendesk connection " +
+            "Ticket submission requires a configured ticketing connection " +
             "and an explicitly selected destination.");
 
         Console.WriteLine();

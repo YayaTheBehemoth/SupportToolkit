@@ -23,7 +23,7 @@ public static class ConsoleCreatedTicketReporter
         {
             output.WriteLine("Ticket already submitted.");
             output.WriteLine(
-                "Zendesk recognized this as a repeat submission. " +
+                "The ticketing system recognized this as a repeat submission. " +
                 "No new ticket was created.");
         }
         else if (ticket.WasIdempotentReplay == false)
@@ -32,9 +32,9 @@ public static class ConsoleCreatedTicketReporter
         }
         else
         {
-            output.WriteLine("Ticket confirmed by Zendesk.");
+            output.WriteLine("Ticket confirmed by the ticketing system.");
             output.WriteLine(
-                "Zendesk did not report whether this was " +
+                "It did not report whether this was " +
                 "a new creation or an idempotent replay.");
         }
 

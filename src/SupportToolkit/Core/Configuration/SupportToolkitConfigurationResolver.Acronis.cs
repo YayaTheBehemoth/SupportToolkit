@@ -98,7 +98,8 @@ public sealed partial class SupportToolkitConfigurationResolver
 
         var clientSecret =
             environmentClientSecret
-            ?? await _secretStore.GetSecretAsync(
+            ?? await ReadConnectionSecretAsync(
+                configuration,
                 SupportToolkitSecretKeys
                     .AcronisClientSecret(
                         connectionName
@@ -111,9 +112,12 @@ public sealed partial class SupportToolkitConfigurationResolver
         {
             throw new InvalidOperationException(
                 $"Acronis client secret for connection " +
-                $"'{connectionName}' is not configured. Run " +
-                $"SupportToolkit configure profile {active.Name} " +
-                "or provide ACRONIS_CLIENT_SECRET."
+                $"'{connectionName}' is not configured. " +
+                MissingSecretAdvice(
+                    SupportToolkitSecretKeys
+                        .AcronisClientSecret(connectionName),
+                    active.Name,
+                    "ACRONIS_CLIENT_SECRET")
             );
         }
 
