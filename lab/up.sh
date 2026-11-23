@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
 # Starts the second-provider lab (osTicket, Duplicati, Dolibarr), seeds its
 # synthetic records and sets the keys SupportToolkit uses, from variables
-# you own (Codespaces secrets). Safe to run again: existing records are
-# kept, keys are reset to the variables' values.
+# you own: Codespaces secrets in a codespace, or ~/.lab.env on your own
+# computer (read automatically when it exists). Safe to run again:
+# existing records are kept, keys are reset to the variables' values.
 #
 #   lab/up.sh                 start and provision
-#   lab/up.sh --generate      print random values for any variable not set,
-#                             to save as Codespaces secrets (lab use only)
+#   lab/up.sh --generate      print random values for any variable not set
+#                             (lab use only): save them as Codespaces
+#                             secrets, or append them to ~/.lab.env with
+#                             lab/up.sh --generate >> ~/.lab.env
 #   lab/up.sh --if-configured as above, but only when every variable is set;
 #                             otherwise a one-line note (the dev container
 #                             runs this on every codespace start)
 #   lab/up.sh --links         print the addresses, logins and commands only;
 #                             starts and changes nothing
+#   lab/up.sh --stop          stop the lab's containers; data is kept and
+#                             lab/up.sh starts them again
 #   lab/up.sh --reset         delete the lab's containers and data, after
 #                             confirmation; needed after changing the
 #                             database passwords
@@ -21,6 +26,33 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
+
+# A lab on your own computer keeps its variables in a file; a codespace has
+# them as Codespaces secrets and no such file. LAB_ENV_FILE overrides the
+# location.
+lab_env="${LAB_ENV_FILE:-$HOME/.lab.env}"
+if [[ -f "$lab_env" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$lab_env"
+  set +a
+fi
+
+in_codespace() { [[ "${CODESPACES:-}" == "true" ]]; }
+
+# Tools the provisioning needs. A codespace has them; a fresh Ubuntu may
+# lack jq.
+require_tools() {
+  local tool absent=()
+  for tool in "$@"; do
+    command -v "$tool" > /dev/null 2>&1 || absent+=("$tool")
+  done
+  if (( ${#absent[@]} > 0 )); then
+    echo "Missing: ${absent[*]}. On Ubuntu: sudo apt-get install -y ${absent[*]}" >&2
+    echo "(Docker itself: see lab/README.md.)" >&2
+    exit 1
+  fi
+}
 
 # Infrastructure only: never used by SupportToolkit.
 infra=(
@@ -48,7 +80,7 @@ links() {
   Dolibarr   http://127.0.0.1:8090/       login labadmin, password $DOLIBARR_LAB_ADMIN_PASSWORD
   Duplicati  http://127.0.0.1:8201/ (machine-a)  password $SUPPORTTOOLKIT_SECRET__DUPLICATI__LAB__PASSWORD_MACHINE_A
              http://127.0.0.1:8202/ (machine-b)  password $SUPPORTTOOLKIT_SECRET__DUPLICATI__LAB__PASSWORD_MACHINE_B
-  Show one:  echo $OSTICKET_LAB_ADMIN_PASSWORD
+  Show one:  echo $OSTICKET_LAB_ADMIN_PASSWORD   (or: grep OSTICKET_LAB_ADMIN_PASSWORD ~/.lab.env)
 
 == SupportToolkit
   dotnet run --project src/SupportToolkit -- configure lab       (adds the 'lab' profile)
@@ -56,6 +88,9 @@ links() {
   Web UI: dotnet run --project src/SupportToolkit -- serve --port 5050 --no-browser
           (or the VS Code task "SupportToolkit: web UI (5050)"), then open the printed link.
 
+EOF
+  if in_codespace; then
+    cat <<'EOF'
 VS Code desktop forwards ports 5050, 8080, 8090, 8201 and 8202 to the same
 numbers on your computer (see Ports). Keep them private. Without VS Code:
   gh codespace ports forward 5050:5050 8080:8080 8090:8090 8201:8201 8202:8202
@@ -63,6 +98,14 @@ The web UI accepts localhost/127.0.0.1 only, so a *.app.github.dev address is re
 Installed exe on another computer: forward 8080, 8090, 8201 and 8202 the same
 way, then run `SupportToolkit configure lab` there.
 EOF
+  else
+    cat <<'EOF'
+This computer reaches the lab at the addresses above. On Windows with the
+lab in WSL, Windows reaches them too: lab\windows\start-lab.cmd starts the
+lab, switches SupportToolkit to the lab profile and opens the web UI.
+Passwords are in your variables file: grep ADMIN_PASSWORD ~/.lab.env
+EOF
+  fi
 }
 
 if [[ "${1:-}" == "--links" ]]; then
@@ -76,16 +119,35 @@ for name in "${infra[@]}" "${app[@]}"; do
 done
 
 if [[ "${1:-}" == "--generate" ]]; then
+  require_tools openssl
+  # Only the values go to standard output, so it can be appended to a file;
+  # the explanation goes to the screen.
   if (( ${#missing[@]} == 0 )); then
-    echo "Every lab variable is already set."
+    echo "Every lab variable is already set." >&2
   else
-    echo "Random values for the lab only. Save each as a Codespaces secret"
-    echo "(github.com/settings/codespaces), then rebuild or restart the codespace."
-    echo
+    {
+      echo "Random values for the lab only. In a codespace, save each as a"
+      echo "Codespaces secret (github.com/settings/codespaces), then rebuild or"
+      echo "restart the codespace. On your own computer, append them to the"
+      echo "variables file instead: lab/up.sh --generate >> ~/.lab.env"
+    } >&2
     for name in "${missing[@]}"; do
       echo "$name=Lab$(openssl rand -hex 16)"
     done
   fi
+  exit 0
+fi
+
+if [[ "${1:-}" == "--stop" ]]; then
+  # The compose files require the variables even to stop; placeholders
+  # suffice for that.
+  for name in "${infra[@]}" "${app[@]}"; do
+    export "$name=${!name:-unused}"
+  done
+  for vendor in osticket duplicati dolibarr; do
+    docker compose -f "$vendor/compose.yml" stop 2>/dev/null || true
+  done
+  echo "Lab stopped; its data is kept. lab/up.sh starts it again."
   exit 0
 fi
 
@@ -117,7 +179,8 @@ if (( ${#missing[@]} > 0 )); then
     echo "Second-provider lab not started: its variables are not set (see lab/README.md)."
     exit 0
   fi
-  echo "Set these first (as Codespaces secrets), or run: lab/up.sh --generate" >&2
+  echo "Set these first: as Codespaces secrets in a codespace, or in $lab_env" >&2
+  echo "on your own computer (lab/up.sh --generate >> $lab_env creates them)." >&2
   printf '  %s\n' "${missing[@]}" >&2
   exit 1
 fi
@@ -138,6 +201,8 @@ wait_for() { # url, accepted status codes regex
   echo "Timed out waiting for $1" >&2
   exit 1
 }
+
+require_tools docker curl jq openssl
 
 # In a codespace, Docker may still be starting when this runs.
 for _ in $(seq 1 60); do
