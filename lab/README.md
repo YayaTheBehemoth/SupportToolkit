@@ -62,6 +62,14 @@ so in the codespace nothing more is needed:
 ## Use it
 
 ```sh
+lab/up.sh --links   # addresses, logins, and the variable holding each password
+```
+
+VS Code desktop connected to the codespace forwards the lab's ports and the
+web UI's (5050) to the same numbers on your computer, labelled in the Ports
+panel. The VS Code task **Lab: addresses and logins** prints the same list.
+
+```sh
 SupportToolkit configure lab        # adds (or resets) the 'lab' profile
 SupportToolkit configure use lab    # switch to it
 SupportToolkit configure use work   # and back to your own profile
@@ -79,8 +87,8 @@ The lab runs in the codespace; the exe reaches it while the codespace is
 running:
 
 1. Forward ports 8080, 8201, 8202 and 8090 **to the same numbers** on your
-   computer: VS Code desktop connected to the codespace does it in its Ports
-   panel, or `gh codespace ports forward 8080:8080 8201:8201 8202:8202 8090:8090`.
+   computer: VS Code desktop connected to the codespace does it on its own
+   (a clash is reported, not renumbered), or `gh codespace ports forward 8080:8080 8201:8201 8202:8202 8090:8090`.
    Do not make the ports public: the lab would be on the internet.
 2. Run `SupportToolkit configure lab`. On Windows it asks for the four keys
    above, hidden as you type, and stores them in the Windows Credential

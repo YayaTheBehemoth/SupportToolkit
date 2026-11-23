@@ -156,12 +156,12 @@ The repository has a dev container (`.devcontainer/devcontainer.json`): the .NET
 
 3. Daily work runs against fixtures, which need no secrets. When a connection does need one, set it as a Codespaces secret or an environment variable; see [Secrets on Linux and in containers](#secrets-on-linux-and-in-containers). `configure status` names the variables that are missing.
 4. The web UI accepts requests addressed to `127.0.0.1` or `localhost` on its own port only (a guard against other web pages reaching it), so a codespace's public forwarding address (`*.app.github.dev`) is refused. Reach it through a tunnel that keeps it on `localhost` with the **same port number**:
-   - In the codespace: `dotnet run --project src/SupportToolkit -- serve --port 5050 --no-browser`
-   - On your computer: VS Code desktop connected to the codespace forwards the port to `localhost`; check under **Ports** that it is local port 5050. Without VS Code: `gh codespace ports forward 5050:5050`.
+   - In the codespace: run the VS Code task **SupportToolkit: web UI (5050)**, or `dotnet run --project src/SupportToolkit -- serve --port 5050 --no-browser`.
+   - On your computer: VS Code desktop connected to the codespace forwards 5050 (and the lab's ports) on its own, keeping the numbers; the dev container asks for that, so a clash is reported instead of renumbered. Without VS Code: `gh codespace ports forward 5050:5050`. Keep the ports private.
    - Open the printed link, replacing `127.0.0.1` with `localhost` if needed.
 
    The same holds on any Linux machine of your own: run `serve` there and reach it with `ssh -L 5050:127.0.0.1:5050 <machine>`. The Zendesk deletion sign-in also redirects to `localhost` on the machine running the toolkit, so it completes only when that port is forwarded the same way.
-5. **Second-provider lab.** `lab/up.sh` starts self-hosted stand-ins (osTicket, Duplicati, Dolibarr) with synthetic records, and `configure lab` adds a `lab` profile beside your own; switch with `configure use lab` and back with `configure use <your profile>`. The installed exe can use the lab too, through the same kind of same-port tunnel. See [lab/README.md](lab/README.md).
+5. **Second-provider lab.** `lab/up.sh` starts self-hosted stand-ins (osTicket, Duplicati, Dolibarr) with synthetic records, and `configure lab` adds a `lab` profile beside your own; switch with `configure use lab` and back with `configure use <your profile>`. `lab/up.sh --links` prints the addresses, logins and commands. The installed exe can use the lab too, through the same kind of same-port tunnel. See [lab/README.md](lab/README.md).
 6. **Stop the codespace when you are done.** The free quota counts the time a codespace is running and the storage it keeps; a stopped codespace still uses storage until it is deleted.
 
 The Windows release (`scripts/publish-windows.cmd`) is built on Windows only.

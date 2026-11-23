@@ -10,6 +10,8 @@
 #   lab/up.sh --if-configured as above, but only when every variable is set;
 #                             otherwise a one-line note (the dev container
 #                             runs this on every codespace start)
+#   lab/up.sh --links         print the addresses, logins and commands only;
+#                             starts and changes nothing
 #   lab/up.sh --reset         delete the lab's containers and data, after
 #                             confirmation; needed after changing the
 #                             database passwords
@@ -36,6 +38,37 @@ app=(
   SUPPORTTOOLKIT_SECRET__DUPLICATI__LAB__PASSWORD_MACHINE_B
   SUPPORTTOOLKIT_SECRET__DOLIBARR__LAB__API_KEY
 )
+
+# Addresses, logins and the variable holding each password (never a value).
+links() {
+  cat <<'EOF'
+
+== Lab
+  osTicket   http://127.0.0.1:8080/scp/   login labadmin, password $OSTICKET_LAB_ADMIN_PASSWORD
+  Dolibarr   http://127.0.0.1:8090/       login labadmin, password $DOLIBARR_LAB_ADMIN_PASSWORD
+  Duplicati  http://127.0.0.1:8201/ (machine-a)  password $SUPPORTTOOLKIT_SECRET__DUPLICATI__LAB__PASSWORD_MACHINE_A
+             http://127.0.0.1:8202/ (machine-b)  password $SUPPORTTOOLKIT_SECRET__DUPLICATI__LAB__PASSWORD_MACHINE_B
+  Show one:  echo $OSTICKET_LAB_ADMIN_PASSWORD
+
+== SupportToolkit
+  dotnet run --project src/SupportToolkit -- configure lab       (adds the 'lab' profile)
+  dotnet run --project src/SupportToolkit -- configure use lab   (switch to it)
+  Web UI: dotnet run --project src/SupportToolkit -- serve --port 5050 --no-browser
+          (or the VS Code task "SupportToolkit: web UI (5050)"), then open the printed link.
+
+VS Code desktop forwards ports 5050, 8080, 8090, 8201 and 8202 to the same
+numbers on your computer (see Ports). Keep them private. Without VS Code:
+  gh codespace ports forward 5050:5050 8080:8080 8090:8090 8201:8201 8202:8202
+The web UI accepts localhost/127.0.0.1 only, so a *.app.github.dev address is refused.
+Installed exe on another computer: forward 8080, 8090, 8201 and 8202 the same
+way, then run `SupportToolkit configure lab` there.
+EOF
+}
+
+if [[ "${1:-}" == "--links" ]]; then
+  links
+  exit 0
+fi
 
 missing=()
 for name in "${infra[@]}" "${app[@]}"; do
@@ -235,15 +268,6 @@ else
   echo "Customers, services and contracts created."
 fi
 
-cat <<'EOF'
-
-== Lab ready
-  osTicket   http://127.0.0.1:8080/   (staff panel /scp/, login labadmin)
-  Duplicati  http://127.0.0.1:8201/ (machine-a)   http://127.0.0.1:8202/ (machine-b)
-  Dolibarr   http://127.0.0.1:8090/   (login labadmin)
-
-Next:  dotnet run --project src/SupportToolkit -- configure lab
-       dotnet run --project src/SupportToolkit -- configure use lab
-From another computer: forward ports 8080, 8201, 8202 and 8090 to the same
-numbers, then run `SupportToolkit configure lab` there.
-EOF
+echo
+echo "Lab ready."
+links
