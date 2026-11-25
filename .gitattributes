@@ -1,0 +1,4 @@
+# Shell scripts run in Linux (WSL, codespaces): keep them LF even in a
+# Windows working copy. Batch files need CRLF.
+*.sh text eol=lf
+*.cmd text eol=crlf

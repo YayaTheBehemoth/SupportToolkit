@@ -81,6 +81,62 @@ the active profile does not change (unless `lab` is the first profile).
 Status, the profile page and the Backup Aggregator page always name the
 systems the active profile uses.
 
+## Lab on your own Windows PC (WSL)
+
+The same lab runs on a Windows PC, in Ubuntu under WSL, with no codespace,
+quota or tunnel. Windows reaches it at the same `127.0.0.1` addresses.
+
+**Once:**
+
+1. In an administrator terminal: `wsl --install -d Ubuntu-24.04`, restart if
+   asked, and create the Ubuntu user it asks for.
+2. In Ubuntu, install Docker Engine and the tools the lab uses:
+
+   ```sh
+   curl -fsSL https://get.docker.com | sudo sh   # recommends Docker Desktop and waits 20 s: let it continue
+   sudo usermod -aG docker $USER
+   sudo apt-get install -y jq
+   ```
+
+   Then run `wsl --shutdown` in Windows, open Ubuntu again, and check with
+   `docker run --rm hello-world`. Docker Engine inside Ubuntu needs no Docker
+   Desktop (whose licence is paid for larger companies).
+3. Clone the repository in the Linux home (not under `/mnt/c`), create the
+   lab's variables file and start the lab:
+
+   ```sh
+   git clone https://github.com/YayaTheBehemoth/SupportToolkit.git ~/SupportToolkit
+   cd ~/SupportToolkit
+   lab/up.sh --generate >> ~/.lab.env   # random values; keep the file private
+   lab/up.sh                            # reads ~/.lab.env; ends with "Lab ready."
+   ```
+
+4. On Windows, in the repository: `dotnet run --project src\SupportToolkit -- configure lab`.
+   It asks for the four keys; `grep SUPPORTTOOLKIT ~/.lab.env` in Ubuntu
+   shows them (paste the part after `=`).
+
+**Each time:** double-click or run `lab\windows\start-lab.cmd`. It starts the
+lab in WSL, remembers your active profile, switches to `lab` and opens the
+web UI. Press "Exit SupportToolkit" in the page when you are done, and it
+switches back. `lab\windows\stop-lab.cmd` switches back on its own (after
+closing the window instead), `stop-lab.cmd --down` also stops the lab, and
+`stop-lab.cmd <profile>` switches to a named profile.
+
+Both scripts assume the distribution `Ubuntu-24.04` and the clone
+`~/SupportToolkit`; set `LAB_WSL_DISTRO` or `LAB_WSL_REPO` otherwise. The lab
+runs the clone inside WSL, so update it there (`git pull`) to pick up lab
+changes.
+
+Notes:
+
+- Don't click inside a running Windows terminal: its title then starts with
+  "Select" and everything in it pauses until you press Esc.
+- The data is kept in `~/SupportToolkit/lab/*/.data/`. After a reboot,
+  `start-lab.cmd` (or `lab/up.sh`) starts the containers again.
+- The osTicket key is bound to the Docker network's gateway address, which
+  is also where requests from Windows arrive; a ticket created from Windows
+  confirms it.
+
 ## From the installed exe on another computer
 
 The lab runs in the codespace; the exe reaches it while the codespace is
