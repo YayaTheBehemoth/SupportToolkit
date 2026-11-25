@@ -1,4 +1,4 @@
-namespace SupportToolkit.Modules.ZendeskBulkDelete.Models;
+namespace SupportToolkit.Modules.BulkDelete.Models;
 
 /// <summary>
 /// What is known about one ticket after a deletion.

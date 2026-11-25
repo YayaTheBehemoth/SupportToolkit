@@ -1,6 +1,6 @@
-using SupportToolkit.Modules.ZendeskBulkDelete.Models;
+using SupportToolkit.Modules.BulkDelete.Models;
 
-namespace SupportToolkit.Modules.ZendeskBulkDelete.Services;
+namespace SupportToolkit.Modules.BulkDelete.Services;
 
 /// <summary>
 /// Builds the exception-first deletion preview. Pure: no I/O.

@@ -1,5 +1,5 @@
 
-namespace SupportToolkit.Modules.ZendeskBulkDelete.Models;
+namespace SupportToolkit.Modules.BulkDelete.Models;
 
 public sealed record PlannedTicket(
     long Id,

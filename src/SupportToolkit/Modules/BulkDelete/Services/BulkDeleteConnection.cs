@@ -1,4 +1,4 @@
-namespace SupportToolkit.Modules.ZendeskBulkDelete.Services;
+namespace SupportToolkit.Modules.BulkDelete.Services;
 
 /// <summary>
 /// Whether the active profile can be used for bulk deletion. Instance is

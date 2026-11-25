@@ -1,6 +1,6 @@
-using SupportToolkit.Modules.ZendeskBulkDelete.Models;
+using SupportToolkit.Modules.BulkDelete.Models;
 
-namespace SupportToolkit.Modules.ZendeskBulkDelete.Services;
+namespace SupportToolkit.Modules.BulkDelete.Services;
 
 /// <summary>
 /// Deletes the tickets of a confirmed plan. No console or UI code.
@@ -18,7 +18,7 @@ namespace SupportToolkit.Modules.ZendeskBulkDelete.Services;
 ///    is unclear, it stops: the remaining tickets are NotAttempted.
 ///  - A final receipt is written even when the run stops or is cancelled.
 /// </summary>
-public sealed class ZendeskDeletionExecutor
+public sealed class DeletionExecutor
 {
     public static readonly TimeSpan DefaultPollInterval =
         TimeSpan.FromSeconds(2);
@@ -33,7 +33,7 @@ public sealed class ZendeskDeletionExecutor
     private readonly TimeSpan _pollInterval;
     private readonly int _maxPolls;
 
-    public ZendeskDeletionExecutor(
+    public DeletionExecutor(
         ITicketDeleter deleter,
         DeletionReceiptStore receipts,
         TimeProvider? timeProvider = null,

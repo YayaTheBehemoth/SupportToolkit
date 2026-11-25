@@ -1,13 +1,13 @@
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Logging;
-using SupportToolkit.Modules.ZendeskBulkDelete.Services;
+using SupportToolkit.Modules.BulkDelete.Services;
 using SupportToolkit.Providers.Zendesk.Deletion;
 using SupportToolkit.Providers.Zendesk.Deletion.Auth;
 using SupportToolkit.Providers.Zendesk.Deletion.Deleting;
 using SupportToolkit.Providers.Zendesk.Deletion.Search;
 using SupportToolkit.Providers.Zendesk.Deletion.Transport;
 
-namespace SupportToolkit.Modules.ZendeskBulkDelete.Production;
+namespace SupportToolkit.Modules.BulkDelete.Production;
 
 /// <summary>
 /// Owns the HTTP clients and the sign-in of one bulk-delete session,
@@ -30,8 +30,8 @@ public sealed class ZendeskBulkDeleteSession : IDisposable
         HttpClient signInClient,
         HttpClient apiClient,
         HttpClient? deleterClient,
-        ZendeskBulkDeleteWorkflow workflow,
-        ZendeskDeletionExecutor? executor,
+        BulkDeleteWorkflow workflow,
+        DeletionExecutor? executor,
         ZendeskDeletionOptions options)
     {
         _signInClient = signInClient;
@@ -42,12 +42,12 @@ public sealed class ZendeskBulkDeleteSession : IDisposable
         Options = options;
     }
 
-    public ZendeskBulkDeleteWorkflow Workflow { get; }
+    public BulkDeleteWorkflow Workflow { get; }
 
     /// <summary>
     /// Null unless deletion was enabled when the session was created.
     /// </summary>
-    public ZendeskDeletionExecutor? Executor { get; }
+    public DeletionExecutor? Executor { get; }
 
     public ZendeskDeletionOptions Options { get; }
 
@@ -118,14 +118,14 @@ public sealed class ZendeskBulkDeleteSession : IDisposable
                 logger);
 
         var workflow =
-            new ZendeskBulkDeleteWorkflow(
+            new BulkDeleteWorkflow(
                 new ZendeskTicketDirectory(
                     tokenSource.SignInAsync,
                     new ZendeskTicketSearchProvider(client),
                     new ZendeskDirectoryProvider(client)));
 
         HttpClient? deleterClient = null;
-        ZendeskDeletionExecutor? executor = null;
+        DeletionExecutor? executor = null;
 
         if (receipts is not null)
         {
@@ -135,7 +135,7 @@ public sealed class ZendeskBulkDeleteSession : IDisposable
                     tokenSource);
 
             executor =
-                new ZendeskDeletionExecutor(
+                new DeletionExecutor(
                     new ZendeskTicketDeleter(
                         new ZendeskTicketDeletionProvider(
                             new ZendeskDeletionApiClient(

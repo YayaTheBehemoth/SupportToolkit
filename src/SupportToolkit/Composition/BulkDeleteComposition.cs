@@ -1,7 +1,7 @@
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Logging;
-using SupportToolkit.Modules.ZendeskBulkDelete.Production;
-using SupportToolkit.Modules.ZendeskBulkDelete.Services;
+using SupportToolkit.Modules.BulkDelete.Production;
+using SupportToolkit.Modules.BulkDelete.Services;
 
 namespace SupportToolkit.Composition;
 
@@ -11,7 +11,7 @@ namespace SupportToolkit.Composition;
 /// resolved on every call, so a profile switched while the program runs
 /// is used next time. Opening a session signs in to nothing.
 /// </summary>
-public static class ZendeskBulkDeleteComposition
+public static class BulkDeleteComposition
 {
     /// <summary>
     /// Local check only: whether the active profile has a usable deletion

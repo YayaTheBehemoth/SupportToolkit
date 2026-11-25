@@ -1,4 +1,4 @@
-namespace SupportToolkit.Modules.ZendeskBulkDelete.Models;
+namespace SupportToolkit.Modules.BulkDelete.Models;
 
 /// <summary>
 /// The record of one deletion run, kept as a JSON file outside the

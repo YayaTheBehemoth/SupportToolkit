@@ -1,4 +1,4 @@
-using SupportToolkit.Modules.ZendeskBulkDelete.Services;
+using SupportToolkit.Modules.BulkDelete.Services;
 using System.Net;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Ui.Web;

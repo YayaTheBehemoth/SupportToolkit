@@ -1,4 +1,4 @@
-namespace SupportToolkit.Modules.ZendeskBulkDelete.Models;
+namespace SupportToolkit.Modules.BulkDelete.Models;
 
 /// <summary>
 /// What to search for. At least one field is required: an empty search

@@ -1,5 +1,5 @@
-using SupportToolkit.Modules.ZendeskBulkDelete.Models;
-using SupportToolkit.Modules.ZendeskBulkDelete.Services;
+using SupportToolkit.Modules.BulkDelete.Models;
+using SupportToolkit.Modules.BulkDelete.Services;
 
 namespace SupportToolkit.Cli.Commands;
 
@@ -27,13 +27,13 @@ public enum ZendeskBulkDeleteMode
 /// </summary>
 public sealed class ZendeskDeletionConsoleFlow
 {
-    private readonly ZendeskDeletionExecutor? _executor;
+    private readonly DeletionExecutor? _executor;
     private readonly TextReader _input;
     private readonly TextWriter _output;
     private readonly TimeProvider _timeProvider;
 
     public ZendeskDeletionConsoleFlow(
-        ZendeskDeletionExecutor? executor,
+        DeletionExecutor? executor,
         TextReader input,
         TextWriter output,
         TimeProvider? timeProvider = null)

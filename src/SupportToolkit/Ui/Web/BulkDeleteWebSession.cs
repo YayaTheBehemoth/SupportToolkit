@@ -1,6 +1,6 @@
 using SupportToolkit.Core.ErrorHandling;
-using SupportToolkit.Modules.ZendeskBulkDelete.Models;
-using SupportToolkit.Modules.ZendeskBulkDelete.Services;
+using SupportToolkit.Modules.BulkDelete.Models;
+using SupportToolkit.Modules.BulkDelete.Services;
 
 namespace SupportToolkit.Ui.Web;
 

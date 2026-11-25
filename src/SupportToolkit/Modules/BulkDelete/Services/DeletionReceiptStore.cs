@@ -1,9 +1,9 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using SupportToolkit.Modules.ZendeskBulkDelete.Models;
+using SupportToolkit.Modules.BulkDelete.Models;
 
-namespace SupportToolkit.Modules.ZendeskBulkDelete.Services;
+namespace SupportToolkit.Modules.BulkDelete.Services;
 
 /// <summary>
 /// Writes deletion receipts as JSON files in a local folder.

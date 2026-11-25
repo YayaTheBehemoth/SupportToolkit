@@ -1,14 +1,14 @@
-using SupportToolkit.Modules.ZendeskBulkDelete.Production;
+using SupportToolkit.Modules.BulkDelete.Production;
 using System.Net;
 using System.Text.Json;
-using SupportToolkit.Modules.ZendeskBulkDelete.Models;
-using SupportToolkit.Modules.ZendeskBulkDelete.Services;
+using SupportToolkit.Modules.BulkDelete.Models;
+using SupportToolkit.Modules.BulkDelete.Services;
 using SupportToolkit.Providers.Zendesk.Deletion.Auth;
-using static SupportToolkit.Tests.Modules.ZendeskBulkDelete.DeletionTestSupport;
+using static SupportToolkit.Tests.Modules.BulkDelete.DeletionTestSupport;
 
-namespace SupportToolkit.Tests.Modules.ZendeskBulkDelete;
+namespace SupportToolkit.Tests.Modules.BulkDelete;
 
-public class ZendeskDeletionExecutorTests : IDisposable
+public class DeletionExecutorTests : IDisposable
 {
     private readonly string _receipts = NewTempDirectory();
 
@@ -467,7 +467,7 @@ public class ZendeskDeletionExecutorTests : IDisposable
         var api = new FakeDeleteApi { PollsUntilDone = 5 };
 
         var executor =
-            new ZendeskDeletionExecutor(
+            new DeletionExecutor(
                 new ZendeskTicketDeleter(Provider(api)),
                 new DeletionReceiptStore(_receipts),
                 new FixedClock(),

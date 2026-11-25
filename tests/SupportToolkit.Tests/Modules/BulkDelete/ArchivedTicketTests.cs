@@ -1,9 +1,9 @@
-using SupportToolkit.Modules.ZendeskBulkDelete.Models;
-using SupportToolkit.Modules.ZendeskBulkDelete.Services;
+using SupportToolkit.Modules.BulkDelete.Models;
+using SupportToolkit.Modules.BulkDelete.Services;
 using SupportToolkit.Providers.Zendesk.Deletion.Search;
-using static SupportToolkit.Tests.Modules.ZendeskBulkDelete.DeletionTestSupport;
+using static SupportToolkit.Tests.Modules.BulkDelete.DeletionTestSupport;
 
-namespace SupportToolkit.Tests.Modules.ZendeskBulkDelete;
+namespace SupportToolkit.Tests.Modules.BulkDelete;
 
 public class ArchivedTicketTests
 {

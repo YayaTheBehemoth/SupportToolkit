@@ -1,17 +1,17 @@
-using SupportToolkit.Modules.ZendeskBulkDelete.Production;
+using SupportToolkit.Modules.BulkDelete.Production;
 using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Web;
-using SupportToolkit.Modules.ZendeskBulkDelete.Models;
-using SupportToolkit.Modules.ZendeskBulkDelete.Reporting;
-using SupportToolkit.Modules.ZendeskBulkDelete.Services;
+using SupportToolkit.Modules.BulkDelete.Models;
+using SupportToolkit.Modules.BulkDelete.Reporting;
+using SupportToolkit.Modules.BulkDelete.Services;
 using SupportToolkit.Providers.Zendesk.Deletion;
 using SupportToolkit.Providers.Zendesk.Deletion.Auth;
 using SupportToolkit.Providers.Zendesk.Deletion.Search;
 using SupportToolkit.Providers.Zendesk.Deletion.Transport;
 
-namespace SupportToolkit.Tests.Modules.ZendeskBulkDelete;
+namespace SupportToolkit.Tests.Modules.BulkDelete;
 
 public class DeletionPreviewTests
 {
@@ -404,7 +404,7 @@ public class DeletionPreviewTests
                 new TicketSearchCriteria()));
     }
 
-    private static ZendeskBulkDeleteWorkflow CreateWorkflow(
+    private static BulkDeleteWorkflow CreateWorkflow(
         Server server,
         Action? onSignIn = null)
     {
@@ -418,7 +418,7 @@ public class DeletionPreviewTests
                     "example",
                     "example-public-client"));
 
-        return new ZendeskBulkDeleteWorkflow(
+        return new BulkDeleteWorkflow(
             new ZendeskTicketDirectory(
                 _ =>
                 {

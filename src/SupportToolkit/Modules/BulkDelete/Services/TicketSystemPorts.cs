@@ -1,6 +1,6 @@
-using SupportToolkit.Modules.ZendeskBulkDelete.Models;
+using SupportToolkit.Modules.BulkDelete.Models;
 
-namespace SupportToolkit.Modules.ZendeskBulkDelete.Services;
+namespace SupportToolkit.Modules.BulkDelete.Services;
 
 /// <summary>
 /// Sign-in, search and name lookups in the ticketing system, as the

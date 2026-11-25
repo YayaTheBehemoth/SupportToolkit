@@ -1,13 +1,13 @@
 using System.Net;
 using System.Text.Json;
-using SupportToolkit.Modules.ZendeskBulkDelete.Models;
-using SupportToolkit.Modules.ZendeskBulkDelete.Services;
+using SupportToolkit.Modules.BulkDelete.Models;
+using SupportToolkit.Modules.BulkDelete.Services;
 using SupportToolkit.Providers.Zendesk.Deletion.Auth;
 using SupportToolkit.Providers.Zendesk.Deletion.Deleting;
 using SupportToolkit.Providers.Zendesk.Deletion.Search;
 using SupportToolkit.Providers.Zendesk.Deletion.Transport;
 
-namespace SupportToolkit.Modules.ZendeskBulkDelete.Production;
+namespace SupportToolkit.Modules.BulkDelete.Production;
 
 /// <summary>
 /// Zendesk as the ticketing system: sign-in, search and lookups, mapped

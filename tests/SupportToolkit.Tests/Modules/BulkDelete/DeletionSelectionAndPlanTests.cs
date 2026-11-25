@@ -1,7 +1,7 @@
-using SupportToolkit.Modules.ZendeskBulkDelete.Models;
-using static SupportToolkit.Tests.Modules.ZendeskBulkDelete.DeletionTestSupport;
+using SupportToolkit.Modules.BulkDelete.Models;
+using static SupportToolkit.Tests.Modules.BulkDelete.DeletionTestSupport;
 
-namespace SupportToolkit.Tests.Modules.ZendeskBulkDelete;
+namespace SupportToolkit.Tests.Modules.BulkDelete;
 
 public class DeletionSelectionAndPlanTests
 {

@@ -9,7 +9,7 @@ namespace SupportToolkit.Tests.Composition;
 /// on every call. Opening a session contacts nothing, and only a session
 /// opened with deletion enabled can delete.
 /// </summary>
-public class ZendeskBulkDeleteCompositionTests
+public class BulkDeleteCompositionTests
 {
     [Fact]
     public async Task Availability_FollowsTheProfilesDeletionConnection()
@@ -17,7 +17,7 @@ public class ZendeskBulkDeleteCompositionTests
         var (_, store, resolver) = Create(FullConfiguration());
 
         var available =
-            await ZendeskBulkDeleteComposition.GetAvailabilityAsync(
+            await BulkDeleteComposition.GetAvailabilityAsync(
                 resolver,
                 CancellationToken.None);
 
@@ -27,7 +27,7 @@ public class ZendeskBulkDeleteCompositionTests
         store.Configuration.Profiles["work"].ZendeskDeletionConnection = null;
 
         var unavailable =
-            await ZendeskBulkDeleteComposition.GetAvailabilityAsync(
+            await BulkDeleteComposition.GetAvailabilityAsync(
                 resolver,
                 CancellationToken.None);
 
@@ -42,7 +42,7 @@ public class ZendeskBulkDeleteCompositionTests
         var (_, _, resolver) = Create(FullConfiguration());
 
         using var session =
-            await ZendeskBulkDeleteComposition.OpenSessionAsync(resolver);
+            await BulkDeleteComposition.OpenSessionAsync(resolver);
 
         Assert.Null(session.Executor);
         Assert.False(session.CreateReviewSession().CanDelete);

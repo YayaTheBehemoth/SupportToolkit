@@ -1,6 +1,6 @@
-using SupportToolkit.Modules.ZendeskBulkDelete.Models;
+using SupportToolkit.Modules.BulkDelete.Models;
 
-namespace SupportToolkit.Modules.ZendeskBulkDelete.Services;
+namespace SupportToolkit.Modules.BulkDelete.Services;
 
 public enum BulkDeleteStage
 {
@@ -130,7 +130,7 @@ public sealed class BulkDeleteReviewSession
     private readonly Func<DeletionOperator, TicketSearchCriteria,
         CancellationToken, Task<DeletionPreviewResult>> _preview;
 
-    private readonly ZendeskDeletionExecutor? _executor;
+    private readonly DeletionExecutor? _executor;
     private readonly TimeProvider _timeProvider;
     private readonly Func<TicketSearchCriteria, string>? _describeQuery;
 
@@ -148,7 +148,7 @@ public sealed class BulkDeleteReviewSession
         Func<CancellationToken, Task<DeletionOperator>> signIn,
         Func<DeletionOperator, TicketSearchCriteria, CancellationToken,
             Task<DeletionPreviewResult>> preview,
-        ZendeskDeletionExecutor? executor,
+        DeletionExecutor? executor,
         TimeProvider? timeProvider = null,
         Func<TicketSearchCriteria, string>? describeQuery = null)
     {

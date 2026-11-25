@@ -1,4 +1,4 @@
-namespace SupportToolkit.Modules.ZendeskBulkDelete.Models;
+namespace SupportToolkit.Modules.BulkDelete.Models;
 
 /// <summary>
 /// Which of a preview's tickets are chosen for deletion.

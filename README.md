@@ -1003,7 +1003,7 @@ src/
     │   │   ├── Reporting/
     │   │   └── Services/
     │   │
-    │   └── ZendeskBulkDelete/
+    │   └── BulkDelete/
     │       ├── Models/
     │       ├── Production/
     │       ├── Reporting/

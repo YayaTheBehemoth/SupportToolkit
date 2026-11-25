@@ -1,6 +1,6 @@
-using SupportToolkit.Modules.ZendeskBulkDelete.Models;
+using SupportToolkit.Modules.BulkDelete.Models;
 
-namespace SupportToolkit.Modules.ZendeskBulkDelete.Services;
+namespace SupportToolkit.Modules.BulkDelete.Services;
 
 /// <summary>
 /// Sign in, search and preview for bulk ticket deletion. It contains no
@@ -9,12 +9,12 @@ namespace SupportToolkit.Modules.ZendeskBulkDelete.Services;
 ///
 /// Interactive only: the sign-in needs an operator at the browser.
 /// </summary>
-public sealed class ZendeskBulkDeleteWorkflow
+public sealed class BulkDeleteWorkflow
 {
     private readonly ITicketDirectory _directory;
     private readonly TimeProvider _timeProvider;
 
-    public ZendeskBulkDeleteWorkflow(
+    public BulkDeleteWorkflow(
         ITicketDirectory directory,
         TimeProvider? timeProvider = null)
     {

@@ -1,5 +1,5 @@
 
-namespace SupportToolkit.Modules.ZendeskBulkDelete.Models;
+namespace SupportToolkit.Modules.BulkDelete.Models;
 
 /// <summary>
 /// Why a ticket is not selected for deletion by default.

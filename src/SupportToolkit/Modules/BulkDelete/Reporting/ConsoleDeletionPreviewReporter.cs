@@ -1,7 +1,7 @@
 using System.Globalization;
-using SupportToolkit.Modules.ZendeskBulkDelete.Models;
+using SupportToolkit.Modules.BulkDelete.Models;
 
-namespace SupportToolkit.Modules.ZendeskBulkDelete.Reporting;
+namespace SupportToolkit.Modules.BulkDelete.Reporting;
 
 /// <summary>
 /// Prints the deletion preview. Contains customer-related names and

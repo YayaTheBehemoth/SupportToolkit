@@ -1,16 +1,16 @@
-using SupportToolkit.Modules.ZendeskBulkDelete.Production;
+using SupportToolkit.Modules.BulkDelete.Production;
 using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Web;
-using SupportToolkit.Modules.ZendeskBulkDelete.Models;
-using SupportToolkit.Modules.ZendeskBulkDelete.Services;
+using SupportToolkit.Modules.BulkDelete.Models;
+using SupportToolkit.Modules.BulkDelete.Services;
 using SupportToolkit.Providers.Zendesk.Deletion;
 using SupportToolkit.Providers.Zendesk.Deletion.Deleting;
 using SupportToolkit.Providers.Zendesk.Deletion.Search;
 using SupportToolkit.Providers.Zendesk.Deletion.Transport;
 
-namespace SupportToolkit.Tests.Modules.ZendeskBulkDelete;
+namespace SupportToolkit.Tests.Modules.BulkDelete;
 
 /// <summary>
 /// Fictional data and a fake Zendesk for the deletion tests.
@@ -91,7 +91,7 @@ internal static class DeletionTestSupport
                     "example",
                     "example-public-client")));
 
-    public static ZendeskDeletionExecutor Executor(
+    public static DeletionExecutor Executor(
         HttpMessageHandler handler,
         string receiptDirectory,
         TimeSpan? maxJobWait = null) =>
