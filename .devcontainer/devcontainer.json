@@ -19,10 +19,10 @@
   // lab profile names 127.0.0.1:<port>. requireLocalPort makes a clash an
   // error instead of a silent renumbering. Ports stay private (the default);
   // never make them public.
-  "forwardPorts": [5050, 8080, 8090, 8201, 8202],
+  "forwardPorts": [5050, 8100, 8090, 8201, 8202],
   "portsAttributes": {
     "5050": { "label": "SupportToolkit web UI", "requireLocalPort": true, "onAutoForward": "silent" },
-    "8080": { "label": "Lab osTicket (/scp/, labadmin)", "requireLocalPort": true, "onAutoForward": "silent" },
+    "8100": { "label": "Lab Zammad (labadmin)", "requireLocalPort": true, "onAutoForward": "silent" },
     "8090": { "label": "Lab Dolibarr (labadmin)", "requireLocalPort": true, "onAutoForward": "silent" },
     "8201": { "label": "Lab Duplicati machine-a", "requireLocalPort": true, "onAutoForward": "silent" },
     "8202": { "label": "Lab Duplicati machine-b", "requireLocalPort": true, "onAutoForward": "silent" }

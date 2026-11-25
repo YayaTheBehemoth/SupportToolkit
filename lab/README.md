@@ -6,12 +6,18 @@ touching work systems:
 
 | Capability | Lab system | Port | Details |
 |---|---|---|---|
-| Ticketing | osTicket 1.17.5 | 8080 | [osticket/README.md](osticket/README.md) |
+| Ticketing and bulk delete | Zammad 7.3.0 | 8100 | [zammad/README.md](zammad/README.md) |
 | Backup | Duplicati 2.4.1.0, two servers | 8201, 8202 | [duplicati/README.md](duplicati/README.md) |
 | Commercial entitlement | Dolibarr 23.0.4 | 8090 | [dolibarr/README.md](dolibarr/README.md) |
 
 Everything in it is synthetic. Daily development and the automated tests use
 recorded fixtures, never the lab.
+
+Zammad needs about 3 GB of memory; the rest of the lab under half a GB.
+osTicket was the lab's ticketing system until November 25, 2026; it is no
+longer started, because its API cannot search or delete tickets (see
+[osticket/README.md](osticket/README.md)). The toolkit's osTicket provider
+is unchanged.
 
 ## Start it (in the codespace)
 
@@ -54,7 +60,7 @@ lab/up.sh
 The four keys SupportToolkit itself needs use the names SupportToolkit reads,
 so in the codespace nothing more is needed:
 
-- `SUPPORTTOOLKIT_SECRET__OSTICKET__LAB__API_KEY`
+- `SUPPORTTOOLKIT_SECRET__ZAMMAD__LAB__API_TOKEN`
 - `SUPPORTTOOLKIT_SECRET__DUPLICATI__LAB__PASSWORD_MACHINE_A`
 - `SUPPORTTOOLKIT_SECRET__DUPLICATI__LAB__PASSWORD_MACHINE_B`
 - `SUPPORTTOOLKIT_SECRET__DOLIBARR__LAB__API_KEY`
@@ -133,18 +139,19 @@ Notes:
   "Select" and everything in it pauses until you press Esc.
 - The data is kept in `~/SupportToolkit/lab/*/.data/`. After a reboot,
   `start-lab.cmd` (or `lab/up.sh`) starts the containers again.
-- The osTicket key is bound to the Docker network's gateway address, which
-  is also where requests from Windows arrive; a ticket created from Windows
-  confirms it.
+- Coming from osTicket: add Zammad's variables to `~/.lab.env` with
+  `lab/up.sh --generate >> ~/.lab.env` (it adds only those not yet set),
+  stop osTicket with `docker compose -f lab/osticket/compose.yml stop`, and
+  run `lab/up.sh`.
 
 ## From the installed exe on another computer
 
 The lab runs in the codespace; the exe reaches it while the codespace is
 running:
 
-1. Forward ports 8080, 8201, 8202 and 8090 **to the same numbers** on your
+1. Forward ports 8100, 8201, 8202 and 8090 **to the same numbers** on your
    computer: VS Code desktop connected to the codespace does it on its own
-   (a clash is reported, not renumbered), or `gh codespace ports forward 8080:8080 8201:8201 8202:8202 8090:8090`.
+   (a clash is reported, not renumbered), or `gh codespace ports forward 8100:8100 8201:8201 8202:8202 8090:8090`.
    Do not make the ports public: the lab would be on the internet.
 2. Run `SupportToolkit configure lab`. On Windows it asks for the four keys
    above, hidden as you type, and stores them in the Windows Credential

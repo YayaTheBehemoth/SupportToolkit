@@ -161,7 +161,7 @@ The repository has a dev container (`.devcontainer/devcontainer.json`): the .NET
    - Open the printed link, replacing `127.0.0.1` with `localhost` if needed.
 
    The same holds on any Linux machine of your own: run `serve` there and reach it with `ssh -L 5050:127.0.0.1:5050 <machine>`. The Zendesk deletion sign-in also redirects to `localhost` on the machine running the toolkit, so it completes only when that port is forwarded the same way.
-5. **Second-provider lab.** `lab/up.sh` starts self-hosted stand-ins (osTicket, Duplicati, Dolibarr) with synthetic records, and `configure lab` adds a `lab` profile beside your own; switch with `configure use lab` and back with `configure use <your profile>`. `lab/up.sh --links` prints the addresses, logins and commands. The installed exe can use the lab too, through the same kind of same-port tunnel. See [lab/README.md](lab/README.md).
+5. **Second-provider lab.** `lab/up.sh` starts self-hosted stand-ins (Zammad, Duplicati, Dolibarr) with synthetic records, and `configure lab` adds a `lab` profile beside your own; switch with `configure use lab` and back with `configure use <your profile>`. `lab/up.sh --links` prints the addresses, logins and commands. The installed exe can use the lab too, through the same kind of same-port tunnel. See [lab/README.md](lab/README.md).
 6. **Stop the codespace when you are done.** The free quota counts the time a codespace is running and the storage it keeps; a stopped codespace still uses storage until it is deleted.
 
 The Windows release (`scripts/publish-windows.cmd`) is built on Windows only.
