@@ -2,6 +2,7 @@ using SupportToolkit.Core.Configuration;
 using SupportToolkit.Providers.Dolibarr.Configuration;
 using SupportToolkit.Providers.Duplicati.Configuration;
 using SupportToolkit.Providers.OsTicket.Configuration;
+using SupportToolkit.Providers.Zammad.Configuration;
 
 namespace SupportToolkit.Composition;
 
@@ -15,6 +16,7 @@ public static class ProviderConnectionsComposition
     public static IReadOnlyList<IProviderConnections> All { get; } =
     [
         OsTicketConnections.Instance,
+        ZammadConnections.Instance,
         DuplicatiConnections.Instance,
         DolibarrConnections.Instance
     ];

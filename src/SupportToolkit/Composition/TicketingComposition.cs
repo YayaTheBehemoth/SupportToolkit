@@ -2,6 +2,8 @@ using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Ticketing;
 using SupportToolkit.Providers.OsTicket.Configuration;
 using SupportToolkit.Providers.OsTicket.Tickets;
+using SupportToolkit.Providers.Zammad.Configuration;
+using SupportToolkit.Providers.Zammad.Tickets;
 using SupportToolkit.Providers.Zendesk.Tickets;
 
 namespace SupportToolkit.Composition;
@@ -31,7 +33,12 @@ public static class TicketingComposition
             OsTicketConnections.ProviderKey,
             OsTicketConnections.Instance.ProviderName,
             async (resolver, token) =>
-                await OsTicketTicketingTarget.ResolveAsync(resolver, token))
+                await OsTicketTicketingTarget.ResolveAsync(resolver, token)),
+        new(
+            ZammadConnections.ProviderKey,
+            ZammadConnections.Instance.ProviderName,
+            async (resolver, token) =>
+                await ZammadTicketingTarget.ResolveAsync(resolver, token))
     ];
 
     public static IReadOnlyList<string> KnownProviders { get; } =
