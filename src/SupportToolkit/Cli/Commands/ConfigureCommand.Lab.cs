@@ -31,7 +31,7 @@ public sealed partial class ConfigureCommand
                 : "Profile 'lab' added.");
 
         Console.WriteLine(
-            "  Ticketing:  osTicket   http://127.0.0.1:8080/  (help topic 10)");
+            "  Ticketing:  Zammad     http://127.0.0.1:8100/  (group Users)");
         Console.WriteLine(
             "  Backup:     Duplicati  http://127.0.0.1:8201/, http://127.0.0.1:8202/");
         Console.WriteLine(
@@ -40,8 +40,9 @@ public sealed partial class ConfigureCommand
             "  Backup Aggregator mode: production (the lab systems are real)");
         Console.WriteLine();
         Console.WriteLine(
-            "The lab must be running (lab/up.sh in the codespace). From another " +
-            "computer, forward ports 8080, 8201, 8202 and 8090 to the same numbers.");
+            "The lab must be running (lab/up.sh, or lab\\windows\\start-lab.cmd). " +
+            "From another computer, forward ports 8100, 8201, 8202 and 8090 to " +
+            "the same numbers.");
 
         Console.WriteLine();
         Console.WriteLine(
