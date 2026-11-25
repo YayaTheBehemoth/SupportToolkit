@@ -49,12 +49,14 @@ public static class ZendeskBulkDeleteComposition
     /// </summary>
     public static async Task<BulkDeleteConnection> ConnectWithDeletionAsync(
         SupportToolkitConfigurationResolver configurationResolver,
+        Action<Uri>? browserUnavailable,
         CancellationToken cancellationToken)
     {
         var session =
             await OpenSessionAsync(
                 configurationResolver,
                 enableDeletion: true,
+                browserUnavailable: browserUnavailable,
                 cancellationToken: cancellationToken);
 
         return new BulkDeleteConnection(
@@ -71,6 +73,7 @@ public static class ZendeskBulkDeleteComposition
         OperationalLogger? logger = null,
         bool enableDeletion = false,
         string? receiptDirectory = null,
+        Action<Uri>? browserUnavailable = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(configurationResolver);
@@ -80,6 +83,7 @@ public static class ZendeskBulkDeleteComposition
                 .GetZendeskDeletionConnectionAsync(cancellationToken),
             logger,
             enableDeletion,
-            receiptDirectory);
+            receiptDirectory,
+            browserUnavailable);
     }
 }

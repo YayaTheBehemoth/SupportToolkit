@@ -107,6 +107,11 @@ public sealed partial class ConfigureCommand
                 )
             );
 
+        if (ExplainSecretSetElsewhere(secretKey))
+        {
+            return null;
+        }
+
         var secret =
             ReadSecret(
                 "Client secret",

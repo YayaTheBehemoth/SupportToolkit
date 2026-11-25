@@ -22,7 +22,7 @@ public sealed class BulkDeleteWebSession : IDisposable
     private readonly Func<CancellationToken, Task<BulkDeleteAvailability>>
         _availability;
 
-    private readonly Func<CancellationToken, Task<BulkDeleteConnection>>
+    private readonly Func<Action<Uri>, CancellationToken, Task<BulkDeleteConnection>>
         _connect;
 
     private readonly object _lock = new();
@@ -31,9 +31,13 @@ public sealed class BulkDeleteWebSession : IDisposable
     private CancellationTokenSource? _operation;
     private Task? _deletion;
 
+    /// <param name="connect">
+    /// Opens a connection. Its first argument receives the sign-in link
+    /// when no browser can be opened.
+    /// </param>
     public BulkDeleteWebSession(
         Func<CancellationToken, Task<BulkDeleteAvailability>> availability,
-        Func<CancellationToken, Task<BulkDeleteConnection>> connect)
+        Func<Action<Uri>, CancellationToken, Task<BulkDeleteConnection>> connect)
     {
         _availability =
             availability ?? throw new ArgumentNullException(nameof(availability));
@@ -54,6 +58,12 @@ public sealed class BulkDeleteWebSession : IDisposable
     /// The last problem, in plain text. Cleared by the next action.
     /// </summary>
     public string? Error { get; private set; }
+
+    /// <summary>
+    /// The sign-in link, when no browser window could be opened for it.
+    /// Cleared by the next action.
+    /// </summary>
+    public Uri? SignInLink { get; private set; }
 
     /// <summary>
     /// True when the problem is that the sign-in is no longer valid.
@@ -79,7 +89,7 @@ public sealed class BulkDeleteWebSession : IDisposable
                 // never signed in with the old settings.
                 await DisposeConnectionAsync();
 
-                _connection = await _connect(token);
+                _connection = await _connect(ShowSignInLink, token);
 
                 await _connection.Session.SignInAsync(token);
             });
@@ -318,8 +328,15 @@ public sealed class BulkDeleteWebSession : IDisposable
     private BulkDeleteReviewSession RequireSession() =>
         Session ?? throw new InvalidOperationException("Sign in first.");
 
+    private void ShowSignInLink(Uri link)
+    {
+        SignInLink = link;
+        Changed?.Invoke();
+    }
+
     private void ClearMessages()
     {
+        SignInLink = null;
         Error = null;
         NeedsSignIn = false;
         SearchProblem = null;

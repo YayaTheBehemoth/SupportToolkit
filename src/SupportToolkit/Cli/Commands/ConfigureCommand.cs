@@ -102,6 +102,16 @@ public sealed partial class ConfigureCommand
             );
         }
 
+        if (args.Length == 1
+            && string.Equals(
+                args[0],
+                "lab",
+                StringComparison.OrdinalIgnoreCase
+            ))
+        {
+            return await ConfigureLabAsync();
+        }
+
         if (args.Length is 1 or 2
             && string.Equals(
                 args[0],
@@ -159,6 +169,10 @@ public sealed partial class ConfigureCommand
 
         Console.WriteLine(
             "  SupportToolkit configure import [file]"
+        );
+
+        Console.WriteLine(
+            "  SupportToolkit configure lab"
         );
 
         Console.WriteLine();

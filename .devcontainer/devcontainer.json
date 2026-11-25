@@ -1,0 +1,40 @@
+{
+  // Linux development for SupportToolkit, for GitHub Codespaces or a local
+  // dev container. Daily work runs against fixtures; secrets, when needed,
+  // are environment variables (see the README, "Secrets on Linux and in
+  // containers").
+  "name": "SupportToolkit",
+  "image": "mcr.microsoft.com/devcontainers/dotnet:10.0-noble",
+  "features": {
+    // The second-provider lab (lab/) runs its containers with docker compose.
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "postCreateCommand": "dotnet restore SupportToolkit.slnx",
+  // Starts the second-provider lab on every codespace start, only when its
+  // variables are set as Codespaces secrets (lab/README.md); otherwise it
+  // prints one line and does nothing.
+  "postStartCommand": "bash lab/up.sh --if-configured",
+  // The web UI (serve --port 5050) and the lab. Each must keep its number on
+  // your computer: the web UI accepts only its own localhost address, and the
+  // lab profile names 127.0.0.1:<port>. requireLocalPort makes a clash an
+  // error instead of a silent renumbering. Ports stay private (the default);
+  // never make them public.
+  "forwardPorts": [5050, 8080, 8090, 8201, 8202],
+  "portsAttributes": {
+    "5050": { "label": "SupportToolkit web UI", "requireLocalPort": true, "onAutoForward": "silent" },
+    "8080": { "label": "Lab osTicket (/scp/, labadmin)", "requireLocalPort": true, "onAutoForward": "silent" },
+    "8090": { "label": "Lab Dolibarr (labadmin)", "requireLocalPort": true, "onAutoForward": "silent" },
+    "8201": { "label": "Lab Duplicati machine-a", "requireLocalPort": true, "onAutoForward": "silent" },
+    "8202": { "label": "Lab Duplicati machine-b", "requireLocalPort": true, "onAutoForward": "silent" }
+  },
+  "hostRequirements": {
+    "cpus": 2
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-dotnettools.csdevkit"
+      ]
+    }
+  }
+}

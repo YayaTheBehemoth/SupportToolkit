@@ -30,6 +30,9 @@ public sealed class WindowsCredentialStore
     private const string TargetPrefix =
         "SupportToolkit:";
 
+    public string Description =>
+        "Windows Credential Manager";
+
     public Task<string?> GetSecretAsync(
         string key,
         CancellationToken cancellationToken = default)

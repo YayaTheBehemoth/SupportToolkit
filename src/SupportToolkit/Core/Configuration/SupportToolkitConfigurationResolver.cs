@@ -111,6 +111,53 @@ public sealed partial class SupportToolkitConfigurationResolver
             : configuredMode.Value;
     }
 
+    /// <summary>
+    /// A connection's secret from the secret store. A secret read from a
+    /// place another connection of the same provider also reads from is
+    /// refused: it would send one connection's secret to the other.
+    /// </summary>
+    private async Task<string?> ReadConnectionSecretAsync(
+        SupportToolkitConfiguration configuration,
+        string key,
+        CancellationToken cancellationToken)
+    {
+        var clash =
+            SecretLocationClashes.For(
+                configuration,
+                _secretStore,
+                key);
+
+        if (clash is not null)
+        {
+            throw new InvalidOperationException(
+                clash.Describe());
+        }
+
+        return await _secretStore.GetSecretAsync(
+            key,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// What to do about a missing connection secret. The wizard can only
+    /// help where the secret store keeps secrets; elsewhere the secret is
+    /// set outside SupportToolkit, so the message names where.
+    /// </summary>
+    private string MissingSecretAdvice(
+        string key,
+        string profileName,
+        string? environmentOverride = null)
+    {
+        var fix =
+            _secretStore.CanStoreSecrets
+                ? $"Run SupportToolkit configure profile {profileName}"
+                : $"Set {_secretStore.ExternalLocation(key) ?? "it outside SupportToolkit"}";
+
+        return environmentOverride is null
+            ? $"{fix}."
+            : $"{fix} or provide {environmentOverride}.";
+    }
+
     private string? ReadEnvironmentValue(
         string variableName)
     {

@@ -20,7 +20,7 @@ var configurationStore =
         .CreateDefault();
 
 ISecretStore secretStore =
-    new WindowsCredentialStore();
+    SecretStoreComposition.Create();
 
 var configurationResolver =
     new SupportToolkitConfigurationResolver(
@@ -147,8 +147,9 @@ try
                     // Deletion is enabled here, and only here: this is the
                     // connection that can delete, used after the
                     // operator's typed confirmations.
-                    token => ZendeskBulkDeleteComposition.ConnectWithDeletionAsync(
+                    (browserUnavailable, token) => ZendeskBulkDeleteComposition.ConnectWithDeletionAsync(
                         configurationResolver,
+                        browserUnavailable,
                         token)),
                 new UsageReportWebSession(
                     new UsageReportSession(

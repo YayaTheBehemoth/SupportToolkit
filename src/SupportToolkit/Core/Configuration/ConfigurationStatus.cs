@@ -12,20 +12,47 @@ public sealed record ConfigurationStatus(
     ActiveRuntimeStatus? Runtime,
     IReadOnlyList<SavedConnectionStatus> SavedConnections,
     IReadOnlyList<string> EnvironmentOverridesSet,
-    IReadOnlyList<string> ObsoleteEnvironmentVariablesSet)
+    IReadOnlyList<string> ObsoleteEnvironmentVariablesSet,
+    string? SecretStore = null,
+    IReadOnlyList<string>? SecretClashes = null,
+    ActiveSystemsStatus? ActiveSystems = null)
 {
     public bool HasProfiles => Profiles.Count > 0;
+}
+
+/// <summary>
+/// The systems the active profile reads and writes, by name ("Duplicati"),
+/// so no screen can leave doubt about which world it works in. "none"
+/// when the profile selects no system for a capability.
+/// </summary>
+public sealed record ActiveSystemsStatus(
+    string Backup,
+    string Commercial,
+    string Ticketing)
+{
+    public override string ToString() =>
+        $"backup {Backup} · commercial {Commercial} · tickets {Ticketing}";
 }
 
 public sealed record ProfileStatus(
     string Name,
     bool IsActive,
     string? AcronisConnection,
-    string? ZendeskConnection,
-    string? ZendeskDestination,
+    TicketingSelection? Ticketing,
+    string? TicketingSystem,
     string? ZendeskDeletionConnection,
     string? BusinessCentralConnection,
-    IReadOnlyDictionary<string, SupportToolkitMode> Modules);
+    IReadOnlyDictionary<string, SupportToolkitMode> Modules)
+{
+    /// <summary>The systems the profile uses, by name.</summary>
+    public ActiveSystemsStatus? Systems { get; init; }
+
+    /// <summary>Its backup selection, as configured.</summary>
+    public BackupSelection? Backup { get; init; }
+
+    /// <summary>Its commercial selection, as configured.</summary>
+    public CommercialSelection? Commercial { get; init; }
+}
 
 /// <summary>
 /// The effective runtime of the active profile.
@@ -33,10 +60,12 @@ public sealed record ProfileStatus(
 public sealed record ActiveRuntimeStatus(
     ModeStatus BackupAggregatorMode,
     ConnectionStatus Acronis,
-    ConnectionStatus ZendeskTicketing,
+    ConnectionStatus Ticketing,
     ConnectionStatus ZendeskDeletion,
     ConnectionStatus BusinessCentral,
-    ReviewWaitStatus ReviewWait);
+    ReviewWaitStatus ReviewWait,
+    ConnectionStatus? BackupSystem = null,
+    ConnectionStatus? CommercialSystem = null);
 
 /// <summary>
 /// Mode is null when the configuration is invalid (Problem says why).

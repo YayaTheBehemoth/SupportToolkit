@@ -1,3 +1,4 @@
+using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Secrets;
 
@@ -95,7 +96,8 @@ public sealed partial class ConfigureCommand
     /// connections need are asked for here, hidden as they are typed, and
     /// stored the same way the wizard stores them. Enter skips one.
     /// </summary>
-    private async Task<int> PromptForMissingSecretsAsync()
+    private async Task<int> PromptForMissingSecretsAsync(
+        Func<MissingSecret, bool>? only = null)
     {
         Console.WriteLine();
 
@@ -104,9 +106,12 @@ public sealed partial class ConfigureCommand
         try
         {
             missing =
-                await RequiredSecrets.FindMissingAsync(
+                (await RequiredSecrets.FindMissingAsync(
                     await _configurationStore.LoadAsync(),
-                    _secretStore);
+                    _secretStore,
+                    ProviderConnectionsComposition.All))
+                .Where(item => only?.Invoke(item) ?? true)
+                .ToArray();
         }
         catch (InvalidOperationException)
         {
@@ -132,7 +137,24 @@ public sealed partial class ConfigureCommand
         foreach (var item in missing)
         {
             Console.WriteLine(
-                $"  {item.Provider} connection '{item.ConnectionName}'");
+                $"  {item.Provider} connection '{item.ConnectionName}': {item.SecretName}");
+        }
+
+        if (!_secretStore.CanStoreSecrets)
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                "Secrets are not stored by SupportToolkit on this system. " +
+                "Set these environment variables instead (for example as " +
+                "Codespaces secrets):");
+
+            foreach (var item in missing)
+            {
+                Console.WriteLine(
+                    $"  {_secretStore.ExternalLocation(item.Key)}");
+            }
+
+            return 0;
         }
 
         Console.WriteLine();
@@ -154,7 +176,7 @@ public sealed partial class ConfigureCommand
                 value =
                     ConsoleSecretReader.ReadOptional(
                         $"  {item.Provider} '{item.ConnectionName}' " +
-                        "client secret: ");
+                        $"{item.SecretName}: ");
             }
             catch (InvalidOperationException)
             {
@@ -191,7 +213,7 @@ public sealed partial class ConfigureCommand
             foreach (var item in skipped)
             {
                 Console.WriteLine(
-                    $"  {item.Provider} connection '{item.ConnectionName}'");
+                    $"  {item.Provider} connection '{item.ConnectionName}': {item.SecretName}");
             }
 
             Console.WriteLine(

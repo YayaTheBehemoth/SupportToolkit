@@ -113,7 +113,8 @@ public class BackupReviewSessionTests
 
         Assert.Equal("fixture-trial.zendesk.com", plan.Destination.InstanceHost);
         Assert.Equal("dev", plan.Destination.DestinationName);
-        Assert.Equal(12345, plan.Destination.GroupId);
+        Assert.Equal("Zendesk", plan.Destination.SystemName);
+        Assert.Equal("12345", plan.Destination.RoutingId);
 
         Assert.Equal(review.Inventory.TenantCount, plan.Review.TenantCount);
         Assert.Equal(review.Inventory.FindingsCount, plan.Review.FindingsCount);
@@ -163,9 +164,11 @@ public class BackupReviewSessionTests
                 Destination =
                     new SupportToolkit.Core.Configuration
                         .TicketDestinationPreview(
+                            "Zendesk",
                             "different.zendesk.com",
                             "dev",
-                            12345)
+                            "Group ID",
+                            "12345")
             };
 
         var exception =

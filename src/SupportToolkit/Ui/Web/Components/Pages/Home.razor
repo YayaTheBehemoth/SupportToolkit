@@ -46,6 +46,10 @@ else
         <div class="banner @ModeBannerClass(mode)">
             <strong>@ModeTitle(mode)</strong>
             <span>@ModeDetail(mode)</span>
+            @if (_status.ActiveSystems is { } systems)
+            {
+                <span>Systems: @systems</span>
+            }
         </div>
     }
 
@@ -59,9 +63,9 @@ else
                     <th></th>
                     <th>Profile</th>
                     <th>Aggregator mode</th>
-                    <th>Acronis</th>
-                    <th>Business Central</th>
-                    <th>Zendesk ticketing</th>
+                    <th>Backup</th>
+                    <th>Commercial</th>
+                    <th>Ticketing</th>
                     <th>Zendesk deletion</th>
                     <th></th>
                 </tr>
@@ -73,9 +77,9 @@ else
                         <td>@(profile.IsActive ? "●" : "")</td>
                         <td><strong>@profile.Name</strong></td>
                         <td>@ModeText(profile)</td>
-                        <td>@Dash(profile.AcronisConnection)</td>
-                        <td>@Dash(profile.BusinessCentralConnection)</td>
-                        <td>@Dash(profile.ZendeskConnection)@(profile.ZendeskDestination is null ? "" : " → " + profile.ZendeskDestination)</td>
+                        <td>@Selected(profile.Systems?.Backup, profile.Backup?.Connection)</td>
+                        <td>@Selected(profile.Systems?.Commercial, profile.Commercial?.Connection)</td>
+                        <td>@TicketingText(profile)</td>
                         <td>@Dash(profile.ZendeskDeletionConnection)</td>
                         <td>
                             @if (!profile.IsActive)
@@ -157,6 +161,15 @@ else
 
     private static string Dash(string? value) =>
         string.IsNullOrWhiteSpace(value) ? "—" : value;
+
+    private static string Selected(string? system, string? connection) =>
+        system is null or "none" ? "—" : $"{system}: {Dash(connection)}";
+
+    private static string TicketingText(ProfileStatus profile) =>
+        profile.Ticketing is not { } ticketing
+            ? "—"
+            : $"{profile.TicketingSystem}: {Dash(ticketing.Connection)}" +
+              (ticketing.Destination is null ? "" : " → " + ticketing.Destination);
 
     private static string ModeText(ProfileStatus profile) =>
         profile.Modules.TryGetValue("backup-aggregator", out var mode)

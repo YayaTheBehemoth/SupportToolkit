@@ -79,15 +79,12 @@ public sealed class BackupInventoryReviewService
                 cancellationToken
             );
 
-        _logger?.Info(
-            $"Microsoft 365 resources: " +
-            $"{result.Microsoft365ResourceCount}."
-        );
-
-        _logger?.Info(
-            $"Device resources: " +
-            $"{result.DeviceResourceCount}."
-        );
+        foreach (var count in result.ResourceCounts)
+        {
+            _logger?.Info(
+                $"{count.Kind}: {count.Count}."
+            );
+        }
 
         var report =
             new AggregatedBackupReport

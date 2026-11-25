@@ -25,8 +25,22 @@ public sealed partial class SupportToolkitConfigurationResolver
                 configuration
             );
 
+        var selection =
+            TicketingSelection.For(
+                active.Profile
+            );
+
+        if (selection is not null
+            && !selection.Is(TicketingSelection.Providers.Zendesk))
+        {
+            throw new InvalidOperationException(
+                $"Active profile '{active.Name}' sends tickets to " +
+                $"'{selection.Provider}', not Zendesk."
+            );
+        }
+
         if (string.IsNullOrWhiteSpace(
-            active.Profile.ZendeskConnection))
+            selection?.Connection))
         {
             throw new InvalidOperationException(
                 $"Active profile '{active.Name}' does not reference " +
@@ -38,7 +52,7 @@ public sealed partial class SupportToolkitConfigurationResolver
         var connectionName =
             SupportToolkitConfigurationNames
                 .NormalizeConnectionName(
-                    active.Profile.ZendeskConnection
+                    selection.Connection
                 );
 
         var connection =
@@ -57,7 +71,7 @@ public sealed partial class SupportToolkitConfigurationResolver
         }
 
         if (string.IsNullOrWhiteSpace(
-            active.Profile.ZendeskDestination))
+            selection.Destination))
         {
             throw new InvalidOperationException(
                 $"Active profile '{active.Name}' does not select " +
@@ -69,7 +83,7 @@ public sealed partial class SupportToolkitConfigurationResolver
         var destinationName =
             SupportToolkitConfigurationNames
                 .NormalizeConnectionName(
-                    active.Profile.ZendeskDestination
+                    selection.Destination
                 );
 
         var destination =
@@ -172,7 +186,8 @@ public sealed partial class SupportToolkitConfigurationResolver
 
         var clientSecret =
             environmentClientSecret
-            ?? await _secretStore.GetSecretAsync(
+            ?? await ReadConnectionSecretAsync(
+                configuration,
                 SupportToolkitSecretKeys
                     .ZendeskClientSecret(
                         connectionName
@@ -185,9 +200,12 @@ public sealed partial class SupportToolkitConfigurationResolver
         {
             throw new InvalidOperationException(
                 $"Zendesk client secret for connection " +
-                $"'{connectionName}' is not configured. Run " +
-                $"SupportToolkit configure profile {active.Name} " +
-                "or provide ZENDESK_CLIENT_SECRET."
+                $"'{connectionName}' is not configured. " +
+                MissingSecretAdvice(
+                    SupportToolkitSecretKeys
+                        .ZendeskClientSecret(connectionName),
+                    active.Name,
+                    "ZENDESK_CLIENT_SECRET")
             );
         }
 

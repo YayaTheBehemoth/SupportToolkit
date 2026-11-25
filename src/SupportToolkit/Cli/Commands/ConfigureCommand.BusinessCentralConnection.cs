@@ -301,9 +301,12 @@ public sealed partial class ConfigureCommand
         {
             Console.WriteLine("  Connection: not selected");
 
-            Console.WriteLine(
-                "  Monitoring scope: unavailable until a connection " +
-                "is configured.");
+            if (CommercialSelection.For(profile) is null)
+            {
+                Console.WriteLine(
+                    "  Monitoring scope: unavailable until a connection " +
+                    "is configured.");
+            }
 
             return;
         }

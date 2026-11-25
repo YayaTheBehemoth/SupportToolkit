@@ -3,7 +3,6 @@ using SupportToolkit.Core.Secrets;
 using SupportToolkit.Providers.Acronis.Transport;
 using SupportToolkit.Providers.BusinessCentral.Transport;
 using SupportToolkit.Providers.Zendesk.Deletion;
-using SupportToolkit.Providers.Zendesk.Transport;
 
 namespace SupportToolkit.Composition;
 
@@ -84,7 +83,34 @@ public sealed class ConfigurationStatusService
                 .ToArray(),
             RuntimeEnvironmentVariables.Obsolete
                 .Where(IsSet)
-                .ToArray());
+                .ToArray(),
+            _secrets.Description,
+            SecretLocationClashes.Find(configuration, _secrets, ProviderConnectionsComposition.All)
+                .Select(clash => clash.Describe())
+                .ToArray(),
+            active is null
+                ? null
+                : ActiveSystems(active.Value.Profile));
+    }
+
+    /// <summary>
+    /// The systems a profile reads and writes, as the composition chooses
+    /// them; "none" for a capability the profile does not select.
+    /// </summary>
+    public static ActiveSystemsStatus ActiveSystems(SupportToolkitProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+
+        return new ActiveSystemsStatus(
+            BackupSelection.For(profile) is { } backup
+                ? BackupSystemsComposition.SystemName(backup)
+                : "none",
+            CommercialSelection.For(profile) is { } commercial
+                ? CommercialSystemsComposition.SystemName(commercial)
+                : "none",
+            TicketingSelection.For(profile) is { } ticketing
+                ? TicketingComposition.SystemName(ticketing)
+                : "none");
     }
 
     /// <summary>
@@ -135,12 +161,92 @@ public sealed class ConfigurationStatusService
             mode,
             await GetAcronisAsync(
                 profile,
-                mode.Mode == SupportToolkitMode.Production,
+                mode.Mode == SupportToolkitMode.Production
+                && BackupSystemsComposition.ReviewsAcronis(BackupSelection.For(profile)),
                 cancellationToken),
-            await GetZendeskTicketingAsync(profile, cancellationToken),
+            await GetTicketingAsync(profile, cancellationToken),
             await GetZendeskDeletionAsync(profile, cancellationToken),
             await GetBusinessCentralAsync(profile, cancellationToken),
-            await GetReviewWaitAsync(cancellationToken));
+            await GetReviewWaitAsync(cancellationToken),
+            await GetBackupSystemAsync(profile, cancellationToken),
+            await GetCommercialSystemAsync(profile, cancellationToken));
+    }
+
+    /// <summary>
+    /// The commercial system the monitoring scope reads, when it is not
+    /// Business Central (which has its own section). Resolved locally.
+    /// </summary>
+    private async Task<ConnectionStatus?> GetCommercialSystemAsync(
+        SupportToolkitProfile profile,
+        CancellationToken cancellationToken)
+    {
+        var selection = CommercialSelection.For(profile);
+
+        if (CommercialSystemsComposition.ReadsBusinessCentral(selection))
+        {
+            return null;
+        }
+
+        var name = $"{CommercialSystemsComposition.SystemName(selection!)} monitoring scope";
+
+        try
+        {
+            return new ConnectionStatus(
+                name,
+                ConnectionState.Valid,
+                selection!.Connection,
+                null,
+                await CommercialSystemsComposition.DescribeAsync(_resolver, cancellationToken));
+        }
+        catch (InvalidOperationException exception)
+        {
+            return new ConnectionStatus(
+                name,
+                ConnectionState.Invalid,
+                selection!.Connection,
+                exception.Message,
+                []);
+        }
+    }
+
+    /// <summary>
+    /// The backup system the review reads, when it is not Acronis (which
+    /// has its own section). Resolved locally; nothing is called.
+    /// </summary>
+    private async Task<ConnectionStatus?> GetBackupSystemAsync(
+        SupportToolkitProfile profile,
+        CancellationToken cancellationToken)
+    {
+        var selection = BackupSelection.For(profile);
+
+        if (BackupSystemsComposition.ReviewsAcronis(selection))
+        {
+            return null;
+        }
+
+        var name = $"{BackupSystemsComposition.SystemName(selection!)} backup review";
+
+        try
+        {
+            return new ConnectionStatus(
+                name,
+                ConnectionState.Valid,
+                selection!.Connection,
+                null,
+                await BackupSystemsComposition.DescribeAsync(
+                    _resolver,
+                    selection,
+                    cancellationToken));
+        }
+        catch (InvalidOperationException exception)
+        {
+            return new ConnectionStatus(
+                name,
+                ConnectionState.Invalid,
+                selection!.Connection,
+                exception.Message,
+                []);
+        }
     }
 
     private async Task<ModeStatus> GetModeAsync(
@@ -237,16 +343,20 @@ public sealed class ConfigurationStatusService
         }
     }
 
-    private async Task<ConnectionStatus> GetZendeskTicketingAsync(
+    /// <summary>
+    /// Ticket submission through whichever system the profile selects,
+    /// resolved as a submission would resolve it, without calling it.
+    /// </summary>
+    private async Task<ConnectionStatus> GetTicketingAsync(
         SupportToolkitProfile profile,
         CancellationToken cancellationToken)
     {
-        const string Name = "Zendesk ticket submission";
+        var selection = TicketingSelection.For(profile);
 
-        if (string.IsNullOrWhiteSpace(profile.ZendeskConnection))
+        if (selection is null)
         {
             return new ConnectionStatus(
-                Name,
+                "Ticket submission",
                 ConnectionState.NotSelected,
                 null,
                 "Submission is unavailable until a connection and " +
@@ -254,48 +364,33 @@ public sealed class ConfigurationStatusService
                 []);
         }
 
+        var name = $"{TicketingComposition.SystemName(selection)} ticket submission";
+
         try
         {
-            var resolved =
-                await _resolver.GetZendeskConnectionAsync(
+            var target =
+                await TicketingComposition.ResolveTargetAsync(
+                    _resolver,
                     cancellationToken);
 
-            var options =
-                ZendeskOptions.Create(
-                    resolved.Subdomain,
-                    resolved.ClientId,
-                    resolved.ClientSecret);
-
             return new ConnectionStatus(
-                Name,
+                name,
                 ConnectionState.Valid,
-                profile.ZendeskConnection,
-                null,
-                [
-                    new StatusDetail(
-                        "Instance",
-                        options.BaseUri.GetLeftPart(UriPartial.Authority)),
-                    new StatusDetail("Destination", resolved.DestinationName),
-                    new StatusDetail("Group ID", resolved.GroupId.ToString()),
-                    new StatusDetail(
-                        "Submitter user ID",
-                        resolved.SubmitterId.ToString()),
-                    new StatusDetail(
-                        "Requester user ID",
-                        resolved.RequesterId.ToString())
-                ]);
+                selection.Connection,
+                target.Destination.Caveat,
+                target.Details);
         }
         catch (InvalidOperationException exception)
         {
             return new ConnectionStatus(
-                Name,
+                name,
                 ConnectionState.Invalid,
-                profile.ZendeskConnection,
+                selection.Connection,
                 exception.Message,
                 [
                     new StatusDetail(
                         "Destination",
-                        profile.ZendeskDestination ?? "(none)")
+                        selection.Destination ?? "(none)")
                 ]);
         }
     }
@@ -365,8 +460,10 @@ public sealed class ConfigurationStatusService
                 Name,
                 ConnectionState.NotSelected,
                 null,
-                "The monitoring scope is unavailable until a " +
-                "connection is configured.",
+                CommercialSelection.For(profile) is null
+                    ? "The monitoring scope is unavailable until a " +
+                      "connection is configured."
+                    : null,
                 []);
         }
 
@@ -467,11 +564,10 @@ public sealed class ConfigurationStatusService
                             Present(pair.Value.ClientId)),
                         new StatusDetail(
                             "Client secret",
-                            Present(
-                                await HasSecretAsync(
-                                    SupportToolkitSecretKeys
-                                        .AcronisClientSecret(pair.Key),
-                                    cancellationToken)))
+                            await SecretAsync(
+                                SupportToolkitSecretKeys
+                                    .AcronisClientSecret(pair.Key),
+                                cancellationToken))
                     ]));
         }
 
@@ -495,11 +591,10 @@ public sealed class ConfigurationStatusService
                             Present(connection.ClientId)),
                         new StatusDetail(
                             "Client secret",
-                            Present(
-                                await HasSecretAsync(
-                                    SupportToolkitSecretKeys
-                                        .ZendeskClientSecret(pair.Key),
-                                    cancellationToken))),
+                            await SecretAsync(
+                                SupportToolkitSecretKeys
+                                    .ZendeskClientSecret(pair.Key),
+                                cancellationToken)),
                         new StatusDetail(
                             "Submitter ID",
                             connection.SubmitterId?.ToString()
@@ -562,6 +657,31 @@ public sealed class ConfigurationStatusService
                     ]));
         }
 
+        // Providers that own their settings: name and secret only, since
+        // the other settings are theirs.
+        foreach (var provider in ProviderConnectionsComposition.All)
+        {
+            foreach (var name in provider.GetSavedConnectionNames(configuration)
+                         .Order(StringComparer.OrdinalIgnoreCase))
+            {
+                var details = new List<StatusDetail>();
+
+                foreach (var secret in provider.GetSecrets(configuration, name))
+                {
+                    details.Add(
+                        new StatusDetail(
+                            Capitalize(secret.Label),
+                            await SecretAsync(secret.Key, cancellationToken)));
+                }
+
+                saved.Add(
+                    new SavedConnectionStatus(
+                        provider.ProviderName,
+                        name,
+                        details));
+            }
+        }
+
         return saved;
     }
 
@@ -573,13 +693,20 @@ public sealed class ConfigurationStatusService
             name,
             isActive,
             profile.AcronisConnection,
-            profile.ZendeskConnection,
-            profile.ZendeskDestination,
+            TicketingSelection.For(profile),
+            TicketingSelection.For(profile) is { } ticketing
+                ? TicketingComposition.SystemName(ticketing)
+                : null,
             profile.ZendeskDeletionConnection,
             profile.BusinessCentralConnection,
             new Dictionary<string, SupportToolkitMode>(
                 profile.Modules,
-                StringComparer.OrdinalIgnoreCase));
+                StringComparer.OrdinalIgnoreCase))
+        {
+            Systems = ActiveSystems(profile),
+            Backup = BackupSelection.For(profile),
+            Commercial = CommercialSelection.For(profile)
+        };
 
     private static (string Name, SupportToolkitProfile Profile)?
         FindProfile(
@@ -604,6 +731,16 @@ public sealed class ConfigurationStatusService
 
         return null;
     }
+
+    private async Task<string> SecretAsync(
+        string key,
+        CancellationToken cancellationToken) =>
+        SecretStatusText.Describe(
+            _secrets,
+            key,
+            await HasSecretAsync(key, cancellationToken),
+            "configured",
+            "not configured");
 
     private async Task<bool> HasSecretAsync(
         string key,
@@ -637,4 +774,7 @@ public sealed class ConfigurationStatusService
     private static string Text(
         string? value) =>
         string.IsNullOrWhiteSpace(value) ? "not configured" : value;
+
+    private static string Capitalize(string text) =>
+        text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
 }

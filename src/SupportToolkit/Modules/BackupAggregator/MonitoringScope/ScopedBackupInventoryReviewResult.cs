@@ -126,7 +126,7 @@ public sealed record ScopedBackupInventoryReviewResult(
 
             return
                 $"Monitored tenants only: {customers} entitled customer " +
-                $"tenant(s) by Business Central entitlement" +
+                $"tenant(s) by subscription entitlement" +
                 (includesOperator
                     ? ", plus the operator's own tenant."
                     : ".");

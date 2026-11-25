@@ -482,3 +482,8 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Second-provider lab data (lab/up.sh); synthetic, kept across codespace rebuilds
+lab/*/.data/
+# start-lab.cmd remembers the profile to switch back to
+lab/windows/.previous-profile

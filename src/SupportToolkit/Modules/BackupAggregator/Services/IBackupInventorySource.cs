@@ -43,12 +43,20 @@ public interface IBackupInventorySource
         CancellationToken cancellationToken = default);
 }
 
-/// <summary>One tenant's normalized inventory, with how much was read.</summary>
+/// <summary>
+/// One tenant's normalized inventory, with how much was read of each kind
+/// of resource, in the backup system's own terms ("Microsoft 365
+/// resources", "Duplicati jobs").
+/// </summary>
 public sealed record TenantReviewResult(
     TenantBackupReport Report,
-    int Microsoft365ResourceCount,
-    int DeviceResourceCount
+    IReadOnlyList<ResourceCount> ResourceCounts
 );
+
+/// <summary>How many resources of one kind a tenant review read.</summary>
+public sealed record ResourceCount(
+    string Kind,
+    int Count);
 
 /// <summary>
 /// A tenant review that failed in a named stage, so the failure can be
