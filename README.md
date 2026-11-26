@@ -15,7 +15,7 @@ SupportToolkit currently includes:
 - **Configuration management** — Reusable provider connections, runtime profiles, and secure credential storage.
 - **Interactive CLI** — Menu-driven workflows alongside commands suitable for scripting.
 - **Usage report** — Acronis storage per customer against what Business Central bills for backup, for the monthly reconciliation.
-- **Web UI** — A local browser interface for the Backup Aggregator, Zendesk bulk delete and the usage report, started with one double-click or `SupportToolkit serve`.
+- **Web UI** — A local browser interface for the Backup Aggregator, bulk delete and the usage report, started with one double-click or `SupportToolkit serve`.
 
 The application supports fixture-based development and production integrations through the same underlying workflows.
 
@@ -467,9 +467,9 @@ The console prints counts by default. `--names` adds the per-customer rows, whic
 
 ---
 
-## Zendesk bulk delete
+## Bulk delete
 
-SupportToolkit has an interactive way to find and bulk-delete Zendesk tickets, for example everything for a customer that has left. It signs in, searches, shows a preview, and, only when asked with `--delete`, deletes the tickets you selected after two typed confirmations and writes a receipt. Without `--delete` it only reads. It is available as a developer command and as a page in the [Web UI](#web-ui), which follows the same rules.
+SupportToolkit has an interactive way to find and bulk-delete tickets, for example everything for a customer that has left, in the profile's ticketing system: Zendesk, or [Zammad](#bulk-delete-in-zammad). It signs in, searches, shows a preview, and, only when asked, deletes the tickets you selected after two typed confirmations and writes a receipt. It is available as a page in the [Web UI](#web-ui) for both systems, and as a developer command for Zendesk (`--delete`; without it the command only reads). Both follow the same rules.
 
 ### Two Zendesk connections
 
@@ -554,6 +554,17 @@ dotnet run --project src\SupportToolkit -- dev zendesk-bulk-delete --production 
 Before the first request, a receipt listing every ticket ID is written. If that cannot be written, nothing is deleted. It is rewritten when the run ends, including a run that stopped or was cancelled. It records the Zendesk instance, who signed in, the search, the time, the typed confirmations, and each ticket's ID, its status when planned, its outcome and its job ID. It never contains ticket subjects or content.
 
 A receipt still identifies a customer's tickets, so the folder is refused if it lies inside a git working tree. Keep receipts private and do not share them publicly.
+
+### Bulk delete in Zammad
+
+A profile whose ticketing system is Zammad deletes in that Zammad, through the web UI. The flow, the confirmations, the frozen list and the receipts are the ones above; what differs is Zammad's:
+
+- **Its own token.** The Zammad connection needs `bulkDelete: true` and a second secret, the **deletion token**: a separate Zammad token with the `admin` permission, which Zammad requires to delete. The token that creates the review's tickets needs only `ticket.agent` and so cannot delete. Using one token for both is refused. A connection without `bulkDelete` is used for tickets only, and needs no deletion token. There is no browser sign-in: the saved deletion token signs in, and the page names its user and roles.
+- **Search.** Organization, requester, domain, sender name and words, joined with AND, read 100 per page until Zammad's own count is reached; any shortfall makes the search **incomplete**. Zammad's search matches loosely (a phrase within a longer organization name, a domain as an email suffix), so only tickets whose organization, requester, domain or sender name match **exactly** are kept. The preview shows no ticket text, which Zammad's search does not return.
+- **Numbers.** Zammad's API deletes by ticket ID, but its screens show the ticket number (ID 13 is `Ticket#44013`). The preview, plan, result and receipt show the number; the receipt records both.
+- **Deletion is immediate and permanent.** One ticket per request, at once. There is no trash, no waiting time after closing, and no archive, so a closed ticket of any age can be deleted, and a deleted one cannot be restored. A `404` means the ticket was not deleted (it no longer existed). A refused token or missing `admin` permission stops the run before another ticket is sent; any other answer, or none, leaves the ticket *Unknown*.
+
+The observed API behaviour is recorded in [lab/zammad/README.md](lab/zammad/README.md).
 
 ---
 
@@ -942,7 +953,7 @@ The release zip also has `Start SupportToolkit.cmd`: double-click it to start th
 - **Profile.** Choose which profile everything uses. The configuration wizard stays in the console (`SupportToolkit configure`).
 - **Backup Aggregator.** Run or refresh the monitored review, with progress and Cancel. Read the completeness banner and the Attention, Unclassified and Incomplete tabs (the detailed view adds Scope and Reconciliation). **Prepare ticket** then shows the exact ticket and its Zendesk destination to confirm before anything is created. What can be prepared or submitted, and that a prepared ticket is used once, is decided by the same `BackupReviewSession` the console uses.
 - **Usage report.** **Generate report** compares Acronis storage with Business Central billing per customer, with progress and Cancel. Each row folds out to show its billing lines and the Acronis figures in both units; the detailed view adds the portal's figures and the customers whose subscription is not active. See [Usage report](#usage-report).
-- **Zendesk bulk delete.** Sign in, search, choose tickets, check the plan and type the confirmations, with progress and a result. The rules are the command's: closed tickets are chosen for you and others need a second confirmation, an incomplete search is never deleted from, and nothing is sent that was not in the confirmed plan. Deletion runs in the background, so reloading or closing the tab does not stop it; **Exit** stops it cleanly and writes the receipt.
+- **Bulk delete** (menu "Bulk delete"), on the profile's ticketing system: Zendesk or Zammad. Sign in, search, choose tickets, check the plan and type the confirmations, with progress and a result. The rules are the command's: closed tickets are chosen for you and others need a second confirmation, an incomplete search is never deleted from, and nothing is sent that was not in the confirmed plan. Deletion runs in the background, so reloading or closing the tab does not stop it; **Exit** stops it cleanly and writes the receipt.
 
 A **Simple / Detailed** switch in the top bar (Simple by default) hides technical detail such as ticket ID lists, request counts, job progress and the scope tabs. It never hides a warning, the Zendesk instance, a count, a typed confirmation, a failed or unknown outcome, or the receipt.
 
@@ -1245,7 +1256,7 @@ BackupAggregator and Zendesk ticket submission are implemented on `main`, with a
 
 Provider behavior is only considered production-validated where real external responses have been observed and checked.
 
-Deployment model, scheduling, persistence and an operator-friendly interface are intentionally undecided. Different modules have different operational needs, and the console has usability limits for non-developers. A local web UI now exists for the Backup Aggregator, Zendesk bulk delete and the usage report; it runs on the same rules as the console. These will be revisited when a validated workflow needs them rather than designed up front.
+Deployment model, scheduling, persistence and an operator-friendly interface are intentionally undecided. Different modules have different operational needs, and the console has usability limits for non-developers. A local web UI now exists for the Backup Aggregator, bulk delete and the usage report; it runs on the same rules as the console. These will be revisited when a validated workflow needs them rather than designed up front.
 
 The current focus is correctness, maintainability, explicit operator control, and practical usefulness in MSP support workflows.
 
