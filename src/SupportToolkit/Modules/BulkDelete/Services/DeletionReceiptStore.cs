@@ -50,14 +50,16 @@ public sealed class DeletionReceiptStore
 
     /// <summary>
     /// One file per run, so the receipt written before deletion and the
-    /// final one are the same file.
+    /// final one are the same file. The system's prefix ("zendesk") starts
+    /// the name.
     /// </summary>
     public string PathFor(
         Guid runId,
-        DateTimeOffset startedAt) =>
+        DateTimeOffset startedAt,
+        string system) =>
         Path.Combine(
             Directory,
-            "zendesk-delete-" +
+            RequireName(system) + "-delete-" +
             startedAt.UtcDateTime.ToString("yyyyMMdd-HHmmss") +
             "-" +
             runId.ToString("N")[..8] +
@@ -86,6 +88,23 @@ public sealed class DeletionReceiptStore
             cancellationToken);
 
         File.Move(temporary, path, overwrite: true);
+    }
+
+    /// <summary>
+    /// A file-name-safe system prefix: lower-case letters and digits only.
+    /// </summary>
+    private static string RequireName(string system)
+    {
+        if (string.IsNullOrWhiteSpace(system)
+            || !system.All(character => char.IsAsciiLetterLower(character)
+                                        || char.IsAsciiDigit(character)))
+        {
+            throw new ArgumentException(
+                "A receipt prefix is lower-case letters and digits.",
+                nameof(system));
+        }
+
+        return system;
     }
 
     private static void RefuseGitWorkingTree(

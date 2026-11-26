@@ -20,18 +20,14 @@ public sealed record PlannedTicket(
 /// </summary>
 public sealed class DeletionPlan
 {
-    /// <summary>
-    /// Zendesk accepts at most this many ticket IDs per deletion request.
-    /// </summary>
-    public const int BatchSize = 100;
-
     private DeletionPlan(
         Guid id,
         DateTimeOffset createdAt,
         string instance,
         DeletionOperator operatorUser,
         string query,
-        IReadOnlyList<PlannedTicket> tickets)
+        IReadOnlyList<PlannedTicket> tickets,
+        TicketSystemRules rules)
     {
         Id = id;
         CreatedAt = createdAt;
@@ -39,14 +35,29 @@ public sealed class DeletionPlan
         Operator = operatorUser;
         Query = query;
         Tickets = tickets;
+        Rules = rules;
     }
 
     public Guid Id { get; }
 
     public DateTimeOffset CreatedAt { get; }
 
-    /// <summary>The Zendesk subdomain the tickets belong to.</summary>
+    /// <summary>
+    /// The instance the tickets belong to, as the system names it (for
+    /// Zendesk, the subdomain).
+    /// </summary>
     public string Instance { get; }
+
+    /// <summary>The rules of the system the tickets are deleted from.</summary>
+    public TicketSystemRules Rules { get; }
+
+    /// <summary>The instance as operators know it ("example.zendesk.com").</summary>
+    public string DisplayInstance => Rules.DisplayInstance(Instance);
+
+    /// <summary>
+    /// The most ticket IDs one deletion request carries (100 in Zendesk).
+    /// </summary>
+    public int BatchSize => Rules.BatchSize;
 
     public DeletionOperator Operator { get; }
 
@@ -63,8 +74,8 @@ public sealed class DeletionPlan
         Tickets.Where(ticket => ticket.Flag is not null).ToArray();
 
     /// <summary>
-    /// Closed tickets old enough to be archived. Once deleted they are not
-    /// in Zendesk's deleted-tickets view.
+    /// Closed tickets old enough to be archived (only in a system that
+    /// archives). Once deleted they are harder to restore.
     /// </summary>
     public IReadOnlyList<PlannedTicket> LikelyArchived =>
         Tickets.Where(ticket => ticket.LikelyArchived).ToArray();
@@ -109,11 +120,14 @@ public sealed class DeletionPlan
                 .Select(ticket => "#" + ticket.Id)
                 .ToArray();
 
+        var rules = preview.Preview.Rules;
+
         if (blocked.Length > 0)
         {
             throw new InvalidOperationException(
                 "These tickets cannot be deleted yet (closed less than " +
-                "24 hours ago): " + string.Join(", ", blocked) + ".");
+                $"{rules.BlockedWindowText} ago): " +
+                string.Join(", ", blocked) + ".");
         }
 
         return new DeletionPlan(
@@ -131,6 +145,7 @@ public sealed class DeletionPlan
                         ticket.UpdatedAt,
                         ticket.LikelyArchived))
                 .OrderBy(ticket => ticket.Id)
-                .ToArray());
+                .ToArray(),
+            rules);
     }
 }

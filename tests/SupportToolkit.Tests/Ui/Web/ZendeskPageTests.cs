@@ -1,3 +1,4 @@
+using SupportToolkit.Modules.BulkDelete.Production;
 using SupportToolkit.Modules.BulkDelete.Services;
 using System.Net;
 using SupportToolkit.Core.Configuration;
@@ -36,7 +37,12 @@ public sealed class ZendeskHostFixture : IAsyncLifetime
                 new WebAppState(
                     service,
                     null,
-                    Web(new BulkDeleteAvailability(true, "example", null))));
+                    Web(
+                        new BulkDeleteAvailability(true, "example", null)
+                        {
+                            Rules = ZendeskDeletionRules.Rules,
+                            SystemName = "Zendesk"
+                        })));
 
         Unavailable =
             await WebHostRunner.StartAsync(

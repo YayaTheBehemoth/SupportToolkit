@@ -58,7 +58,7 @@ public class DeletionPreviewTests
                 Orgs,
                 Emails,
                 null,
-                Now);
+                Now, ZendeskDeletionRules.Rules);
 
         Assert.Equal(2, preview.Total);
         Assert.Equal(2, preview.SelectedCount);
@@ -80,7 +80,7 @@ public class DeletionPreviewTests
                 Orgs,
                 Emails,
                 null,
-                Now);
+                Now, ZendeskDeletionRules.Rules);
 
         var exception = Assert.Single(preview.Exceptions);
 
@@ -99,7 +99,7 @@ public class DeletionPreviewTests
                 Orgs,
                 Emails,
                 null,
-                Now);
+                Now, ZendeskDeletionRules.Rules);
 
         var ticket = Assert.Single(preview.Tickets);
 
@@ -118,7 +118,7 @@ public class DeletionPreviewTests
                 Orgs,
                 Emails,
                 null,
-                Now);
+                Now, ZendeskDeletionRules.Rules);
 
         var recent = Assert.Single(preview.Exceptions);
 
@@ -137,7 +137,7 @@ public class DeletionPreviewTests
                 Orgs,
                 Emails,
                 null,
-                Now);
+                Now, ZendeskDeletionRules.Rules);
 
         var ticket = Assert.Single(preview.Tickets);
 
@@ -158,7 +158,7 @@ public class DeletionPreviewTests
                 Orgs,
                 Emails,
                 null,
-                Now);
+                Now, ZendeskDeletionRules.Rules);
 
         Assert.Equal(
             [("Example Org", 2), ("(no organization)", 1), ("Other Org", 1)],
@@ -184,7 +184,7 @@ public class DeletionPreviewTests
                 organizationNames: null,
                 userEmails: null,
                 directoryNote: "lookups failed",
-                Now);
+                Now, ZendeskDeletionRules.Rules);
 
         Assert.Equal("lookups failed", preview.DirectoryNote);
 
@@ -211,7 +211,7 @@ public class DeletionPreviewTests
                 Orgs,
                 Emails,
                 null,
-                Now);
+                Now, ZendeskDeletionRules.Rules);
 
         var ticket = Assert.Single(preview.Tickets);
 
@@ -233,7 +233,7 @@ public class DeletionPreviewTests
                 Orgs,
                 Emails,
                 null,
-                Now);
+                Now, ZendeskDeletionRules.Rules);
 
         Assert.False(preview.IsSearchComplete);
         Assert.Equal("too many matches", preview.SearchIncompleteReason);
@@ -254,7 +254,7 @@ public class DeletionPreviewTests
                 Orgs,
                 Emails,
                 "names unavailable",
-                Now);
+                Now, ZendeskDeletionRules.Rules);
 
         var output = new StringWriter();
 
@@ -286,7 +286,7 @@ public class DeletionPreviewTests
                 Orgs,
                 Emails,
                 null,
-                Now);
+                Now, ZendeskDeletionRules.Rules);
 
         var output = new StringWriter();
 

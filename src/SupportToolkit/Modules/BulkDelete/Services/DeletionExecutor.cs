@@ -12,7 +12,7 @@ namespace SupportToolkit.Modules.BulkDelete.Services;
 ///    if that cannot be written, nothing is deleted.
 ///  - Batches of up to 100 go one at a time, and each job is followed to
 ///    its end. There are no automatic retries.
-///  - A ticket is Deleted only when Zendesk's job reports it. Anything
+///  - A ticket is Deleted only when the system's job reports it. Anything
 ///    unclear is Unknown, never Deleted.
 ///  - After a request is rejected, a job fails or times out, or an outcome
 ///    is unclear, it stops: the remaining tickets are NotAttempted.
@@ -80,7 +80,7 @@ public sealed class DeletionExecutor
         RequireConfirmation(plan, confirmation);
 
         var startedAt = _timeProvider.GetUtcNow();
-        var receiptPath = _receipts.PathFor(plan.Id, startedAt);
+        var receiptPath = _receipts.PathFor(plan.Id, startedAt, plan.Rules.ReceiptPrefix);
 
         var results =
             plan.Tickets.ToDictionary(
@@ -128,6 +128,7 @@ public sealed class DeletionExecutor
             {
                 stop =
                     await RunBatchAsync(
+                        plan.Rules,
                         batch,
                         number,
                         batches.Count,
@@ -138,7 +139,7 @@ public sealed class DeletionExecutor
             catch (OperationCanceledException)
                 when (cancellationToken.IsCancellationRequested)
             {
-                // A job may already be running on Zendesk's side.
+                // A job may already be running on the system's side.
                 MarkUnstarted(
                     batch,
                     results,
@@ -242,6 +243,7 @@ public sealed class DeletionExecutor
     /// Deletes one batch. Returns true when the run must stop.
     /// </summary>
     private async Task<bool> RunBatchAsync(
+        TicketSystemRules rules,
         IReadOnlyList<long> batch,
         int number,
         int batchCount,
@@ -294,8 +296,7 @@ public sealed class DeletionExecutor
                 results,
                 TicketDeletionState.Unknown,
                 "The request did not complete clearly (" +
-                SourceType(exception) + "). Check the deleted " +
-                "tickets in Zendesk.",
+                SourceType(exception) + "). " + rules.CheckAdvice,
                 null);
 
             return true;
@@ -323,7 +324,7 @@ public sealed class DeletionExecutor
                     results,
                     TicketDeletionState.Unknown,
                     "The job was still running when the wait ended. " +
-                    "Check the deleted tickets in Zendesk.",
+                    rules.CheckAdvice,
                     job.JobId);
 
                 return true;
@@ -349,15 +350,14 @@ public sealed class DeletionExecutor
                     results,
                     TicketDeletionState.Unknown,
                     "The job's result could not be read (" +
-                    SourceType(exception) + "). Check the deleted " +
-                    "tickets in Zendesk.",
+                    SourceType(exception) + "). " + rules.CheckAdvice,
                     job.JobId);
 
                 return true;
             }
         }
 
-        return Apply(batch, job, results);
+        return Apply(rules, batch, job, results);
     }
 
     /// <summary>
@@ -365,6 +365,7 @@ public sealed class DeletionExecutor
     /// run must stop.
     /// </summary>
     private static bool Apply(
+        TicketSystemRules rules,
         IReadOnlyList<long> batch,
         DeleteJob job,
         Dictionary<long, TicketDeletionResult> results)
@@ -386,8 +387,8 @@ public sealed class DeletionExecutor
                 batch,
                 results,
                 TicketDeletionState.Unknown,
-                "Zendesk reported an unrecognised job status. Check " +
-                "the deleted tickets in Zendesk.",
+                $"{rules.SystemName} reported an unrecognised job status. " +
+                rules.CheckAdvice,
                 job.JobId);
 
             return true;
@@ -413,7 +414,7 @@ public sealed class DeletionExecutor
                     new TicketDeletionResult(
                         id,
                         TicketDeletionState.Failed,
-                        "Zendesk did not delete this ticket" +
+                        $"{rules.SystemName} did not delete this ticket" +
                         (string.IsNullOrWhiteSpace(result.Status)
                             ? "."
                             : " (" + result.Status + ")."),
@@ -431,7 +432,7 @@ public sealed class DeletionExecutor
                               (string.IsNullOrWhiteSpace(job.Message)
                                   ? "."
                                   : ": " + job.Message)
-                            : "Zendesk reported no result for this ticket.",
+                            : $"{rules.SystemName} reported no result for this ticket.",
                         job.JobId);
 
                 stop = true;

@@ -487,6 +487,16 @@ SupportToolkit has two Zendesk connections, separated by function. They are conf
 
 Both may point at the same Zendesk subdomain; they still use different OAuth clients. A missing deletion connection does not affect ticketing, and the reverse. `configure status` shows them in separate sections.
 
+### Which system bulk delete works on
+
+Bulk delete works on the ticketing system the profile selects: a profile whose review tickets go to one system never deletes in another. Deleting still uses its own access, kept apart from the access that creates tickets (for Zendesk, the deletion connection above), and that access must point at the same instance:
+
+- A profile that sends tickets to Zendesk deletes with its Zendesk deletion connection. If the deletion connection points at a different subdomain than the ticketing connection, bulk delete is refused and says why.
+- A profile that selects no ticketing system keeps using its Zendesk deletion connection, as before.
+- A profile whose ticketing system SupportToolkit cannot delete from (osTicket, whose API cannot delete tickets) shows bulk delete as unavailable. It never falls back to another system.
+
+Each system declares its own deletion rules (how many tickets per request, any waiting time after closing, archiving, how long deleted tickets can be restored), and the preview, plan, confirmations and receipt follow them. Zendesk's are the ones described below.
+
 ### Sign-in
 
 The deletion connection is a public OAuth client with PKCE (S256); no client secret exists. The sign-in opens your browser (where none can be opened, such as in a container, the console and the web page show the sign-in link to open yourself), listens on a free loopback port and sends `http://localhost:{port}` as the redirect URI (the OAuth client registers `http://localhost`; Zendesk ignores the port). It requests `read tickets:write`: `tickets:read` alone is not enough, because search and the signed-in user's identity need `read`. The token is kept in memory only and is gone when the program exits. If Zendesk reports no token lifetime, none is assumed; a rejected or expired token is not replaced silently and needs a new sign-in.

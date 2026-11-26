@@ -12,31 +12,20 @@ public static class DeletionPreviewBuilder
     public const string Unknown = "(unknown)";
 
     /// <summary>
-    /// Zendesk cannot delete a ticket closed less than this long ago.
-    /// </summary>
-    public static readonly TimeSpan RecentlyClosedWindow =
-        TimeSpan.FromHours(24);
-
-    /// <summary>
-    /// Zendesk archives closed tickets after about this long. A deleted
-    /// archived ticket is not in the 30-day deleted-tickets view and can
-    /// only be restored through the API by ID.
-    /// </summary>
-    public static readonly TimeSpan ArchiveAge =
-        TimeSpan.FromDays(120);
-
-    /// <summary>
-    /// True for a closed ticket last updated at least <see cref="ArchiveAge"/>
-    /// ago. An approximation: the real close time is not in the search
-    /// result, and an unknown time is not claimed to be archived.
+    /// True for a closed ticket last updated at least the system's archive
+    /// age ago. An approximation: the real close time is not in the search
+    /// result, and an unknown time is not claimed to be archived. Always
+    /// false for a system that does not archive.
     /// </summary>
     public static bool IsLikelyArchived(
         string? status,
         DateTimeOffset? updatedAt,
-        DateTimeOffset now) =>
-        string.Equals(status?.Trim(), "closed", StringComparison.OrdinalIgnoreCase)
+        DateTimeOffset now,
+        TimeSpan? archiveAge) =>
+        archiveAge is not null
+        && string.Equals(status?.Trim(), "closed", StringComparison.OrdinalIgnoreCase)
         && updatedAt is not null
-        && now - updatedAt.Value >= ArchiveAge;
+        && now - updatedAt.Value >= archiveAge.Value;
 
     /// <param name="organizationNames">
     /// Null when the lookup failed: every organization is then unknown.
@@ -49,9 +38,11 @@ public static class DeletionPreviewBuilder
         IReadOnlyDictionary<long, string>? organizationNames,
         IReadOnlyDictionary<long, string>? userEmails,
         string? directoryNote,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        TicketSystemRules rules)
     {
         ArgumentNullException.ThrowIfNull(search);
+        ArgumentNullException.ThrowIfNull(rules);
 
         var tickets =
             search.Tickets
@@ -60,7 +51,8 @@ public static class DeletionPreviewBuilder
                         ticket,
                         organizationNames,
                         userEmails,
-                        now))
+                        now,
+                        rules))
                 .OrderBy(ticket => ticket.Id)
                 .ToArray();
 
@@ -75,14 +67,18 @@ public static class DeletionPreviewBuilder
             search.IsComplete,
             search.IncompleteReason,
             search.DuplicateCount,
-            directoryNote);
+            directoryNote)
+        {
+            Rules = rules
+        };
     }
 
     private static DeletionPreviewTicket ToPreviewTicket(
         TicketSummary ticket,
         IReadOnlyDictionary<long, string>? organizationNames,
         IReadOnlyDictionary<long, string>? userEmails,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        TicketSystemRules rules)
     {
         var status =
             string.IsNullOrWhiteSpace(ticket.Status)
@@ -95,12 +91,16 @@ public static class DeletionPreviewBuilder
         {
             flag = DeletionPreviewFlag.NotClosed;
         }
+        else if (rules.DeleteBlockedAfterClosing is not { } window)
+        {
+            // The system deletes a closed ticket at any time.
+        }
         else if (ticket.UpdatedAt is null)
         {
             // Without a time, "closed long enough ago" cannot be known.
             flag = DeletionPreviewFlag.ClosedTimeUnknown;
         }
-        else if (now - ticket.UpdatedAt.Value < RecentlyClosedWindow)
+        else if (now - ticket.UpdatedAt.Value < window)
         {
             flag = DeletionPreviewFlag.ClosedWithin24Hours;
         }
@@ -114,7 +114,7 @@ public static class DeletionPreviewBuilder
             ticket.UpdatedAt,
             flag is null,
             flag,
-            IsLikelyArchived(status, ticket.UpdatedAt, now),
+            IsLikelyArchived(status, ticket.UpdatedAt, now, rules.ArchiveAge),
             ticket.Description);
     }
 

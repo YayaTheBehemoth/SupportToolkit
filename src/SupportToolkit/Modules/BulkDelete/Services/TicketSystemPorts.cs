@@ -8,7 +8,16 @@ namespace SupportToolkit.Modules.BulkDelete.Services;
 /// </summary>
 public interface ITicketDirectory
 {
-    /// <summary>Interactive sign-in; needs an operator at the browser.</summary>
+    /// <summary>
+    /// What deleting in this system is like: its limits and caveats, which
+    /// the preview, the plan and the deletion follow.
+    /// </summary>
+    TicketSystemRules Rules { get; }
+
+    /// <summary>
+    /// The sign-in: interactive in a browser, or with the saved connection
+    /// (TicketSystemRules.SignsInWithBrowser).
+    /// </summary>
     Task SignInAsync(
         CancellationToken cancellationToken);
 
@@ -45,9 +54,10 @@ public interface ITicketDirectory
 }
 
 /// <summary>
-/// Ticket deletion in the ticketing system. The system deletes
-/// asynchronously: a request starts a job, and the outcome is read from
-/// the job. Failures are reported as DeletionRequestException.
+/// Ticket deletion in the ticketing system. A request starts a job, and
+/// the outcome is read from the job. A system that deletes synchronously
+/// returns a job that has already finished, with each ticket's result.
+/// Failures are reported as DeletionRequestException.
 /// </summary>
 public interface ITicketDeleter
 {

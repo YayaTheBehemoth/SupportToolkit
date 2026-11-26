@@ -5,22 +5,25 @@ namespace SupportToolkit.Modules.BulkDelete.Models;
 ///
 /// It starts as the preview's default (closed tickets, old enough). Tickets
 /// that are not closed can be added explicitly, which later needs the extra
-/// confirmation. A ticket closed less than 24 hours ago cannot be deleted
-/// through the API, so it can never be selected.
+/// confirmation. A ticket closed more recently than the system allows
+/// deleting (24 hours in Zendesk) can never be selected.
 ///
 /// Changes are all-or-nothing: if any ID is unknown or not selectable,
 /// nothing changes. It holds only ticket IDs and what the preview already
-/// said about them; it has no connection to Zendesk and no UI.
+/// said about them; it has no connection to the system and no UI.
 /// </summary>
 public sealed class DeletionSelection
 {
     private readonly Dictionary<long, DeletionPreviewTicket> _tickets;
     private readonly HashSet<long> _selected;
+    private readonly TicketSystemRules _rules;
 
     public DeletionSelection(
         DeletionPreview preview)
     {
         ArgumentNullException.ThrowIfNull(preview);
+
+        _rules = preview.Rules;
 
         _tickets =
             preview.Tickets.ToDictionary(ticket => ticket.Id);
@@ -53,7 +56,7 @@ public sealed class DeletionSelection
         _selected.Contains(ticketId);
 
     /// <summary>
-    /// False for a ticket closed less than 24 hours ago.
+    /// False for a ticket closed too recently to be deleted.
     /// </summary>
     public static bool CanBeSelected(
         DeletionPreviewTicket ticket)
@@ -76,8 +79,9 @@ public sealed class DeletionSelection
         if (blocked.Length > 0)
         {
             throw new ArgumentException(
-                "Closed less than 24 hours ago, so Zendesk cannot " +
-                "delete: " + string.Join(", ", blocked.Select(Show)) + ".");
+                $"Closed less than {_rules.BlockedWindowText} ago, so " +
+                $"{_rules.SystemName} cannot delete: " +
+                string.Join(", ", blocked.Select(Show)) + ".");
         }
 
         _selected.UnionWith(ids);

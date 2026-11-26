@@ -10,12 +10,14 @@ public enum DeletionPreviewFlag
     NotClosed,
 
     /// <summary>
-    /// Closed less than 24 hours ago, which the API cannot delete.
+    /// Closed more recently than the system allows deleting
+    /// (TicketSystemRules.DeleteBlockedAfterClosing; 24 hours in Zendesk).
     /// </summary>
     ClosedWithin24Hours,
 
     /// <summary>
-    /// Closed, but when is not known, so it is treated as too recent.
+    /// Closed, but when is not known, so it is treated as too recent. Only
+    /// for a system with a waiting time after closing.
     /// </summary>
     ClosedTimeUnknown
 }
@@ -55,7 +57,14 @@ public sealed record DeletionPreview(
     bool IsSearchComplete,
     string? SearchIncompleteReason,
     int DuplicateCount,
-    string? DirectoryNote);
+    string? DirectoryNote)
+{
+    /// <summary>
+    /// The rules of the system searched, which the selection and the plan
+    /// made from this preview follow.
+    /// </summary>
+    public required TicketSystemRules Rules { get; init; }
+}
 
 /// <summary>
 /// The signed-in operator and the preview of their search.

@@ -58,7 +58,7 @@ internal static class DeletionTestSupport
                 new Dictionary<long, string> { [10] = "Example Org" },
                 new Dictionary<long, string> { [1] = "a@example.com" },
                 null,
-                Now));
+                Now, ZendeskDeletionRules.Rules));
     }
 
     public static IEnumerable<TicketSummary> Closed(int count) =>

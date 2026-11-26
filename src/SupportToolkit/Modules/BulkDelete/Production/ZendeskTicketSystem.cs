@@ -10,6 +10,36 @@ using SupportToolkit.Providers.Zendesk.Deletion.Transport;
 namespace SupportToolkit.Modules.BulkDelete.Production;
 
 /// <summary>
+/// What deleting in Zendesk is like. Zendesk deletes up to 100 tickets per
+/// request in a background job, cannot delete a ticket closed less than 24
+/// hours ago, archives closed tickets after about 120 days, and keeps
+/// deleted tickets for 30 days (archived ones only restorable through the
+/// API by ID). The operator signs in in a browser.
+/// </summary>
+public static class ZendeskDeletionRules
+{
+    public static TicketSystemRules Rules { get; } =
+        new()
+        {
+            SystemName = "Zendesk",
+            ReceiptPrefix = "zendesk",
+            DisplayInstance = subdomain => subdomain + ".zendesk.com",
+            BatchSize = 100,
+            DeleteBlockedAfterClosing = TimeSpan.FromHours(24),
+            ArchiveAge = TimeSpan.FromDays(120),
+            RecoverableDays = 30,
+            SignsInWithBrowser = true,
+            RunsJobs = true,
+            DescribeRequest =
+                (count, first, last) =>
+                    "DELETE /api/v2/tickets/destroy_many.json" +
+                    $"?ids=<{count} ticket ID(s): {first}..{last}>",
+            DomainSearchNote =
+                "May return nothing: Zendesk does not always search by domain."
+        };
+}
+
+/// <summary>
 /// Zendesk as the ticketing system: sign-in, search and lookups, mapped
 /// to the module's types. A failed or expired sign-in becomes
 /// SignInRequiredException wherever it happens; a failed name lookup
@@ -30,6 +60,8 @@ public sealed class ZendeskTicketDirectory : ITicketDirectory
         _search = search ?? throw new ArgumentNullException(nameof(search));
         _directory = directory ?? throw new ArgumentNullException(nameof(directory));
     }
+
+    public TicketSystemRules Rules => ZendeskDeletionRules.Rules;
 
     public Task SignInAsync(
         CancellationToken cancellationToken) =>

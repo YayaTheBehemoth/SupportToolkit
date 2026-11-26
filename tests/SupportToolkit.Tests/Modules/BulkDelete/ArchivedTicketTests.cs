@@ -1,3 +1,4 @@
+using SupportToolkit.Modules.BulkDelete.Production;
 using SupportToolkit.Modules.BulkDelete.Models;
 using SupportToolkit.Modules.BulkDelete.Services;
 using SupportToolkit.Providers.Zendesk.Deletion.Search;
@@ -29,7 +30,7 @@ public class ArchivedTicketTests
     public void UnknownCloseTime_IsNotClaimedToBeArchived()
     {
         Assert.False(
-            DeletionPreviewBuilder.IsLikelyArchived("closed", null, Now));
+            DeletionPreviewBuilder.IsLikelyArchived("closed", null, Now, ZendeskDeletionRules.Rules.ArchiveAge));
     }
 
     [Fact]
@@ -60,7 +61,7 @@ public class ArchivedTicketTests
                 1, 0, true, null);
 
         var preview =
-            DeletionPreviewBuilder.Build(search, null, null, null, Now);
+            DeletionPreviewBuilder.Build(search, null, null, null, Now, ZendeskDeletionRules.Rules);
 
         Assert.Equal("Example ticket text", preview.Tickets[0].Description);
     }

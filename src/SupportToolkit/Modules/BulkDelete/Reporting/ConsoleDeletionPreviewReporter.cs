@@ -22,8 +22,13 @@ public static class ConsoleDeletionPreviewReporter
         var preview = result.Preview;
 
         output.WriteLine();
-        output.WriteLine("ZENDESK BULK DELETE PREVIEW (nothing is deleted)");
-        output.WriteLine("-------------------------------------------------");
+        var title =
+            $"{preview.Rules.SystemName.ToUpperInvariant()} BULK DELETE " +
+            "PREVIEW (nothing is deleted)";
+
+        output.WriteLine(title);
+        // One dash longer than the title, as this underline has always been.
+        output.WriteLine(new string('-', title.Length + 1));
         output.WriteLine(
             $"Signed in as: {result.Operator.Name ?? "(no name)"} " +
             $"<{result.Operator.Email ?? "no email"}> " +
@@ -74,7 +79,8 @@ public static class ConsoleDeletionPreviewReporter
         foreach (var ticket in preview.Exceptions)
         {
             output.WriteLine(
-                $"  #{ticket.Id}  {ticket.Status,-8} {Describe(ticket.Flag)}");
+                $"  #{ticket.Id}  {ticket.Status,-8} " +
+                Describe(ticket.Flag, preview.Rules));
         }
 
         output.WriteLine();
@@ -117,13 +123,15 @@ public static class ConsoleDeletionPreviewReporter
     }
 
     private static string Describe(
-        DeletionPreviewFlag? flag) =>
+        DeletionPreviewFlag? flag,
+        TicketSystemRules rules) =>
         flag switch
         {
             DeletionPreviewFlag.NotClosed =>
                 "not closed",
             DeletionPreviewFlag.ClosedWithin24Hours =>
-                "closed less than 24 hours ago (cannot be deleted yet)",
+                $"closed less than {rules.BlockedWindowText} ago " +
+                "(cannot be deleted yet)",
             DeletionPreviewFlag.ClosedTimeUnknown =>
                 "closed, time unknown (treated as too recent)",
             _ => string.Empty

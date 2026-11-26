@@ -73,7 +73,7 @@ public class DeletionReceiptStoreTests
 
             var plan = Plan(Closed(2));
             var confirmation = new DeletionConfirmation(2, null);
-            var path = store.PathFor(plan.Id, Now);
+            var path = store.PathFor(plan.Id, Now, "zendesk");
 
             await store.WriteAsync(
                 path,
@@ -134,7 +134,7 @@ public class DeletionReceiptStoreTests
         {
             var id = Guid.Parse("11111111-2222-3333-4444-555555555555");
 
-            var name = Path.GetFileName(store.PathFor(id, Now));
+            var name = Path.GetFileName(store.PathFor(id, Now, "zendesk"));
 
             Assert.Equal("zendesk-delete-20261103-120000-11111111.json", name);
         }

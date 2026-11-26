@@ -24,6 +24,9 @@ public sealed class BulkDeleteWorkflow
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
+    /// <summary>The ticketing system's deletion rules.</summary>
+    public TicketSystemRules Rules => _directory.Rules;
+
     /// <summary>
     /// The exact query the ticketing system runs for these criteria.
     /// Throws ArgumentException when a term cannot be searched for.
@@ -110,6 +113,7 @@ public sealed class BulkDeleteWorkflow
                 notes.Count == 0
                     ? null
                     : string.Join(" ", notes),
-                _timeProvider.GetUtcNow()));
+                _timeProvider.GetUtcNow(),
+                _directory.Rules));
     }
 }
