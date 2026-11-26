@@ -23,6 +23,11 @@ public sealed record TicketSearchCriteria(
         || !string.IsNullOrWhiteSpace(SenderName);
 }
 
+/// <summary>
+/// One ticket a search found. Id is what the system deletes by. Number is
+/// what operators see in the system when it differs from the Id (Zammad's
+/// ticket number); null when the Id is what they see (Zendesk).
+/// </summary>
 public sealed record TicketSummary(
     long Id,
     string? Status,
@@ -31,7 +36,8 @@ public sealed record TicketSummary(
     long? OrganizationId,
     DateTimeOffset? CreatedAt,
     DateTimeOffset? UpdatedAt,
-    string? Description = null);
+    string? Description = null,
+    string? Number = null);
 
 /// <summary>
 /// The tickets a search returned, with an explicit completeness verdict.

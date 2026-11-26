@@ -277,7 +277,7 @@ else if (session is not null)
                             title="@(open ? "Hide the ticket text" : "Show the ticket text")"
                             @onclick="() => Fold(id)">@(open ? "▾" : "▸")</button>
                 </td>
-                <td>#@ticket.Id</td>
+                <td>@ticket.Shown</td>
                 <td>@ticket.Status</td>
                 @if (State.View.IsDetailed) { <td>@Date(ticket.UpdatedAt)</td> }
                 <td>@ticket.Organization</td>
@@ -342,13 +342,13 @@ else if (session is not null)
                     restored from the @plan.Rules.SystemName interface. It can only be restored through the API by ticket
                     ID, using the receipt.
                 </span>
-                <span>@string.Join("  ", plan.LikelyArchived.Select(t => "#" + t.Id))</span>
+                <span>@string.Join("  ", plan.LikelyArchived.Select(t => t.Shown))</span>
             </div>
         }
 
         @if (State.View.IsDetailed)
         {
-            <p class="ids">@string.Join("  ", plan.Tickets.Select(t => "#" + t.Id))</p>
+            <p class="ids">@string.Join("  ", plan.Tickets.Select(t => t.Shown))</p>
         }
     </section>
 
@@ -369,7 +369,7 @@ else if (session is not null)
                 {
                     <li>
                         Request @batch.Number: delete @batch.TicketCount ticket(s)
-                        (#@batch.FirstId to #@batch.LastId)
+                        (@plan.Show(batch.FirstId) to @plan.Show(batch.LastId))
                     </li>
                 }
             </ul>
@@ -393,7 +393,7 @@ else if (session is not null)
         {
             <div class="banner warn">
                 <strong>@requirements.NonClosed.Count of these tickets are NOT closed (or their closing time is unknown):</strong>
-                <span>@string.Join("  ", requirements.NonClosed.Select(t => $"#{t.Id} ({t.Status})"))</span>
+                <span>@string.Join("  ", requirements.NonClosed.Select(t => $"{t.Shown} ({t.Status})"))</span>
             </div>
 
             <label>
@@ -458,7 +458,7 @@ else if (session is not null)
                 {
                     <li>
                         <strong>@group.State</strong>:
-                        @string.Join(", ", group.TicketIds.Select(id => "#" + id))
+                        @string.Join(", ", group.TicketIds.Select(id => session.Plan?.Show(id) ?? "#" + id))
                         @if (!string.IsNullOrWhiteSpace(group.Detail))
                         {
                             <span> - @group.Detail</span>

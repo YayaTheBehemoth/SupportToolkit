@@ -6,7 +6,12 @@ public sealed record PlannedTicket(
     string Status,
     DeletionPreviewFlag? Flag,
     DateTimeOffset? UpdatedAt,
-    bool LikelyArchived = false);
+    bool LikelyArchived = false,
+    string? Number = null)
+{
+    /// <summary>The ticket as operators know it ("#44013", or "#11").</summary>
+    public string Shown => TicketDisplay.Show(Id, Number);
+}
 
 /// <summary>
 /// The exact, frozen list of tickets a deletion will send.
@@ -80,6 +85,14 @@ public sealed class DeletionPlan
     public IReadOnlyList<PlannedTicket> LikelyArchived =>
         Tickets.Where(ticket => ticket.LikelyArchived).ToArray();
 
+    /// <summary>
+    /// A ticket of this plan as operators know it ("#44013"), from its ID.
+    /// </summary>
+    public string Show(long id) =>
+        TicketDisplay.Show(
+            id,
+            Tickets.FirstOrDefault(ticket => ticket.Id == id)?.Number);
+
     /// <summary>The IDs in request-sized groups, in order.</summary>
     public IReadOnlyList<IReadOnlyList<long>> Batches =>
         Tickets
@@ -117,7 +130,7 @@ public sealed class DeletionPlan
         var blocked =
             selected.Where(
                     ticket => !DeletionSelection.CanBeSelected(ticket))
-                .Select(ticket => "#" + ticket.Id)
+                .Select(ticket => ticket.Shown)
                 .ToArray();
 
         var rules = preview.Preview.Rules;
@@ -143,7 +156,8 @@ public sealed class DeletionPlan
                         ticket.Status,
                         ticket.Flag,
                         ticket.UpdatedAt,
-                        ticket.LikelyArchived))
+                        ticket.LikelyArchived,
+                        ticket.Number))
                 .OrderBy(ticket => ticket.Id)
                 .ToArray(),
             rules);

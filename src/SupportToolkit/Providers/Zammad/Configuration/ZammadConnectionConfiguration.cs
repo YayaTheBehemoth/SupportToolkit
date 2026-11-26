@@ -9,6 +9,10 @@ namespace SupportToolkit.Providers.Zammad.Configuration;
 /// BaseUrl is the Zammad root (the folder holding api/). Customer is the
 /// email address tickets are opened for; Zammad creates that customer on
 /// first use. The API token is a secret and lives in the secret store.
+///
+/// BulkDelete allows bulk delete through this connection. It then needs a
+/// second secret, the deletion token: a separate Zammad token with the
+/// admin permission, so the token that creates tickets never can delete.
 /// </summary>
 public sealed class ZammadConnectionConfiguration : ConfigurationNode
 {
@@ -17,6 +21,8 @@ public sealed class ZammadConnectionConfiguration : ConfigurationNode
 
     public string Customer { get; set; } =
         string.Empty;
+
+    public bool BulkDelete { get; set; }
 
     public Dictionary<string, ZammadDestinationConfiguration> Destinations
     {
@@ -47,3 +53,12 @@ public sealed record ResolvedZammadConnection(
     string Customer,
     string DestinationName,
     string Group);
+
+/// <summary>
+/// A Zammad connection set up for bulk delete, with its deletion token,
+/// validated locally before any Zammad request.
+/// </summary>
+public sealed record ResolvedZammadDeletionConnection(
+    string ConnectionName,
+    string BaseUrl,
+    string DeletionToken);

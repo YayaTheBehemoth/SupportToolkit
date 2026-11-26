@@ -33,6 +33,8 @@ public sealed partial class ConfigureCommand
         Console.WriteLine(
             "  Ticketing:  Zammad     http://127.0.0.1:8100/  (group Users)");
         Console.WriteLine(
+            "  Bulk delete: Zammad, with its own deletion token");
+        Console.WriteLine(
             "  Backup:     Duplicati  http://127.0.0.1:8201/, http://127.0.0.1:8202/");
         Console.WriteLine(
             "  Commercial: Dolibarr   http://127.0.0.1:8090/");

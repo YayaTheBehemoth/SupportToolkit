@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace SupportToolkit.Modules.BulkDelete.Models;
 
 /// <summary>
@@ -78,7 +80,10 @@ public sealed record DeletionReceipt(
                             ticket.Flag?.ToString(),
                             result.State.ToString(),
                             result.Detail,
-                            result.JobId);
+                            result.JobId)
+                        {
+                            Number = ticket.Number
+                        };
                     })
                 .ToArray());
     }
@@ -107,4 +112,13 @@ public sealed record ReceiptTicket(
     string? FlagAtPlan,
     string Outcome,
     string? Detail,
-    string? JobId);
+    string? JobId)
+{
+    /// <summary>
+    /// The ticket number operators see, when it differs from the ID
+    /// (Zammad). Left out of the receipt when there is none, so a Zendesk
+    /// receipt is unchanged.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Number { get; init; }
+}

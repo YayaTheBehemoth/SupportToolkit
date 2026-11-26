@@ -118,7 +118,7 @@ quota or tunnel. Windows reaches it at the same `127.0.0.1` addresses.
    ```
 
 4. On Windows, in the repository: `dotnet run --project src\SupportToolkit -- configure lab`.
-   It asks for the four keys; `grep SUPPORTTOOLKIT ~/.lab.env` in Ubuntu
+   It asks for the five keys; `grep SUPPORTTOOLKIT ~/.lab.env` in Ubuntu
    shows them (paste the part after `=`).
 
 **Each time:** double-click or run `lab\windows\start-lab.cmd`. It starts the
@@ -127,6 +127,11 @@ web UI. Press "Exit SupportToolkit" in the page when you are done, and it
 switches back. `lab\windows\stop-lab.cmd` switches back on its own (after
 closing the window instead), `stop-lab.cmd --down` also stops the lab, and
 `stop-lab.cmd <profile>` switches to a named profile.
+
+WSL stops a few seconds after no Windows program uses it, and the lab's
+containers stop with it. So `start-lab.cmd` also opens a minimized window,
+"SupportToolkit lab - keeps WSL running", which `stop-lab.cmd` closes. An
+open Ubuntu terminal keeps WSL running too.
 
 Both scripts assume the distribution `Ubuntu-24.04` and the clone
 `~/SupportToolkit`; set `LAB_WSL_DISTRO` or `LAB_WSL_REPO` otherwise. The lab

@@ -155,7 +155,7 @@ public sealed class ZendeskDeletionConsoleFlow
 
             foreach (var ticket in plan.LikelyArchived)
             {
-                _output.WriteLine($"  #{ticket.Id}");
+                _output.WriteLine($"  {ticket.Shown}");
             }
         }
 
@@ -181,7 +181,7 @@ public sealed class ZendeskDeletionConsoleFlow
             foreach (var ticket in plan.NonClosed)
             {
                 _output.WriteLine(
-                    $"  #{ticket.Id}  {ticket.Status}");
+                    $"  {ticket.Shown}  {ticket.Status}");
             }
 
             _output.Write(
@@ -247,7 +247,7 @@ public sealed class ZendeskDeletionConsoleFlow
         _output.WriteLine("Exact ticket IDs (nothing else will be sent):");
 
         foreach (var line in plan.Tickets
-                     .Select(ticket => "#" + ticket.Id)
+                     .Select(ticket => ticket.Shown)
                      .Chunk(10))
         {
             _output.WriteLine("  " + string.Join("  ", line));
@@ -348,7 +348,7 @@ public sealed class ZendeskDeletionConsoleFlow
             {
                 _output.WriteLine(
                     $"  {group.Key.State}: " +
-                    string.Join(", ", group.Select(r => "#" + r.Id)) +
+                    string.Join(", ", group.Select(r => outcome.Plan.Show(r.Id))) +
                     (string.IsNullOrWhiteSpace(group.Key.Detail)
                         ? string.Empty
                         : " - " + group.Key.Detail));

@@ -3,6 +3,8 @@ using SupportToolkit.Core.Logging;
 using SupportToolkit.Modules.BulkDelete.Models;
 using SupportToolkit.Modules.BulkDelete.Production;
 using SupportToolkit.Modules.BulkDelete.Services;
+using SupportToolkit.Providers.Zammad.Configuration;
+using SupportToolkit.Providers.Zammad.Transport;
 
 namespace SupportToolkit.Composition;
 
@@ -55,6 +57,31 @@ public static class BulkDeleteComposition
                     session)
                 {
                     Rules = ZendeskDeletionRules.Rules
+                };
+            }),
+        new(
+            ZammadConnections.ProviderKey,
+            ZammadDeletionRules.Rules,
+            async (resolver, token) =>
+            {
+                var connection =
+                    await ZammadConnections.Instance.ResolveDeletionAsync(resolver, token);
+
+                return ZammadDeletionRules.InstanceOf(
+                    ZammadOptions.Create(connection.BaseUrl, connection.DeletionToken).BaseUri);
+            },
+            async (resolver, _, token) =>
+            {
+                var session =
+                    ZammadBulkDeleteSession.Create(
+                        await ZammadConnections.Instance.ResolveDeletionAsync(resolver, token),
+                        enableDeletion: true);
+
+                return new BulkDeleteConnection(
+                    session.CreateReviewSession(),
+                    session)
+                {
+                    Rules = ZammadDeletionRules.Rules
                 };
             })
     ];

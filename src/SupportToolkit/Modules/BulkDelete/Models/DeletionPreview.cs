@@ -32,7 +32,24 @@ public sealed record DeletionPreviewTicket(
     bool Selected,
     DeletionPreviewFlag? Flag,
     bool LikelyArchived = false,
-    string? Description = null);
+    string? Description = null,
+    string? Number = null)
+{
+    /// <summary>
+    /// The ticket as operators know it: "#" and its number, or its ID when
+    /// the system shows the ID.
+    /// </summary>
+    public string Shown => TicketDisplay.Show(Id, Number);
+}
+
+/// <summary>How a ticket is named to operators.</summary>
+public static class TicketDisplay
+{
+    public static string Show(long id, string? number) =>
+        "#" + (string.IsNullOrWhiteSpace(number)
+            ? id.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : number.Trim());
+}
 
 public sealed record PreviewGroup(
     string Name,

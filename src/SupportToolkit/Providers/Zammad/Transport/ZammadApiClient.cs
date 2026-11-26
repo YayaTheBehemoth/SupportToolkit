@@ -75,6 +75,50 @@ public sealed class ZammadApiClient
         return await SendAsync(request, cancellationToken);
     }
 
+    /// <summary>
+    /// One read: a path below api/v1/ with its query. The query is never
+    /// logged (it may hold search terms such as an email address).
+    /// </summary>
+    public async Task<HttpResponseMessage> GetAsync(
+        string pathAndQuery,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pathAndQuery);
+
+        using var request =
+            new HttpRequestMessage(
+                HttpMethod.Get,
+                new Uri(_options.BaseUri, "api/v1/" + pathAndQuery.TrimStart('/')));
+
+        return await SendAsync(request, cancellationToken);
+    }
+
+    /// <summary>
+    /// Deletes one ticket by its ID. Zammad deletes at once and
+    /// permanently. Never retried.
+    /// </summary>
+    public async Task<HttpResponseMessage> DeleteTicketAsync(
+        long ticketId,
+        CancellationToken cancellationToken = default)
+    {
+        if (ticketId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(ticketId),
+                ticketId,
+                "A Zammad ticket ID is positive.");
+        }
+
+        using var request =
+            new HttpRequestMessage(
+                HttpMethod.Delete,
+                new Uri(
+                    _options.BaseUri,
+                    TicketsPath + "/" + ticketId.ToString(CultureInfo.InvariantCulture)));
+
+        return await SendAsync(request, cancellationToken);
+    }
+
     private async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
         CancellationToken cancellationToken)

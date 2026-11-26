@@ -79,7 +79,7 @@ public static class ConsoleDeletionPreviewReporter
         foreach (var ticket in preview.Exceptions)
         {
             output.WriteLine(
-                $"  #{ticket.Id}  {ticket.Status,-8} " +
+                $"  {ticket.Shown}  {ticket.Status,-8} " +
                 Describe(ticket.Flag, preview.Rules));
         }
 
@@ -89,7 +89,7 @@ public static class ConsoleDeletionPreviewReporter
         foreach (var ticket in preview.Tickets)
         {
             output.WriteLine(
-                $"  [{(ticket.Selected ? "x" : " ")}] #{ticket.Id,-9} " +
+                $"  [{(ticket.Selected ? "x" : " ")}] {ticket.Shown,-10} " +
                 $"{ticket.Status,-8} " +
                 $"{Date(ticket.UpdatedAt),-16} " +
                 $"{ticket.Organization} / {ticket.RequesterDomain}  " +

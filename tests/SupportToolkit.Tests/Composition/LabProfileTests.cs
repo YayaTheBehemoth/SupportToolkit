@@ -18,6 +18,7 @@ public class LabProfileTests
         new(new Dictionary<string, string>
         {
             [ZammadConnections.ApiToken("lab").Key] = "EXAMPLE-LAB-1",
+            [ZammadConnections.DeletionToken("lab").Key] = "EXAMPLE-LAB-5",
             [DuplicatiConnections.ServerPassword("lab", "machine-a").Key] = "EXAMPLE-LAB-2",
             [DuplicatiConnections.ServerPassword("lab", "machine-b").Key] = "EXAMPLE-LAB-3",
             [DolibarrConnections.ApiKey("lab").Key] = "EXAMPLE-LAB-4"
@@ -104,9 +105,29 @@ public class LabProfileTests
 
         var lab = missing.Where(LabProfileComposition.IsLabSecret).ToArray();
 
-        Assert.Equal(4, lab.Length);
+        // Zammad's API token and its separate deletion token, two Duplicati
+        // passwords and the Dolibarr key.
+        Assert.Equal(5, lab.Length);
+        Assert.Contains(lab, secret => secret.Provider == "Zammad" && secret.SecretName == "deletion token");
         Assert.Contains(missing, secret => secret.Provider == "Acronis");
         Assert.DoesNotContain(lab, secret => secret.Provider == "Acronis");
+    }
+
+    [Fact]
+    public async Task TheLabsBulkDelete_WorksOnItsZammad_WithTheDeletionToken()
+    {
+        var configuration = FullConfiguration();
+        LabProfileComposition.Apply(configuration);
+        configuration.ActiveProfile = "lab";
+
+        var (_, _, resolver) = Create(configuration, LabSecrets());
+
+        var availability =
+            await BulkDeleteComposition.GetAvailabilityAsync(resolver, CancellationToken.None);
+
+        Assert.True(availability.IsAvailable, availability.Reason);
+        Assert.Equal("Zammad", availability.SystemName);
+        Assert.Equal("127.0.0.1:8100", availability.DisplayInstance);
     }
 
     [Fact]

@@ -6,6 +6,8 @@
 # existing records are kept, keys are reset to the variables' values.
 #
 #   lab/up.sh                 start and provision
+#   lab/up.sh --more-tickets  as above, and add another set of Tailspin Toys
+#                             tickets for bulk delete (after deleting them)
 #   lab/up.sh --generate      print random values for any variable not set
 #                             (lab use only): save them as Codespaces
 #                             secrets, or append them to ~/.lab.env with
@@ -66,6 +68,7 @@ infra=(
 # computer when `configure lab` asks.
 app=(
   SUPPORTTOOLKIT_SECRET__ZAMMAD__LAB__API_TOKEN
+  SUPPORTTOOLKIT_SECRET__ZAMMAD__LAB__DELETION_TOKEN
   SUPPORTTOOLKIT_SECRET__DUPLICATI__LAB__PASSWORD_MACHINE_A
   SUPPORTTOOLKIT_SECRET__DUPLICATI__LAB__PASSWORD_MACHINE_B
   SUPPORTTOOLKIT_SECRET__DOLIBARR__LAB__API_KEY
@@ -220,12 +223,15 @@ echo "== Zammad"
 # The first start builds the database and the search index: minutes.
 wait_for http://127.0.0.1:8100/ '^200$'
 
-# No setup wizard: the admin, its group access and the API token
-# SupportToolkit uses are set from your variables. Zammad gives a new token
-# a random value, so the value is set afterwards. Only the runner's own
-# "lab:" lines are shown.
+# No setup wizard: the admin, its group access and the two tokens
+# SupportToolkit uses are set from your variables. As in production, access
+# is kept apart by purpose: the API token only creates tickets (agent
+# permission), and bulk delete has its own deletion token (admin, which
+# Zammad requires to delete). Zammad gives a new token a random value, so
+# the value is set afterwards. Only the runner's own "lab:" lines are shown.
 docker compose -f zammad/compose.yml exec -T -e LAB_ADMIN_PASSWORD="$ZAMMAD_LAB_ADMIN_PASSWORD" \
   -e LAB_API_TOKEN="$SUPPORTTOOLKIT_SECRET__ZAMMAD__LAB__API_TOKEN" \
+  -e LAB_DELETION_TOKEN="$SUPPORTTOOLKIT_SECRET__ZAMMAD__LAB__DELETION_TOKEN" \
   zammad-railsserver bundle exec rails r '
 UserInfo.current_user_id = 1
 Setting.set("system_init_done", true)
@@ -235,49 +241,90 @@ admin.assign_attributes(firstname: "Lab", lastname: "Admin", email: "labadmin@ex
 admin.save!
 admin.group_names_access_map = { "Users" => "full" }
 admin.save!
-Token.where(user_id: admin.id, action: "api", name: "SupportToolkit lab").destroy_all
-api = Token.create!(action: "api", persistent: true, user_id: admin.id, name: "SupportToolkit lab",
-  preferences: { permission: %w[admin ticket.agent] })
-api.update_column(:token, ENV.fetch("LAB_API_TOKEN"))
-puts "lab: admin and API token set"
+Token.where(user_id: admin.id, action: "api",
+  name: ["SupportToolkit lab", "SupportToolkit lab deletion", "SupportToolkit probe"]).destroy_all
+{ "SupportToolkit lab" => [%w[ticket.agent], "LAB_API_TOKEN"],
+  "SupportToolkit lab deletion" => [%w[admin ticket.agent], "LAB_DELETION_TOKEN"] }.each do |name, (permission, variable)|
+  token = Token.create!(action: "api", persistent: true, user_id: admin.id, name: name,
+    preferences: { permission: permission })
+  token.update_column(:token, ENV.fetch(variable))
+end
+puts "lab: admin, API token and deletion token set"
 ' < /dev/null 2>/dev/null | grep '^lab:' || { echo "Zammad setup failed" >&2; exit 1; }
 
 zapi=http://127.0.0.1:8100/api/v1
-zauth=(-H "Authorization: Token token=$SUPPORTTOOLKIT_SECRET__ZAMMAD__LAB__API_TOKEN"
+# Seeding creates organizations and customers, which needs admin.
+zauth=(-H "Authorization: Token token=$SUPPORTTOOLKIT_SECRET__ZAMMAD__LAB__DELETION_TOKEN"
   -H 'Content-Type: application/json')
 
-if [[ "$(curl -s "$zapi/organizations?per_page=100" "${zauth[@]}" \
-         | jq '[.[] | select(.name == "Northwind Traders ApS")] | length')" != "0" ]]; then
+zpost() { # path, json; prints the new id
+  curl -s -X POST "$zapi/$1" "${zauth[@]}" -d "$2" | jq -e -r .id \
+    || { echo "Zammad refused POST $1" >&2; exit 1; }
+}
+zcustomer() { # first, last, email, organization
+  zpost users "$(jq -n --arg f "$1" --arg l "$2" --arg e "$3" --arg o "$4" \
+    '{firstname: $f, lastname: $l, email: $e, organization: $o, roles: ["Customer"]}')" > /dev/null
+}
+zticket() { # customer email, state, title
+  zpost tickets "$(jq -n --arg c "$1" --arg s "$2" --arg t "$3" \
+    '{title: $t, group: "Users", customer: $c, state: $s,
+      article: {subject: $t, body: ("Synthetic lab ticket: " + $t), type: "note", internal: false}}')" > /dev/null
+}
+zorganization_exists() { # name
+  [[ "$(curl -s "$zapi/organizations?per_page=100" "${zauth[@]}" \
+        | jq --arg n "$1" '[.[] | select(.name == $n)] | length')" != "0" ]]
+}
+
+if zorganization_exists "Northwind Traders ApS"; then
   echo "Records exist, kept."
 else
-  zpost() { # path, json; prints the new id
-    curl -s -X POST "$zapi/$1" "${zauth[@]}" -d "$2" | jq -e -r .id \
-      || { echo "Zammad refused POST $1" >&2; exit 1; }
-  }
   for org in "Northwind Traders ApS" "Contoso A/S" "Fabrikam"; do
     zpost organizations "$(jq -n --arg n "$org" '{name: $n}')" > /dev/null
   done
-  customer() { # first, last, email, organization
-    zpost users "$(jq -n --arg f "$1" --arg l "$2" --arg e "$3" --arg o "$4" \
-      '{firstname: $f, lastname: $l, email: $e, organization: $o, roles: ["Customer"]}')" > /dev/null
-  }
-  customer Nina  Nordvik  nina@northwind.example  "Northwind Traders ApS"
-  customer Ole   Okker    ole@northwind.example   "Northwind Traders ApS"
-  customer Carla Conti    carla@contoso.example   "Contoso A/S"
-  customer Frank Fabri    frank@fabrikam.example  "Fabrikam"
-  ticket() { # customer email, state, title
-    zpost tickets "$(jq -n --arg c "$1" --arg s "$2" --arg t "$3" \
-      '{title: $t, group: "Users", customer: $c, state: $s,
-        article: {subject: $t, body: ("Synthetic lab ticket: " + $t), type: "note", internal: false}}')" > /dev/null
-  }
-  ticket nina@northwind.example  closed "Backup failed on file server"
-  ticket nina@northwind.example  closed "Restore request: project folder"
-  ticket ole@northwind.example   open   "Backup job warning: partly missing source"
-  ticket carla@contoso.example   closed "New laptop setup"
-  ticket carla@contoso.example   new    "Monitoring alert: never-run backup job"
-  ticket frank@fabrikam.example  closed "Offboarding: remove shared mailbox"
-  ticket frank@fabrikam.example  closed "Contract ended: archive tickets"
+  zcustomer Nina  Nordvik  nina@northwind.example  "Northwind Traders ApS"
+  zcustomer Ole   Okker    ole@northwind.example   "Northwind Traders ApS"
+  zcustomer Carla Conti    carla@contoso.example   "Contoso A/S"
+  zcustomer Frank Fabri    frank@fabrikam.example  "Fabrikam"
+  zticket nina@northwind.example  closed "Backup failed on file server"
+  zticket nina@northwind.example  closed "Restore request: project folder"
+  zticket ole@northwind.example   open   "Backup job warning: partly missing source"
+  zticket carla@contoso.example   closed "New laptop setup"
+  zticket carla@contoso.example   new    "Monitoring alert: never-run backup job"
+  zticket frank@fabrikam.example  closed "Offboarding: remove shared mailbox"
+  zticket frank@fabrikam.example  closed "Contract ended: archive tickets"
   echo "Organizations, customers and tickets created."
+fi
+
+# Bulk delete: Tailspin Toys, a customer that has left. More than one
+# search page (100) of tickets, mostly closed, a few still open, from
+# three requesters on two domains. Created when the customer is new, and
+# again with --more-tickets after a bulk delete has removed them.
+tailspin_tickets() {
+  local requesters=(tom@tailspin.example tara@tailspin.example ivo@tailspin-partner.example)
+  local topics=("Printer offline" "Password reset" "Mailbox full" "VPN not connecting"
+    "New user account" "Backup restore test" "Laptop replacement" "Licence renewal")
+  local i state
+  for i in $(seq 1 110); do
+    state=closed
+    (( i % 25 == 0 )) && state=open
+    (( i % 55 == 0 )) && state=new
+    zticket "${requesters[$(( i % 3 ))]}" "$state" \
+      "Tailspin $(printf %03d "$i"): ${topics[$(( i % 8 ))]}"
+    (( i % 25 == 0 )) && echo "  $i of 110"
+  done
+  echo "Tailspin Toys: 110 tickets created for bulk delete."
+}
+
+if ! zorganization_exists "Tailspin Toys"; then
+  zpost organizations '{"name": "Tailspin Toys"}' > /dev/null
+  zcustomer Tom  Tailor  tom@tailspin.example          "Tailspin Toys"
+  zcustomer Tara Tanaka  tara@tailspin.example         "Tailspin Toys"
+  zcustomer Ivo  Ilves   ivo@tailspin-partner.example  "Tailspin Toys"
+  tailspin_tickets
+elif [[ "${1:-}" == "--more-tickets" ]]; then
+  tailspin_tickets
+else
+  echo "Tailspin Toys exists, kept (lab/up.sh --more-tickets adds more)."
 fi
 
 # --------------------------------------------------------------- Duplicati

@@ -42,6 +42,7 @@ public static class LabProfileComposition
             {
                 BaseUrl = "http://127.0.0.1:8100/",
                 Customer = "backups@lab.example",
+                BulkDelete = true,
                 Destinations = { ["backups"] = new ZammadDestinationConfiguration { Group = "Users" } }
             }
         };
