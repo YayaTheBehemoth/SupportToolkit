@@ -6,7 +6,8 @@ public sealed record ZammadSearchCriteria(
     string? RequesterEmail,
     string? EmailDomain,
     string? FreeText,
-    string? SenderName);
+    string? SenderName,
+    string? TicketNumber = null);
 
 /// <summary>
 /// Builds Zammad's ticket search query, as observed against Zammad 7.3.0
@@ -24,6 +25,12 @@ public static class ZammadSearchQuery
         ArgumentNullException.ThrowIfNull(criteria);
 
         var terms = new List<string>();
+
+        if (Number(criteria.TicketNumber) is { } number)
+        {
+            // Observed: number:44013 matches that ticket only.
+            terms.Add($"number:{number}");
+        }
 
         if (Value(criteria.Organization) is { } organization)
         {
@@ -93,6 +100,35 @@ public static class ZammadSearchQuery
         }
 
         return domain;
+    }
+
+    /// <summary>
+    /// The ticket number as Zammad shows it (digits, optionally after
+    /// "#" or "Ticket#"), or null when none was given.
+    /// </summary>
+    public static string? Number(string? value)
+    {
+        var number = Value(value);
+
+        if (number is null)
+        {
+            return null;
+        }
+
+        if (number.StartsWith("Ticket", StringComparison.OrdinalIgnoreCase))
+        {
+            number = number[6..];
+        }
+
+        number = number.TrimStart('#').Trim();
+
+        if (number.Length == 0 || !number.All(char.IsAsciiDigit))
+        {
+            throw new ArgumentException(
+                "A ticket number is the number Zammad shows, such as 44013.");
+        }
+
+        return number;
     }
 
     private static string? Value(string? value) =>

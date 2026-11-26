@@ -98,7 +98,8 @@ public sealed class ZammadTicketDirectory : ITicketDirectory
                         ticket.CreatedAt,
                         ticket.UpdatedAt,
                         null,
-                        ticket.Number))
+                        ticket.Number,
+                        _provider.TicketLink(ticket.Id)))
                     .ToArray(),
                 result.ReportedCount,
                 result.DuplicateCount,
@@ -125,7 +126,8 @@ public sealed class ZammadTicketDirectory : ITicketDirectory
             criteria.RequesterEmail,
             criteria.EmailDomain,
             criteria.FreeText,
-            criteria.SenderName);
+            criteria.SenderName,
+            criteria.TicketNumber);
     }
 
     private static IReadOnlyDictionary<long, string> Pick(

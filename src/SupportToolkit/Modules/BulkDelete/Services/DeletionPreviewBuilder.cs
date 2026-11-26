@@ -116,7 +116,8 @@ public static class DeletionPreviewBuilder
             flag,
             IsLikelyArchived(status, ticket.UpdatedAt, now, rules.ArchiveAge),
             ticket.Description,
-            ticket.Number);
+            ticket.Number,
+            ticket.Link);
     }
 
     private static string Organization(

@@ -9,24 +9,29 @@ public sealed record TicketSearchCriteria(
     string? RequesterEmail = null,
     string? EmailDomain = null,
     string? FreeText = null,
-    string? SenderName = null)
+    string? SenderName = null,
+    string? TicketNumber = null)
 {
     /// <summary>
     /// SenderName is the requester's name, which for an email ticket is
-    /// the sender.
+    /// the sender. TicketNumber is the number operators see in the system
+    /// (in Zendesk, the ticket ID); only the ticket with exactly that
+    /// number is kept.
     /// </summary>
     public bool HasAny =>
         !string.IsNullOrWhiteSpace(Organization)
         || !string.IsNullOrWhiteSpace(RequesterEmail)
         || !string.IsNullOrWhiteSpace(EmailDomain)
         || !string.IsNullOrWhiteSpace(FreeText)
-        || !string.IsNullOrWhiteSpace(SenderName);
+        || !string.IsNullOrWhiteSpace(SenderName)
+        || !string.IsNullOrWhiteSpace(TicketNumber);
 }
 
 /// <summary>
 /// One ticket a search found. Id is what the system deletes by. Number is
 /// what operators see in the system when it differs from the Id (Zammad's
-/// ticket number); null when the Id is what they see (Zendesk).
+/// ticket number); null when the Id is what they see (Zendesk). Link opens
+/// the ticket in the system, built from the configured instance.
 /// </summary>
 public sealed record TicketSummary(
     long Id,
@@ -37,7 +42,8 @@ public sealed record TicketSummary(
     DateTimeOffset? CreatedAt,
     DateTimeOffset? UpdatedAt,
     string? Description = null,
-    string? Number = null);
+    string? Number = null,
+    Uri? Link = null);
 
 /// <summary>
 /// The tickets a search returned, with an explicit completeness verdict.

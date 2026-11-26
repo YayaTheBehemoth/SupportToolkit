@@ -9,19 +9,22 @@ public sealed record ZendeskSearchCriteria(
     string? RequesterEmail = null,
     string? EmailDomain = null,
     string? FreeText = null,
-    string? SenderName = null)
+    string? SenderName = null,
+    long? TicketId = null)
 {
     /// <summary>
     /// SenderName is the requester's name, which for an email ticket is
     /// the sender. Zendesk's requester operator takes a full or partial
-    /// name as well as an email address.
+    /// name as well as an email address. TicketId is searched for as a
+    /// term, and only the ticket with exactly that ID is kept.
     /// </summary>
     public bool HasAny =>
         !string.IsNullOrWhiteSpace(Organization)
         || !string.IsNullOrWhiteSpace(RequesterEmail)
         || !string.IsNullOrWhiteSpace(EmailDomain)
         || !string.IsNullOrWhiteSpace(FreeText)
-        || !string.IsNullOrWhiteSpace(SenderName);
+        || !string.IsNullOrWhiteSpace(SenderName)
+        || TicketId is not null;
 }
 
 /// <summary>
@@ -80,6 +83,21 @@ public static class ZendeskSearchQuery
         {
             terms.Add(
                 "requester:*@" + NormalizeDomain(criteria.EmailDomain));
+        }
+
+        if (criteria.TicketId is { } ticketId)
+        {
+            if (ticketId <= 0)
+            {
+                throw new ArgumentException(
+                    "A ticket number is a positive whole number.",
+                    nameof(criteria));
+            }
+
+            // Unverified against Zendesk: a bare number is searched as
+            // text, and the result is narrowed to that ID afterwards, so
+            // a search that does not return it finds nothing.
+            terms.Add(ticketId.ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
 
         if (!string.IsNullOrWhiteSpace(criteria.FreeText))

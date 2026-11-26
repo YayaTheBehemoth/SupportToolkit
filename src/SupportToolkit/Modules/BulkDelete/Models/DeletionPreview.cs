@@ -33,7 +33,8 @@ public sealed record DeletionPreviewTicket(
     DeletionPreviewFlag? Flag,
     bool LikelyArchived = false,
     string? Description = null,
-    string? Number = null)
+    string? Number = null,
+    Uri? Link = null)
 {
     /// <summary>
     /// The ticket as operators know it: "#" and its number, or its ID when

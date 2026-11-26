@@ -122,7 +122,8 @@ public sealed class ZendeskBulkDeleteSession : IDisposable
                 new ZendeskTicketDirectory(
                     tokenSource.SignInAsync,
                     new ZendeskTicketSearchProvider(client),
-                    new ZendeskDirectoryProvider(client)));
+                    new ZendeskDirectoryProvider(client),
+                    id => ZendeskTicketDirectory.AgentLink(options.BaseUri, id)));
 
         HttpClient? deleterClient = null;
         DeletionExecutor? executor = null;

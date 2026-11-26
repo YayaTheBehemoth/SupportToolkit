@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using SupportToolkit.Modules.BulkDelete.Models;
@@ -50,16 +51,27 @@ public sealed class ZendeskTicketDirectory : ITicketDirectory
     private readonly Func<CancellationToken, Task> _signIn;
     private readonly ZendeskTicketSearchProvider _search;
     private readonly ZendeskDirectoryProvider _directory;
+    private readonly Func<long, Uri>? _ticketLink;
 
+    /// <param name="ticketLink">
+    /// The agent link of a ticket, from the configured instance; null
+    /// shows no link.
+    /// </param>
     public ZendeskTicketDirectory(
         Func<CancellationToken, Task> signIn,
         ZendeskTicketSearchProvider search,
-        ZendeskDirectoryProvider directory)
+        ZendeskDirectoryProvider directory,
+        Func<long, Uri>? ticketLink = null)
     {
         _signIn = signIn ?? throw new ArgumentNullException(nameof(signIn));
         _search = search ?? throw new ArgumentNullException(nameof(search));
         _directory = directory ?? throw new ArgumentNullException(nameof(directory));
+        _ticketLink = ticketLink;
     }
+
+    /// <summary>The agent view of a ticket on a Zendesk instance.</summary>
+    public static Uri AgentLink(Uri instance, long ticketId) =>
+        new(instance, "agent/tickets/" + ticketId.ToString(CultureInfo.InvariantCulture));
 
     public TicketSystemRules Rules => ZendeskDeletionRules.Rules;
 
@@ -100,7 +112,9 @@ public sealed class ZendeskTicketDirectory : ITicketDirectory
                         ticket.OrganizationId,
                         ticket.CreatedAt,
                         ticket.UpdatedAt,
-                        ticket.Description))
+                        ticket.Description,
+                        null,
+                        _ticketLink?.Invoke(ticket.Id)))
                     .ToArray(),
                 result.ReportedCount,
                 result.DuplicateCount,
@@ -134,7 +148,29 @@ public sealed class ZendeskTicketDirectory : ITicketDirectory
             criteria.RequesterEmail,
             criteria.EmailDomain,
             criteria.FreeText,
-            criteria.SenderName);
+            criteria.SenderName,
+            TicketNumber(criteria.TicketNumber));
+    }
+
+    /// <summary>
+    /// A Zendesk ticket number is its ID: digits, optionally after "#".
+    /// </summary>
+    private static long? TicketNumber(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var digits = value.Trim().TrimStart('#');
+
+        return digits.Length > 0
+               && digits.All(char.IsAsciiDigit)
+               && long.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var id)
+               && id > 0
+            ? id
+            : throw new ArgumentException(
+                "A ticket number is a positive whole number, such as 12345.");
     }
 
     private static async Task SignInGuard(

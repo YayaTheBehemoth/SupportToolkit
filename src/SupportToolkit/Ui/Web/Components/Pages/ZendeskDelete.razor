@@ -152,6 +152,11 @@ else if (session is not null)
                 }
             </label>
             <label>Words in the ticket<input type="text" @bind="_text" @bind:event="oninput" /></label>
+            <label>
+                Ticket number
+                <input type="text" inputmode="numeric" @bind="_number" @bind:event="oninput" />
+                <small class="muted">Finds only the ticket with exactly this number.</small>
+            </label>
         </div>
 
         @if (web.SearchProblem is not null)
@@ -284,6 +289,11 @@ else if (session is not null)
                 @if (State.View.IsDetailed) { <td>@ticket.RequesterDomain</td> }
                 <td>@Subject(ticket.Subject)</td>
                 <td class="muted">
+                    @if (ticket.Link is { } ticketLink)
+                    {
+                        <a href="@ticketLink.AbsoluteUri" target="_blank" rel="noopener noreferrer"
+                           title="Open @ticket.Shown in @Rules.SystemName">Open in @Rules.SystemName</a>
+                    }
                     @Describe(ticket.Flag)
                     @if (ticket.LikelyArchived)
                     {
@@ -506,6 +516,7 @@ else if (session is not null)
     private string _requester = "";
     private string _domain = "";
     private string _text = "";
+    private string _number = "";
 
     private readonly HashSet<long> _expanded = [];
 
@@ -539,6 +550,7 @@ else if (session is not null)
         if (!string.IsNullOrWhiteSpace(criteria.RequesterEmail)) yield return ("Requester email", criteria.RequesterEmail);
         if (!string.IsNullOrWhiteSpace(criteria.EmailDomain)) yield return ("Email domain", criteria.EmailDomain);
         if (!string.IsNullOrWhiteSpace(criteria.FreeText)) yield return ("Words in the ticket", criteria.FreeText);
+        if (!string.IsNullOrWhiteSpace(criteria.TicketNumber)) yield return ("Ticket number", criteria.TicketNumber);
     }
 
     private static string? Blank(string value) =>
@@ -557,7 +569,8 @@ else if (session is not null)
                 Blank(_requester),
                 Blank(_domain),
                 Blank(_text),
-                Blank(_sender)));
+                Blank(_sender),
+                Blank(_number)));
     }
 
     private void Toggle(long id, bool selected) =>
@@ -627,6 +640,7 @@ else if (session is not null)
         _requester = "";
         _domain = "";
         _text = "";
+        _number = "";
     }
 
     private static int ProgressPercent(DeletionProgress? progress)

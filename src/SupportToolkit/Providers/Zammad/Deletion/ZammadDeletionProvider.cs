@@ -93,6 +93,9 @@ public sealed class ZammadDeletionProvider
 
     public Uri BaseUri => _client.BaseUri;
 
+    /// <summary>The agent view of a ticket, from the configured instance.</summary>
+    public Uri TicketLink(long ticketId) => _client.GetTicketViewUri(ticketId);
+
     /// <summary>
     /// The token's user and role names. Throws ZammadApiException for a
     /// refused token (401) or any other answer.
@@ -336,6 +339,12 @@ public sealed class ZammadDeletionProvider
                 : null;
 
         var email = customer?.Email?.Trim();
+
+        if (ZammadSearchQuery.Number(criteria.TicketNumber) is { } number
+            && !string.Equals(ticket.Number?.Trim(), number, StringComparison.Ordinal))
+        {
+            return false;
+        }
 
         if (!string.IsNullOrWhiteSpace(criteria.Organization)
             && !(ticket.OrganizationId is { } organizationId
