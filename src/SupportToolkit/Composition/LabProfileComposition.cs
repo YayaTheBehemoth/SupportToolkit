@@ -1,14 +1,15 @@
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Modules.BackupAggregator;
+using SupportToolkit.Modules.UsageReport;
 using SupportToolkit.Providers.Dolibarr.Configuration;
 using SupportToolkit.Providers.Duplicati.Configuration;
-using SupportToolkit.Providers.OsTicket.Configuration;
+using SupportToolkit.Providers.Zammad.Configuration;
 
 namespace SupportToolkit.Composition;
 
 /// <summary>
 /// The "lab" profile: SupportToolkit against the second-provider lab that
-/// lab/up.sh starts (osTicket, Duplicati, Dolibarr), on the same loopback
+/// lab/up.sh starts (Zammad, Duplicati, Dolibarr), on the same loopback
 /// ports wherever it runs: in the codespace, or on another computer with
 /// those ports forwarded. Everything here must match lab/up.sh.
 ///
@@ -34,14 +35,16 @@ public static class LabProfileComposition
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
-        var osTicket = new Dictionary<string, OsTicketConnectionConfiguration>(OsTicketConnections.Read(configuration))
+        // Zammad replaced osTicket in the lab: an osTicket "lab" connection
+        // from earlier is left as it is, unused.
+        var zammad = new Dictionary<string, ZammadConnectionConfiguration>(ZammadConnections.Read(configuration))
         {
             [ConnectionName] = new()
             {
-                BaseUrl = "http://127.0.0.1:8080/",
-                RequesterName = "Example Requester",
-                RequesterEmail = "requester@example.com",
-                Destinations = { ["backups"] = new OsTicketDestinationConfiguration { TopicId = 10 } }
+                BaseUrl = "http://127.0.0.1:8100/",
+                Customer = "backups@lab.example",
+                BulkDelete = true,
+                Destinations = { ["backups"] = new ZammadDestinationConfiguration { Group = "Users" } }
             }
         };
 
@@ -70,7 +73,7 @@ public static class LabProfileComposition
             [ConnectionName] = new() { BaseUrl = "http://127.0.0.1:8090/" }
         };
 
-        OsTicketConnections.Write(configuration, osTicket);
+        ZammadConnections.Write(configuration, zammad);
         DuplicatiConnections.Write(configuration, duplicati);
         DolibarrConnections.Write(configuration, dolibarr);
 
@@ -81,15 +84,25 @@ public static class LabProfileComposition
         configuration.Profiles[existing ?? ProfileName] =
             new SupportToolkitProfile
             {
-                Ticketing = new() { Provider = OsTicketConnections.ProviderKey, Connection = ConnectionName, Destination = "backups" },
+                Ticketing = new() { Provider = ZammadConnections.ProviderKey, Connection = ConnectionName, Destination = "backups" },
                 Backup = new() { Provider = DuplicatiConnections.ProviderKey, Connection = ConnectionName },
                 Commercial = new() { Provider = DolibarrConnections.ProviderKey, Connection = ConnectionName },
-                Modules = { [BackupAggregatorModule.ModuleCommand] = SupportToolkitMode.Production },
+                Modules =
+                {
+                    [BackupAggregatorModule.ModuleCommand] = SupportToolkitMode.Production,
+                    [UsageReportModule.ModuleCommand] = SupportToolkitMode.Production
+                },
                 MonitoringScope =
                 {
                     [BackupAggregatorModule.ModuleCommand] = new ModuleMonitoringScopeConfiguration
                     {
                         MonitoringItemNumber = MonitoringItem,
+                        ServiceItemNumbers = [BackupItem]
+                    },
+                    // The usage report compares what the backup item bills
+                    // with the storage Duplicati reports.
+                    [UsageReportModule.ModuleCommand] = new ModuleMonitoringScopeConfiguration
+                    {
                         ServiceItemNumbers = [BackupItem]
                     }
                 }
@@ -101,7 +114,7 @@ public static class LabProfileComposition
     /// <summary>Whether a missing secret belongs to the lab's connections.</summary>
     public static bool IsLabSecret(MissingSecret secret) =>
         string.Equals(secret.ConnectionName, ConnectionName, StringComparison.OrdinalIgnoreCase)
-        && (secret.Provider == OsTicketConnections.Instance.ProviderName
+        && (secret.Provider == ZammadConnections.Instance.ProviderName
             || secret.Provider == DuplicatiConnections.Instance.ProviderName
             || secret.Provider == DolibarrConnections.Instance.ProviderName);
 }

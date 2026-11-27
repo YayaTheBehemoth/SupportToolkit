@@ -160,8 +160,11 @@ public sealed class ZendeskTicketSearchProvider
                 $"{unique} unique tickets were received.";
         }
 
+        // A ticket number keeps only that ticket; completeness is judged on
+        // the whole search above.
         return new ZendeskSearchResult(
             tickets.Values
+                .Where(ticket => criteria.TicketId is not { } id || ticket.Id == id)
                 .OrderBy(ticket => ticket.Id)
                 .ToArray(),
             reportedCount,

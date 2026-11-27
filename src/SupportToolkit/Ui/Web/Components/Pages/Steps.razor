@@ -15,16 +15,16 @@
 @code {
     private static readonly string[] Labels = ["Sign in", "Search", "Choose tickets", "Confirm"];
 
-    [Parameter, EditorRequired] public SupportToolkit.Modules.ZendeskBulkDelete.Services.BulkDeleteStage Stage { get; set; }
+    [Parameter, EditorRequired] public SupportToolkit.Modules.BulkDelete.Services.BulkDeleteStage Stage { get; set; }
 
     /// <summary>The step in progress; 4 means all four are done.</summary>
     private int Current =>
         Stage switch
         {
-            SupportToolkit.Modules.ZendeskBulkDelete.Services.BulkDeleteStage.SignedOut => 0,
-            SupportToolkit.Modules.ZendeskBulkDelete.Services.BulkDeleteStage.SignedIn => 1,
-            SupportToolkit.Modules.ZendeskBulkDelete.Services.BulkDeleteStage.Previewed => 2,
-            SupportToolkit.Modules.ZendeskBulkDelete.Services.BulkDeleteStage.Planned => 3,
+            SupportToolkit.Modules.BulkDelete.Services.BulkDeleteStage.SignedOut => 0,
+            SupportToolkit.Modules.BulkDelete.Services.BulkDeleteStage.SignedIn => 1,
+            SupportToolkit.Modules.BulkDelete.Services.BulkDeleteStage.Previewed => 2,
+            SupportToolkit.Modules.BulkDelete.Services.BulkDeleteStage.Planned => 3,
             _ => 4
         };
 }

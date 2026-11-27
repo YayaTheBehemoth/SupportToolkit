@@ -23,6 +23,12 @@ if errorlevel 1 (
     exit /b 1
 )
 
+rem WSL stops a few seconds after no Windows program uses it, and the lab's
+rem containers stop with it. A minimized window keeps it running until
+rem stop-lab.cmd closes it.
+taskkill /fi "WINDOWTITLE eq SupportToolkit lab - keeps WSL running" /t /f >nul 2>&1
+start "SupportToolkit lab - keeps WSL running" /min wsl -d %LAB_WSL_DISTRO% -- bash -c "echo This window keeps the lab running while you work. stop-lab.cmd closes it.; exec sleep infinity"
+
 echo.
 echo == SupportToolkit
 dotnet build "%PROJECT%" --nologo -v q

@@ -108,6 +108,65 @@ public static class DolibarrSubscriptionMapper
     }
 
     /// <summary>
+    /// Every contract line that names a service, as a billing line of the
+    /// subscription Map numbers it as ("contract ref/line id"). Amounts are
+    /// excluding tax; Dolibarr gives no unit, so none is stated. A value
+    /// that cannot be read is missing, never zero.
+    /// </summary>
+    internal static IReadOnlyList<DolibarrBillingLine> MapBillingLines(
+        IReadOnlyList<DolibarrContractDto> contracts)
+    {
+        var lines = new List<DolibarrBillingLine>();
+
+        foreach (var contract in contracts)
+        {
+            if (string.IsNullOrWhiteSpace(contract.Ref))
+            {
+                throw new DolibarrApiException(
+                    "Dolibarr returned a contract without a reference.");
+            }
+
+            foreach (var line in contract.Lines ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(line.ProductRef))
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(line.Id))
+                {
+                    throw new DolibarrApiException(
+                        "Dolibarr returned a contract line without an ID.");
+                }
+
+                lines.Add(
+                    new DolibarrBillingLine(
+                        $"{contract.Ref.Trim()}/{line.Id.Trim()}",
+                        int.TryParse(line.Id.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var number)
+                            ? number
+                            : null,
+                        line.ProductRef.Trim(),
+                        string.IsNullOrWhiteSpace(line.Description) ? null : line.Description.Trim(),
+                        Number(line.Quantity),
+                        Number(line.UnitPrice),
+                        Number(line.DiscountPercent),
+                        Number(line.Amount)));
+            }
+        }
+
+        return lines;
+    }
+
+    private static decimal? Number(string? value) =>
+        decimal.TryParse(
+            value,
+            NumberStyles.Number,
+            CultureInfo.InvariantCulture,
+            out var number)
+            ? number
+            : null;
+
+    /// <summary>
     /// Customer parties for the requested customer numbers. A code held by
     /// customers of different names keeps no name: a conflict is never
     /// turned into a guess.

@@ -1,5 +1,11 @@
 # osTicket lab
 
+**No longer started by `lab/up.sh`** (since November 25, 2026): the lab's
+ticketing system is now [Zammad](../zammad/README.md), because osTicket's API
+can only create tickets, and the bulk delete needs search and delete. The
+toolkit's osTicket provider, and the findings below, are unchanged; this
+instance can still be started by hand as described here.
+
 A throwaway osTicket instance for **API contract discovery** only. Daily
 development and every test run against the recorded, synthetic fixtures in
 `tests/`, never against this instance. Nothing here touches work systems.

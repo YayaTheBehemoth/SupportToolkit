@@ -2,6 +2,8 @@ using SupportToolkit.Core.Configuration;
 using SupportToolkit.Domain.MonitoringScope;
 using SupportToolkit.Modules.BackupAggregator.Production;
 using SupportToolkit.Modules.BackupAggregator.Services;
+using SupportToolkit.Modules.UsageReport.Production;
+using SupportToolkit.Modules.UsageReport.Services;
 using SupportToolkit.Providers.Dolibarr.Configuration;
 using SupportToolkit.Providers.Dolibarr.Subscriptions;
 
@@ -21,11 +23,19 @@ public static class CommercialSystemsComposition
         Func<CancellationToken, Task<ISmartSubscriptionEvidenceSource>> Evidence,
         Func<CancellationToken, Task<ICustomerNameSource>> Names);
 
+    /// <param name="CheckUsage">
+    /// The usage report's local check of the system's configuration;
+    /// with OpenUsage, null when the usage report cannot read the system.
+    /// </param>
     private sealed record CommercialSystem(
         string Key,
         string Name,
         Func<SupportToolkitConfigurationResolver, ScopedReviewProductionSources, CancellationToken, Task<ISmartSubscriptionEvidenceSource>> Evidence,
-        Func<SupportToolkitConfigurationResolver, ScopedReviewProductionSources, CancellationToken, Task<ICustomerNameSource>> Names);
+        Func<SupportToolkitConfigurationResolver, ScopedReviewProductionSources, CancellationToken, Task<ICustomerNameSource>> Names,
+        Func<SupportToolkitConfigurationResolver, CancellationToken, Task>? CheckUsage = null,
+        Func<SupportToolkitConfigurationResolver, CancellationToken, Task<IUsageCommercialSource>>? OpenUsage = null,
+        string? UsageQuantityName = null,
+        bool UsageSignsInWithBrowser = false);
 
     private static readonly CommercialSystem[] Systems =
     [
@@ -41,7 +51,12 @@ public static class CommercialSystemsComposition
             {
                 await RequireBusinessCentralFieldAsync(resolver, token);
                 return await businessCentral.CreateNameSourceAsync(token);
-            }),
+            },
+            CheckUsage: async (resolver, token) =>
+                await resolver.GetBusinessCentralConnectionAsync(token),
+            OpenUsage: BusinessCentralUsageSource.CreateAsync,
+            UsageQuantityName: ProductionUsageReportSources.FirstSystemNames.QuantityName,
+            UsageSignsInWithBrowser: true),
         new(
             DolibarrConnections.ProviderKey,
             DolibarrConnections.Instance.ProviderName,
@@ -50,8 +65,56 @@ public static class CommercialSystemsComposition
                     await DolibarrConnections.Instance.ResolveAsync(resolver, token)),
             async (resolver, _, token) =>
                 new DolibarrCustomerNameSource(
-                    await DolibarrConnections.Instance.ResolveAsync(resolver, token)))
+                    await DolibarrConnections.Instance.ResolveAsync(resolver, token)),
+            CheckUsage: async (resolver, token) =>
+                await DolibarrConnections.Instance.ResolveAsync(resolver, token),
+            OpenUsage: DolibarrUsageSource.CreateAsync)
     ];
+
+    /// <summary>
+    /// The usage report's billing half, from the same selection the review
+    /// uses. A profile that selects no commercial system reads Business
+    /// Central, as the usage report always has. Resolved on every call.
+    /// </summary>
+    public static (Func<CancellationToken, Task> Check,
+        Func<CancellationToken, Task<IUsageCommercialSource>> Open,
+        Func<CancellationToken, Task<(string Name, string? QuantityName, bool SignsInWithBrowser)>> Name)
+        ForUsageReport(SupportToolkitConfigurationResolver resolver)
+    {
+        ArgumentNullException.ThrowIfNull(resolver);
+
+        async Task<CommercialSystem> SelectAsync(CancellationToken token)
+        {
+            var selection = await resolver.GetCommercialSelectionAsync(token);
+
+            var system =
+                selection is null
+                    ? Systems.Single(candidate => candidate.Key == CommercialSelection.Providers.BusinessCentral)
+                    : await SystemAsync(resolver, token);
+
+            return system.CheckUsage is null || system.OpenUsage is null
+                ? throw new InvalidOperationException(
+                    $"The usage report cannot read billing from {system.Name}.")
+                : system;
+        }
+
+        return (
+            async token =>
+            {
+                var system = await SelectAsync(token);
+                await system.CheckUsage!(resolver, token);
+            },
+            async token =>
+            {
+                var system = await SelectAsync(token);
+                return await system.OpenUsage!(resolver, token);
+            },
+            async token =>
+            {
+                var system = await SelectAsync(token);
+                return (system.Name, system.UsageQuantityName, system.UsageSignsInWithBrowser);
+            });
+    }
 
     public static IReadOnlyList<string> KnownProviders { get; } =
         Systems.Select(system => system.Key).ToArray();

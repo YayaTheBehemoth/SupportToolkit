@@ -12,7 +12,14 @@ namespace SupportToolkit.Modules.UsageReport.Services;
 public sealed record UsageReportAvailability(
     SupportToolkitMode Mode,
     bool IsAvailable,
-    string? Reason);
+    string? Reason)
+{
+    /// <summary>
+    /// What the report's systems are called; null when they could not be
+    /// determined.
+    /// </summary>
+    public UsageSystemNames? Systems { get; init; }
+}
 
 /// <summary>
 /// Generates a usage report: Acronis storage per customer next to what

@@ -1,0 +1,165 @@
+
+namespace SupportToolkit.Modules.BulkDelete.Models;
+
+public sealed record PlannedTicket(
+    long Id,
+    string Status,
+    DeletionPreviewFlag? Flag,
+    DateTimeOffset? UpdatedAt,
+    bool LikelyArchived = false,
+    string? Number = null)
+{
+    /// <summary>The ticket as operators know it ("#44013", or "#11").</summary>
+    public string Shown => TicketDisplay.Show(Id, Number);
+}
+
+/// <summary>
+/// The exact, frozen list of tickets a deletion will send.
+///
+/// It is built from a selection once, and then never changes. Deletion
+/// sends only these IDs: the search is never run again at delete time, so
+/// the set cannot drift between confirmation and deletion.
+///
+/// A plan is refused when the search was incomplete, when nothing is
+/// selected, or when a selected ticket cannot be deleted.
+/// </summary>
+public sealed class DeletionPlan
+{
+    private DeletionPlan(
+        Guid id,
+        DateTimeOffset createdAt,
+        string instance,
+        DeletionOperator operatorUser,
+        string query,
+        IReadOnlyList<PlannedTicket> tickets,
+        TicketSystemRules rules)
+    {
+        Id = id;
+        CreatedAt = createdAt;
+        Instance = instance;
+        Operator = operatorUser;
+        Query = query;
+        Tickets = tickets;
+        Rules = rules;
+    }
+
+    public Guid Id { get; }
+
+    public DateTimeOffset CreatedAt { get; }
+
+    /// <summary>
+    /// The instance the tickets belong to, as the system names it (for
+    /// Zendesk, the subdomain).
+    /// </summary>
+    public string Instance { get; }
+
+    /// <summary>The rules of the system the tickets are deleted from.</summary>
+    public TicketSystemRules Rules { get; }
+
+    /// <summary>The instance as operators know it ("example.zendesk.com").</summary>
+    public string DisplayInstance => Rules.DisplayInstance(Instance);
+
+    /// <summary>
+    /// The most ticket IDs one deletion request carries (100 in Zendesk).
+    /// </summary>
+    public int BatchSize => Rules.BatchSize;
+
+    public DeletionOperator Operator { get; }
+
+    public string Query { get; }
+
+    /// <summary>The tickets to delete, in ID order.</summary>
+    public IReadOnlyList<PlannedTicket> Tickets { get; }
+
+    /// <summary>
+    /// Tickets that are not closed (or whose closing time is unknown).
+    /// Deleting them needs the explicit second confirmation.
+    /// </summary>
+    public IReadOnlyList<PlannedTicket> NonClosed =>
+        Tickets.Where(ticket => ticket.Flag is not null).ToArray();
+
+    /// <summary>
+    /// Closed tickets old enough to be archived (only in a system that
+    /// archives). Once deleted they are harder to restore.
+    /// </summary>
+    public IReadOnlyList<PlannedTicket> LikelyArchived =>
+        Tickets.Where(ticket => ticket.LikelyArchived).ToArray();
+
+    /// <summary>
+    /// A ticket of this plan as operators know it ("#44013"), from its ID.
+    /// </summary>
+    public string Show(long id) =>
+        TicketDisplay.Show(
+            id,
+            Tickets.FirstOrDefault(ticket => ticket.Id == id)?.Number);
+
+    /// <summary>The IDs in request-sized groups, in order.</summary>
+    public IReadOnlyList<IReadOnlyList<long>> Batches =>
+        Tickets
+            .Select(ticket => ticket.Id)
+            .Chunk(BatchSize)
+            .Select(batch => (IReadOnlyList<long>)batch)
+            .ToArray();
+
+    public static DeletionPlan Create(
+        DeletionPreviewResult preview,
+        DeletionSelection selection,
+        string instance,
+        DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(preview);
+        ArgumentNullException.ThrowIfNull(selection);
+        ArgumentException.ThrowIfNullOrWhiteSpace(instance);
+
+        if (!preview.Preview.IsSearchComplete)
+        {
+            throw new InvalidOperationException(
+                "The search is incomplete, so it is not the full set of " +
+                "matching tickets. Narrow the search before deleting. " +
+                preview.Preview.SearchIncompleteReason);
+        }
+
+        var selected = selection.SelectedTickets;
+
+        if (selected.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "No tickets are selected.");
+        }
+
+        var blocked =
+            selected.Where(
+                    ticket => !DeletionSelection.CanBeSelected(ticket))
+                .Select(ticket => ticket.Shown)
+                .ToArray();
+
+        var rules = preview.Preview.Rules;
+
+        if (blocked.Length > 0)
+        {
+            throw new InvalidOperationException(
+                "These tickets cannot be deleted yet (closed less than " +
+                $"{rules.BlockedWindowText} ago): " +
+                string.Join(", ", blocked) + ".");
+        }
+
+        return new DeletionPlan(
+            Guid.NewGuid(),
+            now,
+            instance.Trim(),
+            preview.Operator,
+            preview.Query,
+            selected
+                .Select(
+                    ticket => new PlannedTicket(
+                        ticket.Id,
+                        ticket.Status,
+                        ticket.Flag,
+                        ticket.UpdatedAt,
+                        ticket.LikelyArchived,
+                        ticket.Number))
+                .OrderBy(ticket => ticket.Id)
+                .ToArray(),
+            rules);
+    }
+}

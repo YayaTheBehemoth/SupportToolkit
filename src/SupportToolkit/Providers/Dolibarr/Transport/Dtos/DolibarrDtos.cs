@@ -44,6 +44,20 @@ internal sealed class DolibarrContractLineDto
     [JsonPropertyName("qty"), JsonConverter(typeof(LooseStringConverter))]
     public string? Quantity { get; init; }
 
+    /// <summary>Unit price before discount, excluding tax.</summary>
+    [JsonPropertyName("subprice"), JsonConverter(typeof(LooseStringConverter))]
+    public string? UnitPrice { get; init; }
+
+    [JsonPropertyName("remise_percent"), JsonConverter(typeof(LooseStringConverter))]
+    public string? DiscountPercent { get; init; }
+
+    /// <summary>The line's amount after discount, excluding tax.</summary>
+    [JsonPropertyName("total_ht"), JsonConverter(typeof(LooseStringConverter))]
+    public string? Amount { get; init; }
+
+    [JsonPropertyName("description")]
+    public string? Description { get; init; }
+
     [JsonPropertyName("date_start"), JsonConverter(typeof(LooseUnixTimeConverter))]
     public LooseTime PlannedStart { get; init; }
 

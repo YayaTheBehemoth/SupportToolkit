@@ -109,13 +109,12 @@ public sealed class DuplicatiBackupInventorySource : IBackupInventorySource
     }
 
     /// <summary>
-    /// The connection and customer name identify a customer; both are
-    /// stable, so the ID is its canonical identity too (the monitored
-    /// review requires one).
+    /// The fleet's identity of the customer (the monitored review requires
+    /// a canonical one).
     /// </summary>
     private TenantRecord Tenant(ResolvedDuplicatiCustomer customer)
     {
-        var id = $"duplicati:{_fleet.ConnectionName}:{customer.Name.ToLowerInvariant()}";
+        var id = _fleet.CustomerId(customer);
 
         return new()
         {

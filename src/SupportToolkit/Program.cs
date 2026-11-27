@@ -9,7 +9,7 @@ using SupportToolkit.Modules.BackupAggregator;
 using SupportToolkit.Modules.BackupAggregator.Services;
 using SupportToolkit.Modules.UsageReport;
 using SupportToolkit.Modules.UsageReport.Services;
-using SupportToolkit.Modules.ZendeskBulkDelete.Services;
+using SupportToolkit.Modules.BulkDelete.Services;
 using SupportToolkit.Ui;
 using SupportToolkit.Ui.Web;
 using SupportToolkit.Ui.Interactive;
@@ -136,13 +136,13 @@ try
                         webScopedWorkflow),
                     webProgress),
                 new BulkDeleteWebSession(
-                    token => ZendeskBulkDeleteComposition.GetAvailabilityAsync(
+                    token => BulkDeleteComposition.GetAvailabilityAsync(
                         configurationResolver,
                         token),
                     // Deletion is enabled here, and only here: this is the
                     // connection that can delete, used after the
                     // operator's typed confirmations.
-                    (browserUnavailable, token) => ZendeskBulkDeleteComposition.ConnectWithDeletionAsync(
+                    (browserUnavailable, token) => BulkDeleteComposition.ConnectWithDeletionAsync(
                         configurationResolver,
                         browserUnavailable,
                         token)),

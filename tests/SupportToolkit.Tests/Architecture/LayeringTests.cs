@@ -219,13 +219,13 @@ public class LayeringTests
     [
         ("Modules/UsageReport/", ["/Production/"]),
         ("Modules/BackupAggregator/", ["/Production/", "/Fixtures/"]),
-        ("Modules/ZendeskBulkDelete/", ["/Production/"])
+        ("Modules/BulkDelete/", ["/Production/"])
     ];
 
     [Theory]
     [InlineData("Modules/UsageReport/")]
     [InlineData("Modules/BackupAggregator/")]
-    [InlineData("Modules/ZendeskBulkDelete/")]
+    [InlineData("Modules/BulkDelete/")]
     public void ProviderAgnosticModules_ReferenceProviders_OnlyInTheirProductionAdapter(
         string module)
     {
