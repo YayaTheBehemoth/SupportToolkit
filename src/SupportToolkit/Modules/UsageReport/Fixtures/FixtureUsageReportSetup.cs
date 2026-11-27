@@ -1,4 +1,5 @@
 using SupportToolkit.Core.Configuration;
+using SupportToolkit.Modules.UsageReport.Production;
 using SupportToolkit.Modules.UsageReport.Services;
 
 namespace SupportToolkit.Modules.UsageReport.Fixtures;
@@ -15,7 +16,11 @@ public sealed class FixtureUsageReportSetup : IUsageReportSetup
     public Task<UsageReportAvailability> GetAvailabilityAsync(
         CancellationToken cancellationToken) =>
         Task.FromResult(
-            new UsageReportAvailability(SupportToolkitMode.Fixture, true, null));
+            new UsageReportAvailability(SupportToolkitMode.Fixture, true, null)
+            {
+                // The synthetic data stands for the first systems.
+                Systems = ProductionUsageReportSources.FirstSystemNames
+            });
 
     public Task<UsageReportRun> OpenAsync(
         CancellationToken cancellationToken) =>

@@ -15,7 +15,7 @@ SupportToolkit currently includes:
 - **Configuration management** — Reusable provider connections, runtime profiles, and secure credential storage.
 - **Interactive CLI** — Menu-driven workflows alongside commands suitable for scripting.
 - **Usage report** — Acronis storage per customer against what Business Central bills for backup, for the monthly reconciliation.
-- **Web UI** — A local browser interface for the Backup Aggregator, Zendesk bulk delete and the usage report, started with one double-click or `SupportToolkit serve`.
+- **Web UI** — A local browser interface for the Backup Aggregator, bulk delete and the usage report, started with one double-click or `SupportToolkit serve`.
 
 The application supports fixture-based development and production integrations through the same underlying workflows.
 
@@ -161,7 +161,7 @@ The repository has a dev container (`.devcontainer/devcontainer.json`): the .NET
    - Open the printed link, replacing `127.0.0.1` with `localhost` if needed.
 
    The same holds on any Linux machine of your own: run `serve` there and reach it with `ssh -L 5050:127.0.0.1:5050 <machine>`. The Zendesk deletion sign-in also redirects to `localhost` on the machine running the toolkit, so it completes only when that port is forwarded the same way.
-5. **Second-provider lab.** `lab/up.sh` starts self-hosted stand-ins (osTicket, Duplicati, Dolibarr) with synthetic records, and `configure lab` adds a `lab` profile beside your own; switch with `configure use lab` and back with `configure use <your profile>`. `lab/up.sh --links` prints the addresses, logins and commands. The installed exe can use the lab too, through the same kind of same-port tunnel. See [lab/README.md](lab/README.md).
+5. **Second-provider lab.** `lab/up.sh` starts self-hosted stand-ins (Zammad, Duplicati, Dolibarr) with synthetic records, and `configure lab` adds a `lab` profile beside your own; switch with `configure use lab` and back with `configure use <your profile>`. `lab/up.sh --links` prints the addresses, logins and commands. The installed exe can use the lab too, through the same kind of same-port tunnel. See [lab/README.md](lab/README.md).
 6. **Stop the codespace when you are done.** The free quota counts the time a codespace is running and the storage it keeps; a stopped codespace still uses storage until it is deleted.
 
 The Windows release (`scripts/publish-windows.cmd`) is built on Windows only.
@@ -436,6 +436,13 @@ Every month, finance compares each customer's Acronis storage with what Business
 - **Business Central**: the subscription lines for the backup items, with item, description, unit, quantity, unit price, discount and amount. The amount is Business Central's own figure; the toolkit calculates no prices. These columns are read by a separate request with its own field list, so the entitlement read never asks for prices and a renamed price column fails only this read.
 - Customers are matched to Acronis tenants by name, automatically, as in the monitored review. Nothing is stored.
 
+**Which systems.** The usage report reads the systems the profile's `backup` and `commercial` settings select, the same ones the Backup Aggregator reviews, so both modules read the same backup data. A profile without those settings reads Acronis and Business Central, as described here. The lab profile reads **Duplicati** and **Dolibarr**:
+
+- **Duplicati**: each customer's storage is the size of its jobs' backups at their destinations, as each server last reported it. A job that has never completed a backup holds none and is not counted (a notice says how many). A completed job without a reported size, or a server that cannot be read, makes the customer's figure unknown. Duplicati backs up no Microsoft 365, so that figure is unknown with that reason, never zero.
+- **Dolibarr**: each contract line is a billing line (quantity, unit price, discount, amount excluding tax), numbered as the monitored review numbers it. Dolibarr states no unit.
+
+A selected system the usage report cannot read is reported as unavailable; it never falls back to another. The web page names the systems actually read.
+
 **Units.** Usage is compared in GB as the Acronis portal shows it: the portal labels its figures GB but counts 1,073,741,824 bytes per GB, and the billed backup quantity is taken from the portal's figure. Decimal GB (1,000,000,000 bytes) would be about 7% higher for the same data; the detailed view shows it, with the bytes, for reference.
 
 **What the report computes.** Only a unit conversion, adding up (a metric's lines, a customer's tenants, a customer's backup lines) and one subtraction: billed GB minus the Acronis total. Nothing is judged and there are no thresholds. A customer whose Acronis total is not backup + Microsoft 365 gets a note; no figure is changed.
@@ -467,9 +474,9 @@ The console prints counts by default. `--names` adds the per-customer rows, whic
 
 ---
 
-## Zendesk bulk delete
+## Bulk delete
 
-SupportToolkit has an interactive way to find and bulk-delete Zendesk tickets, for example everything for a customer that has left. It signs in, searches, shows a preview, and, only when asked with `--delete`, deletes the tickets you selected after two typed confirmations and writes a receipt. Without `--delete` it only reads. It is available as a developer command and as a page in the [Web UI](#web-ui), which follows the same rules.
+SupportToolkit has an interactive way to find and bulk-delete tickets, for example everything for a customer that has left, in the profile's ticketing system: Zendesk, or [Zammad](#bulk-delete-in-zammad). It signs in, searches, shows a preview, and, only when asked, deletes the tickets you selected after two typed confirmations and writes a receipt. It is available as a page in the [Web UI](#web-ui) for both systems, and as a developer command for Zendesk (`--delete`; without it the command only reads). Both follow the same rules.
 
 ### Two Zendesk connections
 
@@ -486,6 +493,16 @@ SupportToolkit has two Zendesk connections, separated by function. They are conf
 | Environment overrides | `ZENDESK_*` | None |
 
 Both may point at the same Zendesk subdomain; they still use different OAuth clients. A missing deletion connection does not affect ticketing, and the reverse. `configure status` shows them in separate sections.
+
+### Which system bulk delete works on
+
+Bulk delete works on the ticketing system the profile selects: a profile whose review tickets go to one system never deletes in another. Deleting still uses its own access, kept apart from the access that creates tickets (for Zendesk, the deletion connection above), and that access must point at the same instance:
+
+- A profile that sends tickets to Zendesk deletes with its Zendesk deletion connection. If the deletion connection points at a different subdomain than the ticketing connection, bulk delete is refused and says why.
+- A profile that selects no ticketing system keeps using its Zendesk deletion connection, as before.
+- A profile whose ticketing system SupportToolkit cannot delete from (osTicket, whose API cannot delete tickets) shows bulk delete as unavailable. It never falls back to another system.
+
+Each system declares its own deletion rules (how many tickets per request, any waiting time after closing, archiving, how long deleted tickets can be restored), and the preview, plan, confirmations and receipt follow them. Zendesk's are the ones described below.
 
 ### Sign-in
 
@@ -544,6 +561,17 @@ dotnet run --project src\SupportToolkit -- dev zendesk-bulk-delete --production 
 Before the first request, a receipt listing every ticket ID is written. If that cannot be written, nothing is deleted. It is rewritten when the run ends, including a run that stopped or was cancelled. It records the Zendesk instance, who signed in, the search, the time, the typed confirmations, and each ticket's ID, its status when planned, its outcome and its job ID. It never contains ticket subjects or content.
 
 A receipt still identifies a customer's tickets, so the folder is refused if it lies inside a git working tree. Keep receipts private and do not share them publicly.
+
+### Bulk delete in Zammad
+
+A profile whose ticketing system is Zammad deletes in that Zammad, through the web UI. The flow, the confirmations, the frozen list and the receipts are the ones above; what differs is Zammad's:
+
+- **Its own token.** The Zammad connection needs `bulkDelete: true` and a second secret, the **deletion token**: a separate Zammad token with the `admin` permission, which Zammad requires to delete. The token that creates the review's tickets needs only `ticket.agent` and so cannot delete. Using one token for both is refused. A connection without `bulkDelete` is used for tickets only, and needs no deletion token. There is no browser sign-in: the saved deletion token signs in, and the page names its user and roles.
+- **Search.** Organization, requester, domain, sender name and words, joined with AND, read 100 per page until Zammad's own count is reached; any shortfall makes the search **incomplete**. Zammad's search matches loosely (a phrase within a longer organization name, a domain as an email suffix), so only tickets whose organization, requester, domain or sender name match **exactly** are kept. The preview shows no ticket text, which Zammad's search does not return.
+- **Numbers.** Zammad's API deletes by ticket ID, but its screens show the ticket number (ID 13 is `Ticket#44013`). The preview, plan, result and receipt show the number; the receipt records both.
+- **Deletion is immediate and permanent.** One ticket per request, at once. There is no trash, no waiting time after closing, and no archive, so a closed ticket of any age can be deleted, and a deleted one cannot be restored. A `404` means the ticket was not deleted (it no longer existed). A refused token or missing `admin` permission stops the run before another ticket is sent; any other answer, or none, leaves the ticket *Unknown*.
+
+The observed API behaviour is recorded in [lab/zammad/README.md](lab/zammad/README.md).
 
 ---
 
@@ -932,7 +960,7 @@ The release zip also has `Start SupportToolkit.cmd`: double-click it to start th
 - **Profile.** Choose which profile everything uses. The configuration wizard stays in the console (`SupportToolkit configure`).
 - **Backup Aggregator.** Run or refresh the monitored review, with progress and Cancel. Read the completeness banner and the Attention, Unclassified and Incomplete tabs (the detailed view adds Scope and Reconciliation). **Prepare ticket** then shows the exact ticket and its Zendesk destination to confirm before anything is created. What can be prepared or submitted, and that a prepared ticket is used once, is decided by the same `BackupReviewSession` the console uses.
 - **Usage report.** **Generate report** compares Acronis storage with Business Central billing per customer, with progress and Cancel. Each row folds out to show its billing lines and the Acronis figures in both units; the detailed view adds the portal's figures and the customers whose subscription is not active. See [Usage report](#usage-report).
-- **Zendesk bulk delete.** Sign in, search, choose tickets, check the plan and type the confirmations, with progress and a result. The rules are the command's: closed tickets are chosen for you and others need a second confirmation, an incomplete search is never deleted from, and nothing is sent that was not in the confirmed plan. Deletion runs in the background, so reloading or closing the tab does not stop it; **Exit** stops it cleanly and writes the receipt.
+- **Bulk delete** (menu "Bulk delete"), on the profile's ticketing system: Zendesk or Zammad. Sign in, search, choose tickets, check the plan and type the confirmations, with progress and a result. The search also takes a **ticket number**, and keeps only the ticket with exactly that number (in Zammad, the number it shows; in Zendesk, the ID, searched as text and then narrowed to that ID). Each ticket's row has a link that opens the ticket in its system, built from the configured instance. The rules are the command's: closed tickets are chosen for you and others need a second confirmation, an incomplete search is never deleted from, and nothing is sent that was not in the confirmed plan. Deletion runs in the background, so reloading or closing the tab does not stop it; **Exit** stops it cleanly and writes the receipt.
 
 A **Simple / Detailed** switch in the top bar (Simple by default) hides technical detail such as ticket ID lists, request counts, job progress and the scope tabs. It never hides a warning, the Zendesk instance, a count, a typed confirmation, a failed or unknown outcome, or the receipt.
 
@@ -1003,7 +1031,7 @@ src/
     │   │   ├── Reporting/
     │   │   └── Services/
     │   │
-    │   └── ZendeskBulkDelete/
+    │   └── BulkDelete/
     │       ├── Models/
     │       ├── Production/
     │       ├── Reporting/
@@ -1235,7 +1263,7 @@ BackupAggregator and Zendesk ticket submission are implemented on `main`, with a
 
 Provider behavior is only considered production-validated where real external responses have been observed and checked.
 
-Deployment model, scheduling, persistence and an operator-friendly interface are intentionally undecided. Different modules have different operational needs, and the console has usability limits for non-developers. A local web UI now exists for the Backup Aggregator, Zendesk bulk delete and the usage report; it runs on the same rules as the console. These will be revisited when a validated workflow needs them rather than designed up front.
+Deployment model, scheduling, persistence and an operator-friendly interface are intentionally undecided. Different modules have different operational needs, and the console has usability limits for non-developers. A local web UI now exists for the Backup Aggregator, bulk delete and the usage report; it runs on the same rules as the console. These will be revisited when a validated workflow needs them rather than designed up front.
 
 The current focus is correctness, maintainability, explicit operator control, and practical usefulness in MSP support workflows.
 

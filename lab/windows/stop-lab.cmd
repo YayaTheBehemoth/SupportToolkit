@@ -1,9 +1,11 @@
 @echo off
 setlocal
 rem Switches SupportToolkit back to the profile that was active before
-rem start-lab.cmd, or to the profile named as the argument.
-rem   stop-lab.cmd           switch back; the lab keeps running in WSL
-rem   stop-lab.cmd --down    switch back and stop the lab (its data is kept)
+rem start-lab.cmd, or to the profile named as the argument, and closes the
+rem window that kept WSL running.
+rem   stop-lab.cmd           switch back; the lab stops when WSL goes idle,
+rem                          unless an Ubuntu terminal is still open
+rem   stop-lab.cmd --down    switch back and stop the lab now (its data is kept)
 rem   stop-lab.cmd <name>    switch to <name> instead
 
 if not defined LAB_WSL_DISTRO set "LAB_WSL_DISTRO=Ubuntu-24.04"
@@ -27,3 +29,5 @@ if defined TARGET (
 if defined DOWN (
     wsl -d %LAB_WSL_DISTRO% -- bash -c "cd %LAB_WSL_REPO% && lab/up.sh --stop"
 )
+
+taskkill /fi "WINDOWTITLE eq SupportToolkit lab - keeps WSL running" /t /f >nul 2>&1

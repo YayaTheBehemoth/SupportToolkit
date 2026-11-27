@@ -3,6 +3,7 @@ using SupportToolkit.Core.Configuration;
 using SupportToolkit.Providers.Dolibarr.Configuration;
 using SupportToolkit.Providers.Duplicati.Configuration;
 using SupportToolkit.Providers.OsTicket.Configuration;
+using SupportToolkit.Providers.Zammad.Configuration;
 using static SupportToolkit.Tests.Ui.Web.StatusTestSupport;
 
 namespace SupportToolkit.Tests.Composition;
@@ -16,7 +17,8 @@ public class LabProfileTests
     private static MemorySecrets LabSecrets() =>
         new(new Dictionary<string, string>
         {
-            [OsTicketConnections.ApiKey("lab").Key] = "EXAMPLE-LAB-1",
+            [ZammadConnections.ApiToken("lab").Key] = "EXAMPLE-LAB-1",
+            [ZammadConnections.DeletionToken("lab").Key] = "EXAMPLE-LAB-5",
             [DuplicatiConnections.ServerPassword("lab", "machine-a").Key] = "EXAMPLE-LAB-2",
             [DuplicatiConnections.ServerPassword("lab", "machine-b").Key] = "EXAMPLE-LAB-3",
             [DolibarrConnections.ApiKey("lab").Key] = "EXAMPLE-LAB-4"
@@ -33,9 +35,9 @@ public class LabProfileTests
         var (_, _, resolver) = Create(configuration, LabSecrets());
 
         var ticketing = await TicketingComposition.ResolveTargetAsync(resolver);
-        Assert.Equal("osTicket", ticketing.Destination.SystemName);
+        Assert.Equal("Zammad", ticketing.Destination.SystemName);
         Assert.Equal("127.0.0.1", ticketing.Destination.InstanceHost);
-        Assert.Equal("10", ticketing.Destination.RoutingId);
+        Assert.Equal("Users", ticketing.Destination.RoutingId);
 
         var fleet = await DuplicatiConnections.Instance.ResolveAsync(resolver, CancellationToken.None);
         Assert.Equal(["Contoso", "Northwind Traders"], fleet.Customers.Select(customer => customer.Name));
@@ -52,11 +54,14 @@ public class LabProfileTests
     {
         var configuration = FullConfiguration();
 
+        // Including an osTicket "lab" connection from before Zammad
+        // replaced osTicket in the lab.
         OsTicketConnections.Write(
             configuration,
             new Dictionary<string, OsTicketConnectionConfiguration>
             {
-                ["office"] = new() { BaseUrl = "https://helpdesk.example.com/" }
+                ["office"] = new() { BaseUrl = "https://helpdesk.example.com/" },
+                ["lab"] = new() { BaseUrl = "http://127.0.0.1:8080/" }
             });
 
         var before = configuration.Profiles["work"];
@@ -69,6 +74,10 @@ public class LabProfileTests
         Assert.Equal(
             ["lab", "office"],
             OsTicketConnections.Read(configuration).Keys.Order());
+        Assert.Equal(
+            "http://127.0.0.1:8080/",
+            OsTicketConnections.Read(configuration)["lab"].BaseUrl);
+        Assert.Equal(["lab"], ZammadConnections.Read(configuration).Keys);
     }
 
     [Fact]
@@ -96,9 +105,29 @@ public class LabProfileTests
 
         var lab = missing.Where(LabProfileComposition.IsLabSecret).ToArray();
 
-        Assert.Equal(4, lab.Length);
+        // Zammad's API token and its separate deletion token, two Duplicati
+        // passwords and the Dolibarr key.
+        Assert.Equal(5, lab.Length);
+        Assert.Contains(lab, secret => secret.Provider == "Zammad" && secret.SecretName == "deletion token");
         Assert.Contains(missing, secret => secret.Provider == "Acronis");
         Assert.DoesNotContain(lab, secret => secret.Provider == "Acronis");
+    }
+
+    [Fact]
+    public async Task TheLabsBulkDelete_WorksOnItsZammad_WithTheDeletionToken()
+    {
+        var configuration = FullConfiguration();
+        LabProfileComposition.Apply(configuration);
+        configuration.ActiveProfile = "lab";
+
+        var (_, _, resolver) = Create(configuration, LabSecrets());
+
+        var availability =
+            await BulkDeleteComposition.GetAvailabilityAsync(resolver, CancellationToken.None);
+
+        Assert.True(availability.IsAvailable, availability.Reason);
+        Assert.Equal("Zammad", availability.SystemName);
+        Assert.Equal("127.0.0.1:8100", availability.DisplayInstance);
     }
 
     [Fact]
@@ -112,7 +141,7 @@ public class LabProfileTests
             ConfigurationStatusService.ActiveSystems(configuration.Profiles["work"]));
 
         Assert.Equal(
-            "backup Duplicati · commercial Dolibarr · tickets osTicket",
+            "backup Duplicati · commercial Dolibarr · tickets Zammad",
             ConfigurationStatusService.ActiveSystems(configuration.Profiles["lab"]).ToString());
 
         Assert.Equal(
@@ -130,7 +159,7 @@ public class LabProfileTests
         var (service, _, _) = Create(configuration, LabSecrets());
 
         Assert.Equal(
-            new ActiveSystemsStatus("Duplicati", "Dolibarr", "osTicket"),
+            new ActiveSystemsStatus("Duplicati", "Dolibarr", "Zammad"),
             (await service.GetAsync()).ActiveSystems);
     }
 }

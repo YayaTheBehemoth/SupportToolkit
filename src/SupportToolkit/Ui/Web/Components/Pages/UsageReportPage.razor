@@ -4,11 +4,6 @@
 
 <h1>Usage report</h1>
 
-<p class="muted">
-    Acronis storage per customer next to what Business Central bills for the backup items.
-    Nothing is saved: the report is kept until you generate a new one or exit.
-</p>
-
 @if (State.UsageReport is not { } web)
 {
     <div class="banner warn">The usage report is not available in this host.</div>
@@ -26,11 +21,16 @@
     var detailed = State.View.IsDetailed;
 }
 
+<p class="muted">
+    @B storage per customer next to what @C bills for the backup items.
+    Nothing is saved: the report is kept until you generate a new one or exit.
+</p>
+
 <div class="banner @(production ? "prod" : "ok")">
     <strong>@(production ? "PRODUCTION: real customer names and billing amounts" : "FIXTURE: synthetic data only")</strong>
     <span>
         @(production
-            ? "This reads live Business Central and Acronis data, read-only. Check who can see your screen."
+            ? $"This reads live {C} and {B} data, read-only. Check who can see your screen."
             : "No external system is contacted.")
     </span>
 </div>
@@ -63,9 +63,9 @@
             <span class="badge @(web.IsRunning ? "neutral" : "ok")">@(web.IsRunning ? "running" : "done")</span>
         </header>
         <pre class="log">@string.Join("\n", web.Progress.Snapshot().TakeLast(detailed ? 15 : 1))</pre>
-        @if (web.IsRunning && production)
+        @if (web.IsRunning && production && Systems?.BillingSignsInWithBrowser == true)
         {
-            <p class="muted">Business Central may ask you to sign in, in a browser window.</p>
+            <p class="muted">@C may ask you to sign in, in a browser window.</p>
         }
     </section>
 }
@@ -99,13 +99,13 @@
         </strong>
         @if (awaiting.Length > 0)
         {
-            <span>@awaiting.Length customer(s) are set up but have no Acronis usage yet; they are listed apart, not compared.</span>
+            <span>@awaiting.Length customer(s) are set up but have no @B usage yet; they are listed apart, not compared.</span>
         }
         <span class="muted">
             Generated @report.GeneratedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm", Invariant)
             @if (report.UsagePeriodStart is not null)
             {
-                <text>· Acronis usage from @report.UsagePeriodStart</text>
+                <text>· @B usage from @report.UsagePeriodStart</text>
             }
         </span>
     </div>
@@ -120,7 +120,7 @@
             <header><h3>Customers</h3></header>
             <dl>
                 <dt>Compared</dt><dd>@report.CustomersCompared of @customers.Length</dd>
-                <dt>Billed differs from Acronis</dt><dd>@report.CustomersWithDifference</dd>
+                <dt>Billed differs from @B</dt><dd>@report.CustomersWithDifference</dd>
                 <dt>Unknown</dt><dd>@report.CustomersUnknown</dd>
             </dl>
         </section>
@@ -147,10 +147,9 @@
         }
     </div>
     <p class="muted">
-        Each row compares two figures: the GB billed in Business Central (the quantity, "Antal", on the
-        backup lines) against the total storage Acronis reports for the customer's tenants, in GB as the
-        Acronis portal shows it. The difference is
-        billed minus Acronis, so a negative difference means less is billed than Acronis reports. Amount, Backup
+        Each row compares two figures: the GB billed in @C (the quantity@(Systems?.QuantityName is { } quantity ? $", \"{quantity}\"," : ""), on the
+        backup lines) against the total storage @B reports for the customer's tenants, in @(Systems?.GbNote is { } gbNote ? "GB " + gbNote : "binary GB (1 GB = 1,073,741,824 bytes)"). The difference is
+        billed minus @B, so a negative difference means less is billed than @B reports. Amount, Backup
         and Microsoft 365 are shown for reference and are not compared.
     </p>
 
@@ -182,14 +181,14 @@
                 <th></th>
                 <th>Customer</th>
                 @if (detailed) { <th>No.</th> }
-                <th class="num cmp">Billed GB<small>Business Central quantity (Antal)</small></th>
-                <th class="num cmp">Acronis GB<small>total storage</small></th>
-                <th class="num cmp">Difference<small>billed &minus; Acronis</small></th>
+                <th class="num cmp">Billed GB<small>@C quantity@(Systems?.QuantityName is { } q ? $" ({q})" : "")</small></th>
+                <th class="num cmp">@B GB<small>total storage</small></th>
+                <th class="num cmp">Difference<small>billed &minus; @B</small></th>
                 <th>Status</th>
-                <th class="num">Amount<small>Business Central</small></th>
+                <th class="num">Amount<small>@C</small></th>
                 @if (detailed) { <th class="num">Decimal GB<small>total, 10^9 bytes</small></th> }
-                <th class="num">Backup<small>Acronis GB</small></th>
-                <th class="num">M365<small>Acronis GB</small></th>
+                <th class="num">Backup<small>@B GB</small></th>
+                <th class="num">M365<small>@B GB</small></th>
             </tr>
             </thead>
             <tbody>
@@ -244,7 +243,7 @@
                     <tr class="ticket-text">
                         <td></td>
                         <td colspan="@(detailed ? 10 : 8)">
-                            <UsageRowDetails Row="row" Detailed="detailed" />
+                            <UsageRowDetails Row="row" Detailed="detailed" Systems="Names" />
                         </td>
                     </tr>
                 }
@@ -257,11 +256,11 @@
     {
         <h2>Set up, no usage reported yet</h2>
         <p class="muted">
-            These customers have an active backup subscription and a matched Acronis tenant, but Acronis
+            These customers have an active backup subscription and a matched @B tenant, but @B
             has not reported any usage for them. Raise them with whoever set them up.
         </p>
         <table>
-            <thead><tr><th>Customer</th>@if (detailed) { <th>No.</th> }<th class="num">Billed GB</th><th class="num">Amount</th><th>Acronis tenant</th></tr></thead>
+            <thead><tr><th>Customer</th>@if (detailed) { <th>No.</th> }<th class="num">Billed GB</th><th class="num">Amount</th><th>@B tenant</th></tr></thead>
             <tbody>
             @foreach (var row in awaiting)
             {
@@ -280,9 +279,9 @@
     @if (unbilled.Length > 0)
     {
         <h2>Storage without a backup subscription</h2>
-        <p class="muted">Acronis customer tenants with storage that no customer with a backup subscription was matched to.</p>
+        <p class="muted">@B customer tenants with storage that no customer with a backup subscription was matched to.</p>
         <table>
-            <thead><tr><th>Acronis tenant</th><th class="num">Acronis GB</th>@if (detailed) { <th class="num">Decimal GB</th> }<th class="num">Backup</th><th class="num">M365</th><th>Note</th></tr></thead>
+            <thead><tr><th>@B tenant</th><th class="num">@B GB</th>@if (detailed) { <th class="num">Decimal GB</th> }<th class="num">Backup</th><th class="num">M365</th><th>Note</th></tr></thead>
             <tbody>
             @foreach (var row in unbilled)
             {
@@ -311,7 +310,7 @@
             <h2>Not active (left out of the report)</h2>
             <p class="muted">Every backup line of these customers is on a subscription that is not active, or omitted.</p>
             <table>
-                <thead><tr><th>Customer</th><th>No.</th><th class="num">Acronis GB</th><th>Acronis tenant</th></tr></thead>
+                <thead><tr><th>Customer</th><th>No.</th><th class="num">@B GB</th><th>@B tenant</th></tr></thead>
                 <tbody>
                 @foreach (var row in notActive)
                 {
@@ -340,7 +339,7 @@
             <h2>Special cases</h2>
             <p class="muted">Tenants that fit none of the lists above but are worth knowing about.</p>
             <table>
-                <thead><tr><th>Acronis tenant</th><th>Why it is here</th></tr></thead>
+                <thead><tr><th>@B tenant</th><th>Why it is here</th></tr></thead>
                 <tbody>
                 @foreach (var row in specialCases)
                 {
@@ -367,6 +366,17 @@
 
     private UsageReportAvailability? _availability;
     private readonly HashSet<string> _expanded = [];
+
+    /// <summary>The report's systems, when known.</summary>
+    private UsageSystemNames? Systems => _availability?.Systems;
+
+    /// <summary>For the details: the known systems, or plain words.</summary>
+    private UsageSystemNames Names =>
+        Systems ?? new UsageSystemNames("the backup system", "the billing system");
+
+    private string B => Names.Backup;
+
+    private string C => Names.Billing;
 
     protected override async Task OnInitializedAsync()
     {
@@ -407,12 +417,12 @@
     private static string Money(decimal? value) =>
         value is null ? "unknown" : value.Value.ToString("#,##0.00", Invariant);
 
-    private static string? Direction(decimal? difference) =>
+    private string? Direction(decimal? difference) =>
         difference switch
         {
             null => null,
-            < 0m => "billed less than Acronis",
-            > 0m => "billed more than Acronis",
+            < 0m => $"billed less than {B}",
+            > 0m => $"billed more than {B}",
             _ => "equal"
         };
 

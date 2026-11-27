@@ -4,9 +4,10 @@ using SupportToolkit.Modules.UsageReport.Services;
 namespace SupportToolkit.Modules.UsageReport.Production;
 
 /// <summary>
-/// Production mode: Business Central (interactive sign-in) and Acronis,
-/// read-only, through the active profile's connections. Local
-/// configuration is checked before any sign-in or request.
+/// Production mode: the profile's backup and commercial systems, read-only
+/// (UsageReportSystems; without one, Acronis and Business Central).
+/// Local configuration is checked before any sign-in or request: the
+/// backup items, then the backup system, then the commercial system.
 /// </summary>
 public sealed class ProductionUsageReportSetup : IUsageReportSetup
 {
@@ -15,17 +16,25 @@ public sealed class ProductionUsageReportSetup : IUsageReportSetup
         "(monitoringScope.usage-report.serviceItemNumbers in the active profile).";
 
     private readonly SupportToolkitConfigurationResolver _resolver;
+    private readonly UsageReportSystems _systems;
     private readonly Func<CancellationToken, Task<IUsageReportSources>> _sources;
 
+    /// <param name="sources">
+    /// Replaces both halves when given (tests and synthetic runs).
+    /// </param>
+    /// <param name="systems">
+    /// The profile's systems; null uses Acronis and Business Central.
+    /// </param>
     public ProductionUsageReportSetup(
         SupportToolkitConfigurationResolver resolver,
-        Func<CancellationToken, Task<IUsageReportSources>>? sources = null)
+        Func<CancellationToken, Task<IUsageReportSources>>? sources = null,
+        UsageReportSystems? systems = null)
     {
         _resolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
 
-        _sources =
-            sources
-            ?? (token => ProductionUsageReportSources.CreateAsync(_resolver, token));
+        _systems = systems ?? ProductionUsageReportSources.Systems(_resolver);
+
+        _sources = sources ?? OpenSourcesAsync;
     }
 
     public Task<SupportToolkitMode> GetModeAsync(
@@ -37,6 +46,20 @@ public sealed class ProductionUsageReportSetup : IUsageReportSetup
     {
         var mode = SupportToolkitMode.Production;
 
+        UsageSystemNames? names = null;
+
+        try
+        {
+            names =
+                _systems.Names is { } lookup
+                    ? await lookup(cancellationToken)
+                    : null;
+        }
+        catch (InvalidOperationException)
+        {
+            // Unknown systems are reported by the checks below.
+        }
+
         try
         {
             if ((await BackupItemsAsync(cancellationToken)).Count == 0)
@@ -44,17 +67,26 @@ public sealed class ProductionUsageReportSetup : IUsageReportSetup
                 return new UsageReportAvailability(
                     mode,
                     false,
-                    NoItemsReason);
+                    NoItemsReason)
+                {
+                    Systems = names
+                };
             }
 
-            await _resolver.GetAcronisConnectionAsync(cancellationToken);
-            await _resolver.GetBusinessCentralConnectionAsync(cancellationToken);
+            await _systems.CheckBackup(cancellationToken);
+            await _systems.CheckCommercial(cancellationToken);
 
-            return new UsageReportAvailability(mode, true, null);
+            return new UsageReportAvailability(mode, true, null)
+            {
+                Systems = names
+            };
         }
         catch (InvalidOperationException exception)
         {
-            return new UsageReportAvailability(mode, false, exception.Message);
+            return new UsageReportAvailability(mode, false, exception.Message)
+            {
+                Systems = names
+            };
         }
     }
 
@@ -72,6 +104,28 @@ public sealed class ProductionUsageReportSetup : IUsageReportSetup
             SupportToolkitMode.Production,
             items,
             await _sources(cancellationToken));
+    }
+
+    /// <summary>
+    /// The commercial half, then the backup half, as the first systems
+    /// were always opened. A backup half that fails releases the other.
+    /// </summary>
+    private async Task<IUsageReportSources> OpenSourcesAsync(
+        CancellationToken cancellationToken)
+    {
+        var commercial = await _systems.OpenCommercial(cancellationToken);
+
+        try
+        {
+            return new CombinedUsageReportSources(
+                commercial,
+                await _systems.OpenBackup(cancellationToken));
+        }
+        catch
+        {
+            commercial.Dispose();
+            throw;
+        }
     }
 
     private Task<IReadOnlyList<string>> BackupItemsAsync(

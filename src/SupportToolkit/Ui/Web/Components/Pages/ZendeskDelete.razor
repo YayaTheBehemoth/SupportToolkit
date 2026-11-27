@@ -2,11 +2,11 @@
 @implements IDisposable
 @inject WebAppState State
 
-<h1>Zendesk bulk delete</h1>
+<h1>@Title</h1>
 
 @if (State.BulkDelete is not { } web)
 {
-    <div class="banner warn">The Zendesk bulk delete is not available in this host.</div>
+    <div class="banner warn">Bulk delete is not available in this host.</div>
     return;
 }
 
@@ -21,17 +21,22 @@
     <div class="banner warn">
         <strong>Bulk delete is not available for this profile.</strong>
         <span>@_availability.Reason</span>
-        <span>Choose a profile with a Zendesk deletion connection on the Profile page.</span>
+        @if (_availability.SystemName is null or "Zendesk")
+        {
+            <span>Choose a profile with a Zendesk deletion connection on the Profile page.</span>
+        }
+        else
+        {
+            <span>Choose a profile whose ticketing system SupportToolkit can delete from, on the Profile page.</span>
+        }
     </div>
     return;
 }
 
 <div class="banner prod">
-    <strong>This deletes real tickets from @(_availability.Subdomain).zendesk.com</strong>
+    <strong>This deletes real tickets from @_availability.DisplayInstance</strong>
     <span>
-        Zendesk keeps deleted tickets for 30 days, except old closed tickets that
-        Zendesk has archived: those cannot be restored from Zendesk's deleted
-        tickets at all. Nothing is deleted until you have typed the confirmations below.
+        @Rules.RecoveryNote Nothing is deleted until you have typed the confirmations below.
     </span>
 </div>
 
@@ -61,8 +66,8 @@
             <div class="banner warn">
                 <strong>No browser window could be opened here.</strong>
                 <span>
-                    Open the Zendesk sign-in yourself:
-                    <a href="@link.AbsoluteUri" target="_blank" rel="noopener noreferrer">sign in to Zendesk</a>.
+                    Open the @Rules.SystemName sign-in yourself:
+                    <a href="@link.AbsoluteUri" target="_blank" rel="noopener noreferrer">sign in to @Rules.SystemName</a>.
                     This page carries on once you have signed in.
                 </span>
             </div>
@@ -81,7 +86,7 @@
             <p class="muted">
                 You can leave this page; the deletion carries on. Cancelling stops after
                 the request in progress, and that request's tickets are then reported as
-                unknown, because Zendesk may still finish them.
+                unknown, because @Rules.SystemName may still finish them.
             </p>
         }
 
@@ -101,12 +106,22 @@
 {
     <section class="card">
         <header><h3>1. Sign in</h3></header>
-        <p>
-            A Zendesk sign-in page opens in your browser. Sign in there, then come back to this
-            window. Your password is never entered here.
-        </p>
+        @if (Rules.SignsInWithBrowser)
+        {
+            <p>
+                A @Rules.SystemName sign-in page opens in your browser. Sign in there, then come back to this
+                window. Your password is never entered here.
+            </p>
+        }
+        else
+        {
+            <p>
+                SupportToolkit signs in to @Rules.SystemName with this profile's deletion access, which is
+                kept apart from the access that creates tickets. Nothing opens in your browser.
+            </p>
+        }
         <div class="actions">
-            <button type="button" disabled="@(!idle)" @onclick="() => web.StartSignIn()">Sign in to Zendesk</button>
+            <button type="button" disabled="@(!idle)" @onclick="() => web.StartSignIn()">Sign in to @Rules.SystemName</button>
         </div>
     </section>
 }
@@ -115,7 +130,7 @@ else if (session is not null)
     <p class="muted">
         Signed in as <strong>@(session.Operator?.Name ?? "(no name)")</strong>
         &lt;@(session.Operator?.Email ?? "no email")&gt; (@(session.Operator?.Role ?? "role unknown")),
-        working on <strong>@(session.Instance).zendesk.com</strong>.
+        working on <strong>@Rules.DisplayInstance(session.Instance)</strong>.
     </p>
 }
 
@@ -131,9 +146,17 @@ else if (session is not null)
             <label>
                 Email domain
                 <input type="text" @bind="_domain" @bind:event="oninput" />
-                <small class="muted">May return nothing: Zendesk does not always search by domain.</small>
+                @if (Rules.DomainSearchNote is { } note)
+                {
+                    <small class="muted">@note</small>
+                }
             </label>
             <label>Words in the ticket<input type="text" @bind="_text" @bind:event="oninput" /></label>
+            <label>
+                Ticket number
+                <input type="text" inputmode="numeric" @bind="_number" @bind:event="oninput" />
+                <small class="muted">Finds only the ticket with exactly this number.</small>
+            </label>
         </div>
 
         @if (web.SearchProblem is not null)
@@ -208,8 +231,11 @@ else if (session is not null)
     <h2>3. Choose tickets</h2>
     <p class="muted">
         Closed tickets are chosen for you. Tickets that are not closed need to be ticked by hand
-        and need an extra confirmation later. A ticket closed less than 24 hours ago cannot be
-        deleted yet.
+        and need an extra confirmation later.
+        @if (Rules.DeleteBlockedAfterClosing is not null)
+        {
+            <text>A ticket closed less than @Rules.BlockedWindowText ago cannot be deleted yet.</text>
+        }
     </p>
 
     <div class="actions">
@@ -256,17 +282,22 @@ else if (session is not null)
                             title="@(open ? "Hide the ticket text" : "Show the ticket text")"
                             @onclick="() => Fold(id)">@(open ? "▾" : "▸")</button>
                 </td>
-                <td>#@ticket.Id</td>
+                <td>@ticket.Shown</td>
                 <td>@ticket.Status</td>
                 @if (State.View.IsDetailed) { <td>@Date(ticket.UpdatedAt)</td> }
                 <td>@ticket.Organization</td>
                 @if (State.View.IsDetailed) { <td>@ticket.RequesterDomain</td> }
                 <td>@Subject(ticket.Subject)</td>
                 <td class="muted">
+                    @if (ticket.Link is { } ticketLink)
+                    {
+                        <a href="@ticketLink.AbsoluteUri" target="_blank" rel="noopener noreferrer"
+                           title="Open @ticket.Shown in @Rules.SystemName">Open in @Rules.SystemName</a>
+                    }
                     @Describe(ticket.Flag)
                     @if (ticket.LikelyArchived)
                     {
-                        <span class="badge warn">probably archived: not restorable from Zendesk</span>
+                        <span class="badge warn">probably archived: not restorable from @Rules.SystemName</span>
                     }
                 </td>
             </tr>
@@ -278,7 +309,7 @@ else if (session is not null)
                     <td colspan="@(State.View.IsDetailed ? 8 : 6)">
                         @if (string.IsNullOrWhiteSpace(ticket.Description))
                         {
-                            <span class="muted">Zendesk returned no ticket text for this ticket.</span>
+                            <span class="muted">@Rules.SystemName returned no ticket text for this ticket.</span>
                         }
                         else
                         {
@@ -302,11 +333,11 @@ else if (session is not null)
     <section class="card confirm">
         <header><h3>Deletion plan</h3></header>
         <dl>
-            <dt>Zendesk instance</dt><dd>@(plan.Instance).zendesk.com</dd>
+            <dt>@plan.Rules.SystemName instance</dt><dd>@plan.DisplayInstance</dd>
             <dt>Tickets to delete</dt><dd>@plan.Tickets.Count</dd>
             @if (State.View.IsDetailed)
             {
-                <dt>Requests</dt><dd>@plan.Batches.Count (up to @DeletionPlan.BatchSize tickets each)</dd>
+                <dt>Requests</dt><dd>@plan.Batches.Count (up to @plan.BatchSize tickets each)</dd>
             }
             <dt>Not closed</dt><dd>@plan.NonClosed.Count</dd>
         </dl>
@@ -317,17 +348,17 @@ else if (session is not null)
             <div class="banner bad">
                 <strong>@plan.LikelyArchived.Count of these tickets were closed long ago and are probably archived.</strong>
                 <span>
-                    A deleted archived ticket does NOT appear in Zendesk's deleted tickets and cannot be
-                    restored from the Zendesk interface. It can only be restored through the API by ticket
+                    A deleted archived ticket does NOT appear in @(plan.Rules.SystemName)'s deleted tickets and cannot be
+                    restored from the @plan.Rules.SystemName interface. It can only be restored through the API by ticket
                     ID, using the receipt.
                 </span>
-                <span>@string.Join("  ", plan.LikelyArchived.Select(t => "#" + t.Id))</span>
+                <span>@string.Join("  ", plan.LikelyArchived.Select(t => t.Shown))</span>
             </div>
         }
 
         @if (State.View.IsDetailed)
         {
-            <p class="ids">@string.Join("  ", plan.Tickets.Select(t => "#" + t.Id))</p>
+            <p class="ids">@string.Join("  ", plan.Tickets.Select(t => t.Shown))</p>
         }
     </section>
 
@@ -348,11 +379,15 @@ else if (session is not null)
                 {
                     <li>
                         Request @batch.Number: delete @batch.TicketCount ticket(s)
-                        (#@batch.FirstId to #@batch.LastId)
+                        (@plan.Show(batch.FirstId) to @plan.Show(batch.LastId))
                     </li>
                 }
             </ul>
-            <p class="muted">Each request starts a job at Zendesk, which is followed to its end.</p>
+            <p class="muted">
+                @(plan.Rules.RunsJobs
+                    ? $"Each request starts a job at {plan.Rules.SystemName}, which is followed to its end."
+                    : "Each request's answer is its outcome. Nothing is retried.")
+            </p>
         </section>
     }
 
@@ -368,7 +403,7 @@ else if (session is not null)
         {
             <div class="banner warn">
                 <strong>@requirements.NonClosed.Count of these tickets are NOT closed (or their closing time is unknown):</strong>
-                <span>@string.Join("  ", requirements.NonClosed.Select(t => $"#{t.Id} ({t.Status})"))</span>
+                <span>@string.Join("  ", requirements.NonClosed.Select(t => $"{t.Shown} ({t.Status})"))</span>
             </div>
 
             <label>
@@ -400,7 +435,7 @@ else if (session is not null)
             <span>@session.CancelledMessage</span>
             <span>
                 Tickets in the request that was running may or may not have been deleted. Check
-                Zendesk's deleted tickets, and use the receipt.
+                @Rules.CheckPlace, and use the receipt.
             </span>
         </div>
     }
@@ -426,14 +461,14 @@ else if (session is not null)
         {
             <h3 class="tenant">Not confirmed deleted</h3>
             <p class="muted">
-                An unknown ticket may or may not have been deleted; check Zendesk's deleted tickets.
+                An unknown ticket may or may not have been deleted; check @Rules.CheckPlace.
             </p>
             <ul>
                 @foreach (var group in done.Problems)
                 {
                     <li>
                         <strong>@group.State</strong>:
-                        @string.Join(", ", group.TicketIds.Select(id => "#" + id))
+                        @string.Join(", ", group.TicketIds.Select(id => session.Plan?.Show(id) ?? "#" + id))
                         @if (!string.IsNullOrWhiteSpace(group.Detail))
                         {
                             <span> - @group.Detail</span>
@@ -451,7 +486,9 @@ else if (session is not null)
         }
 
         <p class="muted">
-            Keep the receipt: it lists the ticket IDs needed to restore them. It is not shared or committed.
+            @(Rules.CanRestore
+                ? "Keep the receipt: it lists the ticket IDs needed to restore them. It is not shared or committed."
+                : "Keep the receipt: it lists every ticket ID and what happened to it. It is not shared or committed.")
         </p>
     }
 
@@ -463,11 +500,23 @@ else if (session is not null)
 @code {
     private BulkDeleteAvailability? _availability;
 
+    /// <summary>
+    /// The rules of the system this page deletes from. Read only once the
+    /// profile is known to be available, which means they are set.
+    /// </summary>
+    private TicketSystemRules Rules => _availability!.Rules!;
+
+    private string Title =>
+        _availability?.SystemName is { } name
+            ? name + " bulk delete"
+            : "Bulk delete";
+
     private string _organization = "";
     private string _sender = "";
     private string _requester = "";
     private string _domain = "";
     private string _text = "";
+    private string _number = "";
 
     private readonly HashSet<long> _expanded = [];
 
@@ -501,6 +550,7 @@ else if (session is not null)
         if (!string.IsNullOrWhiteSpace(criteria.RequesterEmail)) yield return ("Requester email", criteria.RequesterEmail);
         if (!string.IsNullOrWhiteSpace(criteria.EmailDomain)) yield return ("Email domain", criteria.EmailDomain);
         if (!string.IsNullOrWhiteSpace(criteria.FreeText)) yield return ("Words in the ticket", criteria.FreeText);
+        if (!string.IsNullOrWhiteSpace(criteria.TicketNumber)) yield return ("Ticket number", criteria.TicketNumber);
     }
 
     private static string? Blank(string value) =>
@@ -519,7 +569,8 @@ else if (session is not null)
                 Blank(_requester),
                 Blank(_domain),
                 Blank(_text),
-                Blank(_sender)));
+                Blank(_sender),
+                Blank(_number)));
     }
 
     private void Toggle(long id, bool selected) =>
@@ -589,6 +640,7 @@ else if (session is not null)
         _requester = "";
         _domain = "";
         _text = "";
+        _number = "";
     }
 
     private static int ProgressPercent(DeletionProgress? progress)
@@ -634,11 +686,11 @@ else if (session is not null)
                 _ => $"Stopped at request {progress.Batch} of {progress.BatchCount}."
             };
 
-    private static string Describe(DeletionPreviewFlag? flag) =>
+    private string Describe(DeletionPreviewFlag? flag) =>
         flag switch
         {
             DeletionPreviewFlag.NotClosed => "not closed",
-            DeletionPreviewFlag.ClosedWithin24Hours => "closed under 24 hours ago: cannot be deleted yet",
+            DeletionPreviewFlag.ClosedWithin24Hours => $"closed under {Rules.BlockedWindowText} ago: cannot be deleted yet",
             DeletionPreviewFlag.ClosedTimeUnknown => "closed, time unknown",
             _ => ""
         };

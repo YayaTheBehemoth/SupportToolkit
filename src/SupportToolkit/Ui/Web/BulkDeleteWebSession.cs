@@ -1,11 +1,11 @@
 using SupportToolkit.Core.ErrorHandling;
-using SupportToolkit.Modules.ZendeskBulkDelete.Models;
-using SupportToolkit.Modules.ZendeskBulkDelete.Services;
+using SupportToolkit.Modules.BulkDelete.Models;
+using SupportToolkit.Modules.BulkDelete.Services;
 
 namespace SupportToolkit.Ui.Web;
 
 /// <summary>
-/// Runs the Zendesk bulk delete for the web UI. Sign-in, search and
+/// Runs bulk delete for the web UI, on the profile's ticketing system. Sign-in, search and
 /// deletion are tasks owned by this object, not by a browser tab, so
 /// closing or reloading the tab does not abandon a deletion: any page
 /// re-attaches to the state.
@@ -73,16 +73,33 @@ public sealed class BulkDeleteWebSession : IDisposable
     public bool IsDeleting =>
         Session?.Stage == BulkDeleteStage.Deleting;
 
-    public Task<BulkDeleteAvailability> GetAvailabilityAsync(
-        CancellationToken cancellationToken = default) =>
-        _availability(cancellationToken);
+    /// <summary>
+    /// The rules of the system the latest availability check found, for
+    /// the messages shown before a session exists.
+    /// </summary>
+    public TicketSystemRules? Rules { get; private set; }
+
+    public async Task<BulkDeleteAvailability> GetAvailabilityAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var availability = await _availability(cancellationToken);
+
+        Rules = availability.Rules;
+
+        return availability;
+    }
+
+    private string SystemName =>
+        (_connection?.Rules ?? Rules)?.SystemName ?? "the ticketing system";
 
     // ---- Sign-in and search ----
 
     public bool StartSignIn() =>
         Start(
-            "Waiting for you to sign in to Zendesk in the browser window " +
-            "that opened...",
+            Rules is { SignsInWithBrowser: false }
+                ? $"Signing in to {SystemName}..."
+                : $"Waiting for you to sign in to {SystemName} in the browser " +
+                  "window that opened...",
             async token =>
             {
                 // A new connection every time, so a changed profile is
@@ -98,7 +115,7 @@ public sealed class BulkDeleteWebSession : IDisposable
 
     public bool StartSearch(TicketSearchCriteria criteria) =>
         Start(
-            "Searching Zendesk...",
+            $"Searching {SystemName}...",
             async token =>
             {
                 SearchProblem =
@@ -342,9 +359,9 @@ public sealed class BulkDeleteWebSession : IDisposable
         SearchProblem = null;
     }
 
-    private static string Describe(Exception exception) =>
+    private string Describe(Exception exception) =>
         exception is SignInRequiredException
-            ? "The Zendesk sign-in did not complete or has expired. " +
+            ? $"The {SystemName} sign-in did not complete or has expired. " +
               ConsoleErrorFormatter.Format(exception)
             : ConsoleErrorFormatter.Format(exception);
 

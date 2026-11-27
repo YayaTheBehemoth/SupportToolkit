@@ -1,9 +1,9 @@
 using SupportToolkit.Cli.Commands;
-using SupportToolkit.Modules.ZendeskBulkDelete.Models;
-using SupportToolkit.Modules.ZendeskBulkDelete.Services;
+using SupportToolkit.Modules.BulkDelete.Models;
+using SupportToolkit.Modules.BulkDelete.Services;
 using SupportToolkit.Providers.Zendesk.Deletion.Search;
-using SupportToolkit.Tests.Modules.ZendeskBulkDelete;
-using static SupportToolkit.Tests.Modules.ZendeskBulkDelete.DeletionTestSupport;
+using SupportToolkit.Tests.Modules.BulkDelete;
+using static SupportToolkit.Tests.Modules.BulkDelete.DeletionTestSupport;
 
 namespace SupportToolkit.Tests.Cli;
 

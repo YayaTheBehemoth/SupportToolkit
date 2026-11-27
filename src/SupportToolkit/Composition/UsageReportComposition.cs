@@ -25,9 +25,34 @@ public static class UsageReportComposition
             new ModeSelectedUsageReportSetup(
                 resolver,
                 new FixtureUsageReportSetup(),
-                new ProductionUsageReportSetup(resolver, productionSources)),
+                new ProductionUsageReportSetup(resolver, productionSources, Systems(resolver))),
             progress,
             timeProvider);
+    }
+
+    /// <summary>
+    /// The profile's backup and commercial systems, selected as the Backup
+    /// Aggregator selects them, so both modules read the same systems.
+    /// </summary>
+    public static UsageReportSystems Systems(SupportToolkitConfigurationResolver resolver)
+    {
+        var backup = BackupSystemsComposition.ForUsageReport(resolver);
+        var commercial = CommercialSystemsComposition.ForUsageReport(resolver);
+
+        return new UsageReportSystems(
+            backup.Check,
+            commercial.Check,
+            commercial.Open,
+            backup.Open)
+        {
+            Names = async token =>
+            {
+                var (backupName, gbNote) = await backup.Name(token);
+                var (billingName, quantityName, signsIn) = await commercial.Name(token);
+
+                return new UsageSystemNames(backupName, billingName, quantityName, gbNote, signsIn);
+            }
+        };
     }
 
     private sealed class ModeSelectedUsageReportSetup(

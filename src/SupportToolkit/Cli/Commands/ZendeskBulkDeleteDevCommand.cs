@@ -1,10 +1,10 @@
 using SupportToolkit.Composition;
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Core.Logging;
-using SupportToolkit.Modules.ZendeskBulkDelete.Models;
-using SupportToolkit.Modules.ZendeskBulkDelete.Production;
-using SupportToolkit.Modules.ZendeskBulkDelete.Reporting;
-using SupportToolkit.Modules.ZendeskBulkDelete.Services;
+using SupportToolkit.Modules.BulkDelete.Models;
+using SupportToolkit.Modules.BulkDelete.Production;
+using SupportToolkit.Modules.BulkDelete.Reporting;
+using SupportToolkit.Modules.BulkDelete.Services;
 using SupportToolkit.Providers.Zendesk.Deletion.Search;
 
 namespace SupportToolkit.Cli.Commands;
@@ -244,7 +244,7 @@ public sealed class ZendeskBulkDeleteDevCommand
         var logger = OperationalLogger.FromEnvironment();
 
         using var session =
-            await ZendeskBulkDeleteComposition.OpenSessionAsync(
+            await BulkDeleteComposition.OpenSessionAsync(
                 _configurationResolver,
                 logger.DebugEnabled ? logger : null,
                 options.Mode == ZendeskBulkDeleteMode.Delete,

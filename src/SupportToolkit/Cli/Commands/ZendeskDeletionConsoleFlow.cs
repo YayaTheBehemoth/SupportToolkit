@@ -1,5 +1,5 @@
-using SupportToolkit.Modules.ZendeskBulkDelete.Models;
-using SupportToolkit.Modules.ZendeskBulkDelete.Services;
+using SupportToolkit.Modules.BulkDelete.Models;
+using SupportToolkit.Modules.BulkDelete.Services;
 
 namespace SupportToolkit.Cli.Commands;
 
@@ -27,13 +27,13 @@ public enum ZendeskBulkDeleteMode
 /// </summary>
 public sealed class ZendeskDeletionConsoleFlow
 {
-    private readonly ZendeskDeletionExecutor? _executor;
+    private readonly DeletionExecutor? _executor;
     private readonly TextReader _input;
     private readonly TextWriter _output;
     private readonly TimeProvider _timeProvider;
 
     public ZendeskDeletionConsoleFlow(
-        ZendeskDeletionExecutor? executor,
+        DeletionExecutor? executor,
         TextReader input,
         TextWriter output,
         TimeProvider? timeProvider = null)
@@ -136,25 +136,26 @@ public sealed class ZendeskDeletionConsoleFlow
             return 1;
         }
 
+        var rules = plan.Rules;
+
         _output.WriteLine();
         _output.WriteLine(
             $"This will delete {plan.Tickets.Count} ticket(s) from " +
-            $"{plan.Instance}.zendesk.com. Zendesk keeps deleted tickets " +
-            "for 30 days.");
+            $"{plan.DisplayInstance}. {rules.ShortRecoveryNote}");
 
         if (plan.LikelyArchived.Count > 0)
         {
             _output.WriteLine(
                 $"WARNING: {plan.LikelyArchived.Count} of these ticket(s) " +
                 "were closed long ago and are probably archived. Deleted " +
-                "archived tickets do NOT appear in Zendesk's deleted " +
-                "tickets and cannot be restored from the Zendesk interface; " +
+                $"archived tickets do NOT appear in {rules.SystemName}'s deleted " +
+                $"tickets and cannot be restored from the {rules.SystemName} interface; " +
                 "they can only be restored through the API by ticket ID, " +
                 "using the receipt:");
 
             foreach (var ticket in plan.LikelyArchived)
             {
-                _output.WriteLine($"  #{ticket.Id}");
+                _output.WriteLine($"  {ticket.Shown}");
             }
         }
 
@@ -180,7 +181,7 @@ public sealed class ZendeskDeletionConsoleFlow
             foreach (var ticket in plan.NonClosed)
             {
                 _output.WriteLine(
-                    $"  #{ticket.Id}  {ticket.Status}");
+                    $"  {ticket.Shown}  {ticket.Status}");
             }
 
             _output.Write(
@@ -235,18 +236,18 @@ public sealed class ZendeskDeletionConsoleFlow
         _output.WriteLine("DELETION PLAN");
         _output.WriteLine("-------------");
         _output.WriteLine(
-            $"Instance:  {plan.Instance}.zendesk.com");
+            $"Instance:  {plan.DisplayInstance}");
         _output.WriteLine(
             $"Tickets:   {plan.Tickets.Count} in " +
             $"{plan.Batches.Count} request(s) of up to " +
-            $"{DeletionPlan.BatchSize}");
+            $"{plan.BatchSize}");
         _output.WriteLine(
             $"Not closed: {plan.NonClosed.Count}");
         _output.WriteLine();
         _output.WriteLine("Exact ticket IDs (nothing else will be sent):");
 
         foreach (var line in plan.Tickets
-                     .Select(ticket => "#" + ticket.Id)
+                     .Select(ticket => ticket.Shown)
                      .Chunk(10))
         {
             _output.WriteLine("  " + string.Join("  ", line));
@@ -266,13 +267,14 @@ public sealed class ZendeskDeletionConsoleFlow
             number++;
 
             _output.WriteLine(
-                $"  {number}. DELETE /api/v2/tickets/destroy_many.json" +
-                $"?ids=<{batch.Count} ticket ID(s): " +
-                $"{batch[0]}..{batch[^1]}>");
+                $"  {number}. " +
+                plan.Rules.DescribeRequest(batch.Count, batch[0], batch[^1]));
         }
 
         _output.WriteLine(
-            "Each request starts a job that is followed to its end.");
+            plan.Rules.RunsJobs
+                ? "Each request starts a job that is followed to its end."
+                : "Each request's answer is its outcome. Nothing is retried.");
     }
 
     private void WriteProgress(
@@ -310,6 +312,7 @@ public sealed class ZendeskDeletionConsoleFlow
         DeletionRun run)
     {
         var outcome = run.Outcome;
+        var rules = outcome.Plan.Rules;
 
         _output.WriteLine();
         _output.WriteLine("RESULT");
@@ -336,7 +339,7 @@ public sealed class ZendeskDeletionConsoleFlow
             _output.WriteLine();
             _output.WriteLine(
                 "Not confirmed deleted (an Unknown ticket may or may " +
-                "not have been deleted; check Zendesk's deleted tickets):");
+                $"not have been deleted; check {rules.CheckPlace}):");
 
             foreach (var group in problems
                          .GroupBy(
@@ -345,7 +348,7 @@ public sealed class ZendeskDeletionConsoleFlow
             {
                 _output.WriteLine(
                     $"  {group.Key.State}: " +
-                    string.Join(", ", group.Select(r => "#" + r.Id)) +
+                    string.Join(", ", group.Select(r => outcome.Plan.Show(r.Id))) +
                     (string.IsNullOrWhiteSpace(group.Key.Detail)
                         ? string.Empty
                         : " - " + group.Key.Detail));
@@ -361,8 +364,11 @@ public sealed class ZendeskDeletionConsoleFlow
         }
 
         _output.WriteLine(
-            "Keep the receipt: it lists the ticket IDs needed to " +
-            "restore them. It is not shared or committed.");
+            rules.CanRestore
+                ? "Keep the receipt: it lists the ticket IDs needed to " +
+                  "restore them. It is not shared or committed."
+                : "Keep the receipt: it lists every ticket ID and what " +
+                  "happened to it. It is not shared or committed.");
     }
 
     private async Task<bool> ReadNumberAsync(

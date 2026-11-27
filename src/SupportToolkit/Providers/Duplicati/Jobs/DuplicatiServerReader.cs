@@ -66,7 +66,11 @@ public sealed class DuplicatiServerReader
                 DuplicatiJobStatus.Evaluate(
                     backup,
                     ReadRuns(log),
-                    string.Equals(runningId, backup.Id, StringComparison.Ordinal)));
+                    string.Equals(runningId, backup.Id, StringComparison.Ordinal))
+                with
+                {
+                    StoredBytes = DuplicatiJobStatus.StoredBytes(backup)
+                });
         }
 
         return jobs;
