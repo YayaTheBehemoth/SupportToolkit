@@ -1,5 +1,6 @@
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Modules.BackupAggregator;
+using SupportToolkit.Modules.UsageReport;
 using SupportToolkit.Providers.Dolibarr.Configuration;
 using SupportToolkit.Providers.Duplicati.Configuration;
 using SupportToolkit.Providers.Zammad.Configuration;
@@ -86,12 +87,22 @@ public static class LabProfileComposition
                 Ticketing = new() { Provider = ZammadConnections.ProviderKey, Connection = ConnectionName, Destination = "backups" },
                 Backup = new() { Provider = DuplicatiConnections.ProviderKey, Connection = ConnectionName },
                 Commercial = new() { Provider = DolibarrConnections.ProviderKey, Connection = ConnectionName },
-                Modules = { [BackupAggregatorModule.ModuleCommand] = SupportToolkitMode.Production },
+                Modules =
+                {
+                    [BackupAggregatorModule.ModuleCommand] = SupportToolkitMode.Production,
+                    [UsageReportModule.ModuleCommand] = SupportToolkitMode.Production
+                },
                 MonitoringScope =
                 {
                     [BackupAggregatorModule.ModuleCommand] = new ModuleMonitoringScopeConfiguration
                     {
                         MonitoringItemNumber = MonitoringItem,
+                        ServiceItemNumbers = [BackupItem]
+                    },
+                    // The usage report compares what the backup item bills
+                    // with the storage Duplicati reports.
+                    [UsageReportModule.ModuleCommand] = new ModuleMonitoringScopeConfiguration
+                    {
                         ServiceItemNumbers = [BackupItem]
                     }
                 }

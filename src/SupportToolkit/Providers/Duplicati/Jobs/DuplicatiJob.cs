@@ -23,7 +23,9 @@ public enum DuplicatiJobOutcome
 
 /// <summary>
 /// One backup job on one Duplicati server, as the toolkit reads it: no
-/// destination, no error text.
+/// destination, no error text. StoredBytes is the size of its backup at
+/// the destination as Duplicati last reported it (TargetFilesSize); null
+/// when not reported or not readable.
 /// </summary>
 public sealed record DuplicatiJob(
     string Id,
@@ -32,7 +34,8 @@ public sealed record DuplicatiJob(
     DateTimeOffset? LastRun,
     DateTimeOffset? LastSuccess,
     bool IsRunning,
-    string? Detail = null);
+    string? Detail = null,
+    long? StoredBytes = null);
 
 /// <summary>
 /// Decides a job's latest outcome from what Duplicati reports, which no
@@ -140,6 +143,18 @@ public static class DuplicatiJobStatus
                 "Duplicati reported a result the toolkit does not know.")
             : Job(logged, latest!.EndTime);
     }
+
+    /// <summary>
+    /// The backup's size at the destination in bytes (TargetFilesSize),
+    /// or null when Duplicati reports none or a value that is not a whole
+    /// number of bytes.
+    /// </summary>
+    internal static long? StoredBytes(DuplicatiBackupDto backup) =>
+        backup.Metadata is { } metadata
+        && metadata.TryGetValue("TargetFilesSize", out var text)
+        && long.TryParse(text?.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var bytes)
+            ? bytes
+            : null;
 
     private static DuplicatiJobOutcome ResultOf(DuplicatiRunResultDto run)
     {

@@ -12,48 +12,90 @@ using SupportToolkit.Providers.BusinessCentral.Subscriptions.Dtos;
 namespace SupportToolkit.Modules.UsageReport.Production;
 
 /// <summary>
-/// The real systems, read-only: Business Central subscriptions, billing
+/// The first systems, read-only: Business Central subscriptions, billing
 /// lines and customer names, and Acronis tenants and usage, through the
-/// active profile's connections. This folder is the only part of the module
-/// that knows Business Central and Acronis exist; it hands the rest of the
-/// module its own types.
+/// active profile's connections. The profile's backup and commercial
+/// settings may select other systems (UsageReportSystems); these are what
+/// a profile without them reads.
 ///
 /// Creating the sources never signs in; the Business Central sign-in
 /// happens on the first request.
 /// </summary>
-public sealed class ProductionUsageReportSources : IUsageReportSources
+public static class ProductionUsageReportSources
 {
-    private readonly BusinessCentralProviderBundle _businessCentral;
-    private readonly AcronisReadSession _acronis;
+    /// <summary>
+    /// Acronis and Business Central as the report names them: Business
+    /// Central calls the billed quantity "Antal" and may open a browser
+    /// sign-in; GB is as the Acronis portal shows it. Also what the
+    /// synthetic data stands for.
+    /// </summary>
+    public static UsageSystemNames FirstSystemNames { get; } =
+        new(
+            "Acronis",
+            "Business Central",
+            "Antal",
+            "as the Acronis portal shows it",
+            true);
 
-    private ProductionUsageReportSources(
-        BusinessCentralProviderBundle businessCentral,
-        AcronisReadSession acronis)
-    {
-        _businessCentral = businessCentral;
-        _acronis = acronis;
-    }
-
+    /// <summary>
+    /// Business Central, then Acronis: local configuration first, so a
+    /// missing connection fails before any sign-in or request.
+    /// </summary>
     public static async Task<IUsageReportSources> CreateAsync(
         SupportToolkitConfigurationResolver resolver,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(resolver);
 
-        // Local configuration first: a missing connection fails before
-        // any sign-in or request.
         var businessCentral =
-            BusinessCentralProviderFactory.Create(
-                await resolver.GetBusinessCentralConnectionAsync(
-                    cancellationToken));
+            await BusinessCentralUsageSource.CreateAsync(resolver, cancellationToken);
 
         var acronis =
-            AcronisReadSession.Create(
-                await resolver.GetAcronisConnectionAsync(
-                    cancellationToken));
+            await AcronisUsageSource.CreateAsync(resolver, cancellationToken);
 
-        return new ProductionUsageReportSources(businessCentral, acronis);
+        return new CombinedUsageReportSources(businessCentral, acronis);
     }
+
+    /// <summary>
+    /// The first systems as the report's systems: Acronis for backup and
+    /// Business Central for billing, checked and opened as before.
+    /// </summary>
+    public static UsageReportSystems Systems(
+        SupportToolkitConfigurationResolver resolver)
+    {
+        ArgumentNullException.ThrowIfNull(resolver);
+
+        return new UsageReportSystems(
+            async token => await resolver.GetAcronisConnectionAsync(token),
+            async token => await resolver.GetBusinessCentralConnectionAsync(token),
+            async token => await BusinessCentralUsageSource.CreateAsync(resolver, token),
+            async token => await AcronisUsageSource.CreateAsync(resolver, token))
+        {
+            Names = _ => Task.FromResult(FirstSystemNames)
+        };
+    }
+}
+
+/// <summary>
+/// Business Central as the usage report's billing system: subscriptions,
+/// billing lines and customer names, read-only.
+/// </summary>
+public sealed class BusinessCentralUsageSource : IUsageCommercialSource
+{
+    private readonly BusinessCentralProviderBundle _businessCentral;
+
+    private BusinessCentralUsageSource(BusinessCentralProviderBundle businessCentral)
+    {
+        _businessCentral = businessCentral;
+    }
+
+    public static async Task<IUsageCommercialSource> CreateAsync(
+        SupportToolkitConfigurationResolver resolver,
+        CancellationToken cancellationToken) =>
+        new BusinessCentralUsageSource(
+            BusinessCentralProviderFactory.Create(
+                await resolver.GetBusinessCentralConnectionAsync(
+                    cancellationToken)));
 
     public async Task<IReadOnlyList<SmartSubscriptionHeader>> GetSubscriptionHeadersAsync(
         CancellationToken cancellationToken)
@@ -95,6 +137,33 @@ public sealed class ProductionUsageReportSources : IUsageReportSources
         CancellationToken cancellationToken) =>
         new BusinessCentralCustomerNameSource(_businessCentral.Provider)
             .GetCustomerPartiesAsync(customerNumbers, cancellationToken);
+
+    public void Dispose()
+    {
+        // The Business Central bundle holds nothing to release.
+    }
+}
+
+/// <summary>
+/// Acronis as the usage report's backup system: customer tenants and their
+/// storage, read-only.
+/// </summary>
+public sealed class AcronisUsageSource : IUsageBackupSource
+{
+    private readonly AcronisReadSession _acronis;
+
+    private AcronisUsageSource(AcronisReadSession acronis)
+    {
+        _acronis = acronis;
+    }
+
+    public static async Task<IUsageBackupSource> CreateAsync(
+        SupportToolkitConfigurationResolver resolver,
+        CancellationToken cancellationToken) =>
+        new AcronisUsageSource(
+            AcronisReadSession.Create(
+                await resolver.GetAcronisConnectionAsync(
+                    cancellationToken)));
 
     public async Task<UsageTenants> GetCustomerTenantsAsync(
         CancellationToken cancellationToken)

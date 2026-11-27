@@ -94,9 +94,10 @@ public static class ZendeskSearchQuery
                     nameof(criteria));
             }
 
-            // Unverified against Zendesk: a bare number is searched as
-            // text, and the result is narrowed to that ID afterwards, so
-            // a search that does not return it finds nothing.
+            // A bare number is searched as text (confirmed against
+            // Zendesk, November 26, 2026), and the result is narrowed to
+            // that ID afterwards, so a search that does not return it
+            // finds nothing.
             terms.Add(ticketId.ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
 

@@ -40,7 +40,21 @@ public sealed class DuplicatiServerConfiguration : ConfigurationNode
 /// </summary>
 public sealed record ResolvedDuplicatiFleet(
     string ConnectionName,
-    IReadOnlyList<ResolvedDuplicatiCustomer> Customers);
+    IReadOnlyList<ResolvedDuplicatiCustomer> Customers)
+{
+    /// <summary>
+    /// A customer's identity as every module names it:
+    /// "duplicati:&lt;connection&gt;:&lt;customer, lower case&gt;". The
+    /// connection and the customer name are both stable, so it is the
+    /// customer's canonical identity too.
+    /// </summary>
+    public string CustomerId(ResolvedDuplicatiCustomer customer)
+    {
+        ArgumentNullException.ThrowIfNull(customer);
+
+        return $"duplicati:{ConnectionName}:{customer.Name.ToLowerInvariant()}";
+    }
+}
 
 public sealed record ResolvedDuplicatiCustomer(
     string Name,

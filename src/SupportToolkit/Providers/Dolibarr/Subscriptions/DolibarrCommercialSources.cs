@@ -41,6 +41,53 @@ public sealed class DolibarrSubscriptionEvidenceSource : ISmartSubscriptionEvide
 }
 
 /// <summary>
+/// One Dolibarr contract line as a billing line, numbered like the
+/// subscription evidence ("contract ref/line id"). Amounts exclude tax.
+/// </summary>
+public sealed record DolibarrBillingLine(
+    string SubscriptionNumber,
+    int? LineNumber,
+    string ProductRef,
+    string? Description,
+    decimal? Quantity,
+    decimal? UnitPrice,
+    decimal? DiscountPercent,
+    decimal? Amount);
+
+/// <summary>
+/// The billing lines of every Dolibarr contract, read-only. Complete or
+/// the read fails.
+/// </summary>
+public sealed class DolibarrBillingLineSource
+{
+    private readonly ResolvedDolibarrConnection _connection;
+    private readonly Func<HttpClient> _createHttpClient;
+    private readonly OperationalLogger? _logger;
+
+    public DolibarrBillingLineSource(
+        ResolvedDolibarrConnection connection,
+        Func<HttpClient>? createHttpClient = null,
+        OperationalLogger? logger = null)
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+        _createHttpClient = createHttpClient ?? (() => DolibarrHttpPipeline.Create());
+        _logger = logger;
+    }
+
+    public async Task<IReadOnlyList<DolibarrBillingLine>> GetBillingLinesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        using var httpClient = _createHttpClient();
+
+        var contracts =
+            await new DolibarrApiClient(httpClient, _connection, _logger)
+                .GetContractsAsync(cancellationToken);
+
+        return DolibarrSubscriptionMapper.MapBillingLines(contracts);
+    }
+}
+
+/// <summary>
 /// Dolibarr's implementation of the shared customer-name contract. Like
 /// Business Central's: a failed read does not fail the caller; the
 /// customers come back without names and the failure is stated, so

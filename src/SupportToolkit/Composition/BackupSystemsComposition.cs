@@ -1,6 +1,8 @@
 using SupportToolkit.Core.Configuration;
 using SupportToolkit.Modules.BackupAggregator.Production;
 using SupportToolkit.Modules.BackupAggregator.Services;
+using SupportToolkit.Modules.UsageReport.Production;
+using SupportToolkit.Modules.UsageReport.Services;
 using SupportToolkit.Providers.Duplicati.Configuration;
 
 namespace SupportToolkit.Composition;
@@ -29,21 +31,89 @@ public static class BackupSystemsComposition
     /// returns its non-secret settings for status. Null for Acronis, whose
     /// status has its own section because other features read it too.
     /// </param>
+    /// <param name="CheckUsage">
+    /// The usage report's local check of the system's configuration;
+    /// with OpenUsage, null when the usage report cannot read the system.
+    /// </param>
     private sealed record BackupSystem(
         string Key,
         string Name,
         RuntimeFactory CreateRuntime,
-        Describer? Describe = null);
+        Describer? Describe = null,
+        Func<SupportToolkitConfigurationResolver, CancellationToken, Task>? CheckUsage = null,
+        Func<SupportToolkitConfigurationResolver, CancellationToken, Task<IUsageBackupSource>>? OpenUsage = null,
+        string? UsageGbNote = null);
 
     private static readonly BackupSystem[] Systems =
     [
-        new(BackupSelection.Providers.Acronis, "Acronis", CreateAcronisRuntimeAsync),
+        new(
+            BackupSelection.Providers.Acronis,
+            "Acronis",
+            CreateAcronisRuntimeAsync,
+            CheckUsage: async (resolver, token) => await resolver.GetAcronisConnectionAsync(token),
+            OpenUsage: AcronisUsageSource.CreateAsync,
+            UsageGbNote: ProductionUsageReportSources.FirstSystemNames.GbNote),
         new(
             DuplicatiConnections.ProviderKey,
             "Duplicati",
             DuplicatiBackupAggregator.CreateRuntimeAsync,
-            DescribeDuplicatiAsync)
+            DescribeDuplicatiAsync,
+            CheckUsage: async (resolver, token) =>
+                await DuplicatiConnections.Instance.ResolveAsync(resolver, token),
+            OpenUsage: DuplicatiUsageSource.CreateAsync)
     ];
+
+    /// <summary>
+    /// The usage report's backup half, from the same selection the review
+    /// uses. A profile that selects no backup system reads Acronis, as the
+    /// usage report always has. Both are resolved on every call.
+    /// </summary>
+    public static (Func<CancellationToken, Task> Check,
+        Func<CancellationToken, Task<IUsageBackupSource>> Open,
+        Func<CancellationToken, Task<(string Name, string? GbNote)>> Name)
+        ForUsageReport(SupportToolkitConfigurationResolver resolver)
+    {
+        ArgumentNullException.ThrowIfNull(resolver);
+
+        async Task<BackupSystem> SelectAsync(CancellationToken token)
+        {
+            var selection = await resolver.GetBackupSelectionAsync(token);
+
+            var system =
+                selection is null
+                    ? Systems.Single(candidate => candidate.Key == BackupSelection.Providers.Acronis)
+                    : Find(selection)
+                      ?? throw new InvalidOperationException(
+                          selection.Provider.Length == 0
+                              ? "The active profile's backup setting names no provider. " +
+                                $"Use one of: {string.Join(", ", KnownProviders)}."
+                              : $"The active profile selects backup provider " +
+                                $"'{selection.Provider}', which SupportToolkit does not know. " +
+                                $"Use one of: {string.Join(", ", KnownProviders)}.");
+
+            return system.CheckUsage is null || system.OpenUsage is null
+                ? throw new InvalidOperationException(
+                    $"The usage report cannot read storage from {system.Name}.")
+                : system;
+        }
+
+        return (
+            async token =>
+            {
+                var system = await SelectAsync(token);
+                await system.CheckUsage!(resolver, token);
+            },
+            async token =>
+            {
+                var system = await SelectAsync(token);
+                return await system.OpenUsage!(resolver, token);
+            },
+            async token =>
+            {
+                var system = await SelectAsync(token);
+                return (system.Name, system.UsageGbNote);
+            });
+    }
 
     public static IReadOnlyList<string> KnownProviders { get; } =
         Systems.Select(system => system.Key).ToArray();
