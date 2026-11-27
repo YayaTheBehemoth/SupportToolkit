@@ -26,7 +26,8 @@ public static class ProductionUsageReportSources
     /// <summary>
     /// Acronis and Business Central as the report names them: Business
     /// Central calls the billed quantity "Antal" and may open a browser
-    /// sign-in; GB is as the Acronis portal shows it. Also what the
+    /// sign-in; GB is as the Acronis portal shows it, and from 1,024 GB on
+    /// the portal shows TB (1 TB = 1,024 GB, two decimals). Also what the
     /// synthetic data stands for.
     /// </summary>
     public static UsageSystemNames FirstSystemNames { get; } =
@@ -35,7 +36,8 @@ public static class ProductionUsageReportSources
             "Business Central",
             "Antal",
             "as the Acronis portal shows it",
-            true);
+            BillingSignsInWithBrowser: true,
+            BackupShowsTerabytes: true);
 
     /// <summary>
     /// Business Central, then Acronis: local configuration first, so a

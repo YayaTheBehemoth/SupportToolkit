@@ -15,7 +15,7 @@
         <div class="op">&minus;</div>
         <div class="side">
             <span class="label">@Systems.Backup total storage</span>
-            <span class="value">@Gb(Row.Total.Gb)</span>
+            <span class="value"><Storage Gb="Row.Total.Gb" Terabytes="Systems.BackupShowsTerabytes" Unit="true" /></span>
             <span class="muted">
                 @if (Row.Total.IsKnown)
                 {
@@ -88,15 +88,15 @@
         <thead>
         <tr>
             <th>Figure</th>
-            <th class="num">@(Portal ? "GB as the portal shows (compared)" : "GB (compared)")</th>
+            <th class="num">@(Systems.BackupShowsTerabytes ? "As the portal shows (compared)" : Portal ? "GB as the portal shows (compared)" : "GB (compared)")</th>
             @if (Detailed) { <th class="num">Decimal GB</th> }
             @if (Detailed) { <th class="num">Bytes</th> }
         </tr>
         </thead>
         <tbody>
-        <Figure Label="Total storage (compared)" Value="Row.Total" Detailed="Detailed" Compared="true" />
-        <Figure Label="Backup storage" Value="Row.Backup" Detailed="Detailed" />
-        <Figure Label="Microsoft 365 and Google Workspace" Value="Row.Microsoft365" Detailed="Detailed" />
+        <Figure Label="Total storage (compared)" Value="Row.Total" Detailed="Detailed" Compared="true" Terabytes="Systems.BackupShowsTerabytes" />
+        <Figure Label="Backup storage" Value="Row.Backup" Detailed="Detailed" Terabytes="Systems.BackupShowsTerabytes" />
+        <Figure Label="Microsoft 365 and Google Workspace" Value="Row.Microsoft365" Detailed="Detailed" Terabytes="Systems.BackupShowsTerabytes" />
         </tbody>
     </table>
 </div>

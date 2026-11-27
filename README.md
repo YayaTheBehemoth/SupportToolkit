@@ -443,7 +443,7 @@ Every month, finance compares each customer's Acronis storage with what Business
 
 A selected system the usage report cannot read is reported as unavailable; it never falls back to another. The web page names the systems actually read.
 
-**Units.** Usage is compared in GB as the Acronis portal shows it: the portal labels its figures GB but counts 1,073,741,824 bytes per GB, and the billed backup quantity is taken from the portal's figure. Decimal GB (1,000,000,000 bytes) would be about 7% higher for the same data; the detailed view shows it, with the bytes, for reference.
+**Units.** Usage is compared in GB as the Acronis portal shows it: the portal labels its figures GB but counts 1,073,741,824 bytes per GB, and the billed backup quantity is taken from the portal's figure. Decimal GB (1,000,000,000 bytes) would be about 7% higher for the same data; the detailed view shows it, with the bytes, for reference. From 1,024 GB on, the portal switches to TB (1 TB = 1,024 GB, rounded to two decimals), so 3,500.00 GB appears there as 3.42 TB. The web page shows Acronis figures the same way, with the exact GB beneath, so they can be compared with the portal by eye; the difference is always worked out in exact GB.
 
 **What the report computes.** Only a unit conversion, adding up (a metric's lines, a customer's tenants, a customer's backup lines) and one subtraction: billed GB minus the Acronis total. Nothing is judged and there are no thresholds. A customer whose Acronis total is not backup + Microsoft 365 gets a note; no figure is changed.
 

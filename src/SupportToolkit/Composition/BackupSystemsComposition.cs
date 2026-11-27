@@ -42,7 +42,8 @@ public static class BackupSystemsComposition
         Describer? Describe = null,
         Func<SupportToolkitConfigurationResolver, CancellationToken, Task>? CheckUsage = null,
         Func<SupportToolkitConfigurationResolver, CancellationToken, Task<IUsageBackupSource>>? OpenUsage = null,
-        string? UsageGbNote = null);
+        string? UsageGbNote = null,
+        bool UsageShowsTerabytes = false);
 
     private static readonly BackupSystem[] Systems =
     [
@@ -52,7 +53,8 @@ public static class BackupSystemsComposition
             CreateAcronisRuntimeAsync,
             CheckUsage: async (resolver, token) => await resolver.GetAcronisConnectionAsync(token),
             OpenUsage: AcronisUsageSource.CreateAsync,
-            UsageGbNote: ProductionUsageReportSources.FirstSystemNames.GbNote),
+            UsageGbNote: ProductionUsageReportSources.FirstSystemNames.GbNote,
+            UsageShowsTerabytes: true),
         new(
             DuplicatiConnections.ProviderKey,
             "Duplicati",
@@ -70,7 +72,7 @@ public static class BackupSystemsComposition
     /// </summary>
     public static (Func<CancellationToken, Task> Check,
         Func<CancellationToken, Task<IUsageBackupSource>> Open,
-        Func<CancellationToken, Task<(string Name, string? GbNote)>> Name)
+        Func<CancellationToken, Task<(string Name, string? GbNote, bool ShowsTerabytes)>> Name)
         ForUsageReport(SupportToolkitConfigurationResolver resolver)
     {
         ArgumentNullException.ThrowIfNull(resolver);
@@ -111,7 +113,7 @@ public static class BackupSystemsComposition
             async token =>
             {
                 var system = await SelectAsync(token);
-                return (system.Name, system.UsageGbNote);
+                return (system.Name, system.UsageGbNote, system.UsageShowsTerabytes);
             });
     }
 

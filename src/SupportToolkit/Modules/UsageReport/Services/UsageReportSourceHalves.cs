@@ -71,12 +71,17 @@ public sealed record UsageReportSystems(
 /// <param name="BillingSignsInWithBrowser">
 /// True when reading the billing system may open a browser sign-in.
 /// </param>
+/// <param name="BackupShowsTerabytes">
+/// True when the backup system's screens show TB from 1,024 GB on
+/// (StorageDisplay), so the report shows figures the same way.
+/// </param>
 public sealed record UsageSystemNames(
     string Backup,
     string Billing,
     string? QuantityName = null,
     string? GbNote = null,
-    bool BillingSignsInWithBrowser = false);
+    bool BillingSignsInWithBrowser = false,
+    bool BackupShowsTerabytes = false);
 
 /// <summary>The two halves as the report's one source.</summary>
 public sealed class CombinedUsageReportSources : IUsageReportSources
