@@ -47,10 +47,10 @@ public static class UsageReportComposition
         {
             Names = async token =>
             {
-                var (backupName, gbNote) = await backup.Name(token);
+                var (backupName, gbNote, showsTerabytes) = await backup.Name(token);
                 var (billingName, quantityName, signsIn) = await commercial.Name(token);
 
-                return new UsageSystemNames(backupName, billingName, quantityName, gbNote, signsIn);
+                return new UsageSystemNames(backupName, billingName, quantityName, gbNote, signsIn, showsTerabytes);
             }
         };
     }

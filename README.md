@@ -443,7 +443,7 @@ Every month, finance compares each customer's Acronis storage with what Business
 
 A selected system the usage report cannot read is reported as unavailable; it never falls back to another. The web page names the systems actually read.
 
-**Units.** Usage is compared in GB as the Acronis portal shows it: the portal labels its figures GB but counts 1,073,741,824 bytes per GB, and the billed backup quantity is taken from the portal's figure. Decimal GB (1,000,000,000 bytes) would be about 7% higher for the same data; the detailed view shows it, with the bytes, for reference.
+**Units.** Usage is compared in GB as the Acronis portal shows it: the portal labels its figures GB but counts 1,073,741,824 bytes per GB, and the billed backup quantity is taken from the portal's figure. Decimal GB (1,000,000,000 bytes) would be about 7% higher for the same data; the detailed view shows it, with the bytes, for reference. From 1,024 GB on, the portal switches to TB (1 TB = 1,024 GB, rounded to two decimals), so 3,500.00 GB appears there as 3.42 TB. The web page shows Acronis figures the same way, with the exact GB beneath, so they can be compared with the portal by eye; the difference is always worked out in exact GB.
 
 **What the report computes.** Only a unit conversion, adding up (a metric's lines, a customer's tenants, a customer's backup lines) and one subtraction: billed GB minus the Acronis total. Nothing is judged and there are no thresholds. A customer whose Acronis total is not backup + Microsoft 365 gets a note; no figure is changed.
 
@@ -1046,7 +1046,9 @@ tests/
 └── SupportToolkit.Tests/
 
 scripts/
-└── publish-windows.cmd
+├── publish-windows.cmd
+├── package-intune.ps1
+└── intune/
 ```
 
 ### Modules
@@ -1211,6 +1213,22 @@ To update SupportToolkit:
 3. Launch the updated executable.
 
 By default, portable releases keep configuration and credentials outside the application directory, allowing an application update without deleting stored profiles or secrets.
+
+### Intune package
+
+Each tagged release also attaches an Intune Win32 app: `SupportToolkit-<version>.intunewin`, plus `SupportToolkit-<version>-intune.md` with the install and uninstall commands, the detection rule and the other settings to enter in Intune for that version. To build one locally after `scripts\publish-windows.cmd`:
+
+```cmd
+powershell -ExecutionPolicy Bypass -File scripts\package-intune.ps1 -Version 0.6.1
+```
+
+- **Per user.** `scripts\intune\Install-SupportToolkit.ps1` runs in user context and needs no admin rights. It puts the app in `%LOCALAPPDATA%\Programs\SupportToolkit` and adds Start menu shortcuts: SupportToolkit, Import SupportToolkit settings, and SupportToolkit folder (where the settings file goes before importing).
+- **Detection.** The installer writes `HKCU\Software\SupportToolkit`, `Version` last, so Intune sees a version as installed only when it is complete. A new release updates the existing Intune app's file and the detection value.
+- **While running.** Install and uninstall return 1618 while SupportToolkit is running, and Intune retries later.
+- **Uninstalling** keeps the user's settings, receipts and stored credentials.
+- **Logs** go to `%TEMP%\SupportToolkit-intune.log`.
+
+The packaging uses Microsoft's Win32 Content Prep Tool. It is downloaded at a pinned version and checked against its SHA-256 and Microsoft signature before it runs. Uploading to Intune stays a manual step, so no tenant credentials are stored in GitHub.
 
 ---
 

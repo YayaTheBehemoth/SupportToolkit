@@ -1,0 +1,31 @@
+@* A storage figure as the backup system's screens show it ("3.35 TB"),
+   with the exact GB beneath when they differ, so it can be compared with
+   the portal by eye; otherwise the GB as before. "unknown" when unknown. *@
+
+@if (Gb is not { } gb)
+{
+    <text>unknown</text>
+}
+else if (StorageDisplay.InTerabytes(gb, Terabytes))
+{
+    <span>@StorageDisplay.AsShown(gb, Terabytes)</span>
+    <br />
+    <small class="muted">@gb.ToString("#,##0.00", Invariant) GB</small>
+}
+else
+{
+    <text>@gb.ToString("#,##0.00", Invariant)@(Unit ? " GB" : "")</text>
+}
+
+@code {
+    private static readonly System.Globalization.CultureInfo Invariant =
+        System.Globalization.CultureInfo.InvariantCulture;
+
+    [Parameter, EditorRequired] public decimal? Gb { get; set; }
+
+    /// <summary>The backup system shows TB from 1,024 GB on.</summary>
+    [Parameter] public bool Terabytes { get; set; }
+
+    /// <summary>Write " GB" after a figure shown in GB.</summary>
+    [Parameter] public bool Unit { get; set; }
+}

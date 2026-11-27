@@ -151,6 +151,11 @@
         backup lines) against the total storage @B reports for the customer's tenants, in @(Systems?.GbNote is { } gbNote ? "GB " + gbNote : "binary GB (1 GB = 1,073,741,824 bytes)"). The difference is
         billed minus @B, so a negative difference means less is billed than @B reports. Amount, Backup
         and Microsoft 365 are shown for reference and are not compared.
+        @if (Tb)
+        {
+            <text>From 1,024 GB on, the portal shows TB (1 TB = 1,024 GB, rounded to two decimals); so does
+            this report, with the exact GB beneath. The difference is always worked out in exact GB.</text>
+        }
     </p>
 
     @if (detailed)
@@ -182,13 +187,13 @@
                 <th>Customer</th>
                 @if (detailed) { <th>No.</th> }
                 <th class="num cmp">Billed GB<small>@C quantity@(Systems?.QuantityName is { } q ? $" ({q})" : "")</small></th>
-                <th class="num cmp">@B GB<small>total storage</small></th>
+                <th class="num cmp">@B@HeadUnit<small>total storage@(Tb ? ", as the portal shows it" : "")</small></th>
                 <th class="num cmp">Difference<small>billed &minus; @B</small></th>
                 <th>Status</th>
                 <th class="num">Amount<small>@C</small></th>
                 @if (detailed) { <th class="num">Decimal GB<small>total, 10^9 bytes</small></th> }
-                <th class="num">Backup<small>@B GB</small></th>
-                <th class="num">M365<small>@B GB</small></th>
+                <th class="num">Backup<small>@B@HeadUnit</small></th>
+                <th class="num">M365<small>@B@HeadUnit</small></th>
             </tr>
             </thead>
             <tbody>
@@ -206,7 +211,7 @@
                     <td>@row.Name</td>
                     @if (detailed) { <td>@row.CustomerNumber</td> }
                     <td class="num cmp">@Gb(row.BilledQuantity)</td>
-                    <td class="num cmp">@Gb(row.Total.Gb)</td>
+                    <td class="num cmp"><Storage Gb="row.Total.Gb" Terabytes="Tb" /></td>
                     <td class="num cmp @(row.DifferenceGb is { } d && d != 0m ? "diff" : "")">
                         @Signed(row.DifferenceGb)
                         @if (Direction(row.DifferenceGb) is { } direction)
@@ -234,8 +239,8 @@
                     </td>
                     <td class="num">@Money(row.BilledAmount)</td>
                     @if (detailed) { <td class="num">@Gb(row.Total.DecimalGb)</td> }
-                    <td class="num">@Gb(row.Backup.Gb)</td>
-                    <td class="num">@Gb(row.Microsoft365.Gb)</td>
+                    <td class="num"><Storage Gb="row.Backup.Gb" Terabytes="Tb" /></td>
+                    <td class="num"><Storage Gb="row.Microsoft365.Gb" Terabytes="Tb" /></td>
                 </tr>
 
                 @if (open)
@@ -281,16 +286,16 @@
         <h2>Storage without a backup subscription</h2>
         <p class="muted">@B customer tenants with storage that no customer with a backup subscription was matched to.</p>
         <table>
-            <thead><tr><th>@B tenant</th><th class="num">@B GB</th>@if (detailed) { <th class="num">Decimal GB</th> }<th class="num">Backup</th><th class="num">M365</th><th>Note</th></tr></thead>
+            <thead><tr><th>@B tenant</th><th class="num">@B@HeadUnit</th>@if (detailed) { <th class="num">Decimal GB</th> }<th class="num">Backup</th><th class="num">M365</th><th>Note</th></tr></thead>
             <tbody>
             @foreach (var row in unbilled)
             {
                 <tr>
                     <td>@row.Name</td>
-                    <td class="num">@Gb(row.Total.Gb)</td>
+                    <td class="num"><Storage Gb="row.Total.Gb" Terabytes="Tb" /></td>
                     @if (detailed) { <td class="num">@Gb(row.Total.DecimalGb)</td> }
-                    <td class="num">@Gb(row.Backup.Gb)</td>
-                    <td class="num">@Gb(row.Microsoft365.Gb)</td>
+                    <td class="num"><Storage Gb="row.Backup.Gb" Terabytes="Tb" /></td>
+                    <td class="num"><Storage Gb="row.Microsoft365.Gb" Terabytes="Tb" /></td>
                     <td>
                         @foreach (var note in row.Problems.Concat(row.Remarks))
                         {
@@ -310,14 +315,14 @@
             <h2>Not active (left out of the report)</h2>
             <p class="muted">Every backup line of these customers is on a subscription that is not active, or omitted.</p>
             <table>
-                <thead><tr><th>Customer</th><th>No.</th><th class="num">@B GB</th><th>@B tenant</th></tr></thead>
+                <thead><tr><th>Customer</th><th>No.</th><th class="num">@B@HeadUnit</th><th>@B tenant</th></tr></thead>
                 <tbody>
                 @foreach (var row in notActive)
                 {
                     <tr>
                         <td>@row.Name</td>
                         <td>@row.CustomerNumber</td>
-                        <td class="num">@Gb(row.Total.Gb)</td>
+                        <td class="num"><Storage Gb="row.Total.Gb" Terabytes="Tb" /></td>
                         <td>@(row.TenantNames.Count == 0 ? "none matched" : string.Join(", ", row.TenantNames))</td>
                     </tr>
                 }
@@ -377,6 +382,12 @@
     private string B => Names.Backup;
 
     private string C => Names.Billing;
+
+    /// <summary>The backup system's screens show TB from 1,024 GB on.</summary>
+    private bool Tb => Names.BackupShowsTerabytes;
+
+    /// <summary>" GB" in a heading, unless figures may be shown in TB.</summary>
+    private string HeadUnit => Tb ? "" : " GB";
 
     protected override async Task OnInitializedAsync()
     {

@@ -1,12 +1,12 @@
-@* One Acronis figure in GB as the portal shows it (the compared unit),
-   plus decimal GB and the bytes in the detailed view, or why it is
-   unknown. *@
+@* One backup figure as the backup system shows it (for Acronis, TB from
+   1,024 GB on, with the exact GB beneath), plus decimal GB and the bytes
+   in the detailed view, or why it is unknown. *@
 
 <tr class="@(Compared ? "cmp" : "")">
     <td>@Label</td>
     @if (Value.IsKnown)
     {
-        <td class="num">@Value.Gb!.Value.ToString("#,##0.00", Invariant)</td>
+        <td class="num"><Storage Gb="Value.Gb" Terabytes="Terabytes" /></td>
         @if (Detailed)
         {
             <td class="num">@Value.DecimalGb!.Value.ToString("#,##0.00", Invariant)</td>
@@ -29,6 +29,9 @@
     [Parameter, EditorRequired] public string Label { get; set; } = "";
     [Parameter, EditorRequired] public UsageMeasurement Value { get; set; } = default!;
     [Parameter] public bool Detailed { get; set; }
+
+    /// <summary>The backup system shows TB from 1,024 GB on.</summary>
+    [Parameter] public bool Terabytes { get; set; }
 
     /// <summary>The figure the report compares, highlighted.</summary>
     [Parameter] public bool Compared { get; set; }

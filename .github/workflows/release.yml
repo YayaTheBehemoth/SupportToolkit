@@ -83,15 +83,25 @@ jobs:
 
           Write-Host "Executable startup verified."
 
+      - name: Package for Intune
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: ./scripts/package-intune.ps1 -Version $env:RELEASE_TAG
+
       - name: Publish GitHub Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
+          $version = $env:RELEASE_TAG.TrimStart('v')
+
           gh release create "$env:RELEASE_TAG" `
             "artifacts/SupportToolkit-win-x64.zip" `
+            "artifacts/SupportToolkit-$version.intunewin" `
+            "artifacts/SupportToolkit-$version-intune.md" `
             --verify-tag `
             --title "SupportToolkit $env:RELEASE_TAG" `
-            --notes "Portable Windows x64 build. Extract the ZIP, then double-click Start SupportToolkit.cmd for the web UI, or run SupportToolkit.exe." `
+            --notes "Portable Windows x64 build: extract the ZIP, then double-click Start SupportToolkit.cmd for the web UI, or run SupportToolkit.exe. For Intune: upload SupportToolkit-$version.intunewin as a Windows app (Win32) with the settings in SupportToolkit-$version-intune.md." `
             --prerelease
